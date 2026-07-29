@@ -78,10 +78,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         turns: state.turns.map((candidate) => (candidate.id === id ? update(candidate) : candidate)),
       }))
 
-    controller = new AbortController()
+    // Held locally as well as on the module, because `cancel()` nulls the module-level
+    // reference synchronously while the fetch rejects a tick later. Reading it from the
+    // catch block therefore always saw `null`, the "was this aborted?" branch was
+    // unreachable, and cancelling a stream surfaced the raw English AbortError as a red
+    // failure — for the one action the user took deliberately.
+    const abort = new AbortController()
+    controller = abort
 
     try {
-      await streamChat(trimmed, history, (event: ChatEvent) => handle(event, patch), controller.signal)
+      await streamChat(trimmed, history, (event: ChatEvent) => handle(event, patch), abort.signal)
       patch((current) =>
         current.card
           ? { ...current, status: 'done', statusMessage: null }
@@ -93,7 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             },
       )
     } catch (error) {
-      if (controller?.signal.aborted) {
+      if (abort.signal.aborted) {
         patch((current) => ({ ...current, status: 'done', statusMessage: null }))
       } else {
         patch((current) => ({
@@ -104,7 +110,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }))
       }
     } finally {
-      controller = null
+      // Only clear it if this turn still owns it; a newer turn may already have replaced it.
+      if (controller === abort) controller = null
       set({ pending: false })
     }
   },

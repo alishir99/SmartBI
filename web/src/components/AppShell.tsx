@@ -7,9 +7,10 @@
  * readable measure.
  */
 
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { navigate, type Route } from '../lib/router'
 import { useAuthStore } from '../lib/auth'
+import { useChatStore } from '../lib/chat'
 import { THEME_LABELS, useThemeStore } from '../lib/theme'
 import { ChatPanel } from './ChatPanel'
 import { Button } from './Button'
@@ -33,8 +34,26 @@ const NAV: NavItem[] = [
   { route: 'mina-vyer', label: 'Mina vyer', icon: IconPin },
 ]
 
+/**
+ * Tailwind's default `xl`, where the chat rail becomes permanent. Kept in one place
+ * because the JS below has to agree with the `xl:` classes on the rail and the slide-over.
+ */
+const RAIL_BREAKPOINT = '(min-width: 1280px)'
+
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false)
+  const turnCount = useChatStore((state) => state.turns.length)
+  const seenTurns = useRef(turnCount)
+
+  // A question can start from outside the chat — the suggestion chips under every card
+  // call `ask` directly. Below `xl` the rail is not on screen, so the answer streamed into
+  // a panel nobody could see and the chip read as a dead control. A 1366×768 laptop is
+  // below this boundary, which is to say: most of them.
+  useEffect(() => {
+    const started = turnCount > seenTurns.current
+    seenTurns.current = turnCount
+    if (started && !window.matchMedia(RAIL_BREAKPOINT).matches) setChatOpen(true)
+  }, [turnCount])
 
   // The slide-over is a modal on small screens; Escape must close it.
   useEffect(() => {

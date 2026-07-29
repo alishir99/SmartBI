@@ -173,7 +173,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             status = str(envelope.get("status") or "ok")
             result = _result_for(envelope, produced)
 
-            if status == "ok" and produced:
+            # Validation is gated on tool data existing, not on the model's own status
+            # field. Gating on `status == "ok"` made the check opt-out through a value the
+            # model writes itself: a narrative emitted under `clarify` still reaches the
+            # user with its figures intact (build_card only suppresses prose for
+            # `validation_failed`), and `clarify` is exactly what the model reaches for
+            # when entity resolution is fuzzy — the moment it is most likely improvising.
+            # If there are rows to check the prose against, we check it.
+            if produced:
                 yield StatusEvent(message="Kontrollerar siffrorna mot datan…")
                 check = validate_narrative(narrative, produced)
 

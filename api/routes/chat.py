@@ -1,0 +1,93 @@
+"""POST /api/chat — one agent turn, streamed as SSE.
+
+SSE rather than WebSocket (D12): the traffic is one-directional, it proxies through anything,
+and streaming the *tool calls* is a trust feature — the user watches the system go to the
+database instead of waiting on a spinner and hoping.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from collections.abc import AsyncIterator
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+
+from .. import db
+from ..agent.loop import run_turn
+from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
+from ..mcp_client import McpClient
+from ..models import CardEvent, ChatRequest, ErrorEvent, ToolCallEvent
+from ..result_cache import ResultCache
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api", tags=["chat"])
+
+
+@router.post("/chat")
+async def chat(body: ChatRequest,
+               tenant: TenantContext = Depends(get_supplier_scope),
+               mcp: McpClient = Depends(get_mcp),
+               cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
+    return StreamingResponse(
+        _stream(body, tenant, mcp, cache),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Without this, nginx and most managed proxies buffer the whole response and the
+            # streaming is invisible to the user.
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
+                  cache: ResultCache) -> AsyncIterator[str]:
+    started = time.monotonic()
+    tool_calls: list[dict] = []
+    status = "error"
+    card = None
+
+    try:
+        async for event in run_turn(
+            question=body.question,
+            history=[turn.model_dump() for turn in body.history],
+            supplier_id=int(tenant.supplier_id),
+            mcp=mcp,
+            cache=cache,
+        ):
+            if isinstance(event, ToolCallEvent):
+                tool_calls.append({"tool": event.tool, "args": event.args})
+            elif isinstance(event, CardEvent):
+                card, status = event.card, event.card.status
+            elif isinstance(event, ErrorEvent):
+                status = "error"
+
+            yield f"data: {event.model_dump_json()}\n\n"
+    except Exception as exc:  # noqa: BLE001 — the client is waiting on this stream
+        logger.exception("chat stream failed")
+        yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+    finally:
+        # Audit after the fact, and never let a logging failure break a delivered answer.
+        try:
+            await db.record_turn(
+                user_id=tenant.user_id,
+                supplier_id=tenant.supplier_id,
+                question=body.question,
+                tool_calls=tool_calls,
+                row_counts={"queries": len(tool_calls),
+                            "query_id": card.query_id if card else None},
+                latency_ms=int((time.monotonic() - started) * 1000),
+                # The agent loop does not surface usage yet, so these stay null rather than
+                # zero — a zero would read as "this turn was free" in any cost rollup.
+                # Threading real counts out of run_turn is what §11.2's per-tenant cost cap
+                # needs; until then the column is honestly empty.
+                input_tokens=None,
+                output_tokens=None,
+                status=status,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("could not write audit row", exc_info=True)

@@ -1,0 +1,927 @@
+# Golden questions — the measured answer to "how do you know it isn't making things up?"
+#
+# Each entry is one Swedish question put to the FULL agent through POST /api/chat, plus the
+# answer computed WITHOUT the app. Two independent sources back every number:
+#
+#   gt:         a key path into data/generated/ground_truth.json, which the generator wrote
+#               while emitting the rows (scripts/generate_data.py :: build_ground_truth).
+#   derivation: a declarative re-computation over the CSVs via eval/oracle.py.
+#
+# tests/test_expectations.py runs every `derivation` and asserts it still equals the literal
+# in `expects`. So these values cannot drift from the data without the test suite failing,
+# and nothing here was ever obtained by asking the system.
+#
+# Tenant: Nordström Audio AB (anna@nordstromaudio.se), brands "Nordström" and "Vidar".
+# Coverage: 2024-07-01 → 2026-06-30. Relative windows anchor on the LAST DATE IN THE DATA,
+# not on today (mcp_server/semantic/compiler.py :: resolve_time_range), so
+# `last_12_months` == 2025-07-01 → 2026-06-30 and `last_month` == May 2026.
+#
+# expects fields, all optional except `status`:
+#   numeric      {value, unit, tolerance_pct}  a figure the answer must carry
+#   delta_pct    {value, tolerance_pct}        period-over-period change
+#   series       {group_by, points, tolerance_pct}  checked against /api/result rows
+#   top_n        {group_by, order, prefix_only}     ordering checked against result rows
+#   tools_called [...]        tools that must have been invoked (from SSE tool_call events)
+#   dimensions   [...]        expected query_sales grouping
+#   chart_type   ...          expected ChartSpec.type; a list means "any of these"
+#   must_contain [...]        substrings the narrative must carry (entity names, mostly)
+#   caveats_min  N            the card must state at least N caveats
+#   status       ok | clarify | cannot_answer
+#   language     sv
+
+# ---------------------------------------------------------------- totals over periods
+
+- id: total_net_sales_last_12m
+  question: "Vad var vår totala försäljning de senaste 12 månaderna?"
+  # gt: sum of per_supplier["Nordström Audio AB"].net_sales_by_month for 2025-07 … 2026-06
+  derivation: {measure: net_sales_sek, where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 41129464.59, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: total_net_sales_all_time
+  question: "Hur mycket har vi sålt för totalt under hela perioden ni har data för?"
+  # gt: per_supplier["Nordström Audio AB"].net_sales_sek
+  derivation: {measure: net_sales_sek, where: {relative: all_time}}
+  expects:
+    numeric: {value: 77537281.39, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: total_units_last_12m
+  question: "Hur många enheter sålde vi senaste 12 månaderna?"
+  # derived: units over the same window; gt has the all-time figure only
+  derivation: {measure: units, where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 24696, unit: st, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: total_units_all_time
+  question: "Hur många enheter har vi sålt totalt sedan starten?"
+  # gt: per_supplier["Nordström Audio AB"].units
+  derivation: {measure: units, where: {relative: all_time}}
+  expects:
+    numeric: {value: 47391, unit: st, tolerance_pct: 0.2}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: total_orders_last_12m
+  question: "Hur många köp innehöll våra produkter det senaste året?"
+  # derived: COUNT(DISTINCT order_id); the `orders` measure is fact-only by design
+  derivation: {measure: orders, where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 19156, unit: st, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: gross_sales_all_time
+  question: "Vad var vår bruttoförsäljning före rabatt under hela perioden?"
+  # gt: per_supplier["Nordström Audio AB"].gross_sales_sek
+  derivation: {measure: gross_sales_sek, where: {relative: all_time}}
+  expects:
+    numeric: {value: 100063499.07, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: net_sales_calendar_2025
+  question: "Hur mycket sålde vi under kalenderåret 2025?"
+  # gt: sum of per_supplier[...].net_sales_by_month for the twelve 2025-* keys
+  derivation: {measure: net_sales_sek, where: {from: "2025-01-01", to: "2025-12-31"}}
+  expects:
+    numeric: {value: 39597445.91, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: net_sales_ytd_2026
+  question: "Hur mycket har vi sålt hittills i år?"
+  # gt: sum of per_supplier[...].net_sales_by_month for 2026-01 … 2026-06 (data ends 30 juni)
+  derivation: {measure: net_sales_sek, where: {relative: ytd}}
+  expects:
+    numeric: {value: 16300377.02, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: net_sales_q4_2025
+  question: "Vad blev försäljningen under fjärde kvartalet 2025?"
+  # gt: net_sales_by_month 2025-10 + 2025-11 + 2025-12
+  derivation: {measure: net_sales_sek, where: {from: "2025-10-01", to: "2025-12-31"}}
+  expects:
+    numeric: {value: 16236078.16, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: net_sales_last_month
+  question: "Hur mycket sålde vi förra månaden?"
+  # gt: net_sales_by_month["2026-05-01"] — "förra månaden" resolves against the data's last
+  # date (2026-06-30), so it is May 2026, not the month before today
+  derivation: {measure: net_sales_sek, where: {relative: last_month}}
+  expects:
+    numeric: {value: 2776925.01, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: net_sales_june_2026
+  question: "Vad sålde vi för i juni 2026?"
+  # gt: net_sales_by_month["2026-06-01"]
+  derivation: {measure: net_sales_sek, where: {from: "2026-06-01", to: "2026-06-30"}}
+  expects:
+    numeric: {value: 2803465.62, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- trends
+
+- id: monthly_trend_last_12m
+  question: "Visa vår försäljning per månad det senaste året."
+  # gt: net_sales_by_month, the last twelve keys — the whole series is checked, not a total
+  derivation: {measure: net_sales_sek, group_by: month, where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: month
+      tolerance_pct: 0.5
+      points:
+        "2025-07-01": 2303237.28
+        "2025-08-01": 3364657.88
+        "2025-09-01": 2925114.25
+        "2025-10-01": 3159985.43
+        "2025-11-01": 7263522.51
+        "2025-12-01": 5812570.22
+        "2026-01-01": 3389865.54
+        "2026-02-01": 2064044.99
+        "2026-03-01": 2553385.42
+        "2026-04-01": 2712690.44
+        "2026-05-01": 2776925.01
+        "2026-06-01": 2803465.62
+    tools_called: [query_sales]
+    dimensions: [month]
+    chart_type: line
+    status: ok
+    language: sv
+
+- id: weekly_trend_last_90d
+  question: "Visa försäljningen per vecka de senaste 90 dagarna."
+  # derived: ISO weeks (Monday-anchored, as date_trunc('week', …) in the semantic layer).
+  # The window is 2026-04-02 → 2026-06-30, so the first and last weeks are partial.
+  derivation: {measure: net_sales_sek, group_by: week, where: {relative: last_90_days}}
+  expects:
+    series:
+      group_by: week
+      tolerance_pct: 0.5
+      points:
+        "2026-04-06": 627825.97
+        "2026-04-20": 634655.95
+        "2026-05-04": 668693.81
+        "2026-06-08": 643355.73
+        "2026-06-22": 763577.17
+    tools_called: [query_sales]
+    dimensions: [week]
+    chart_type: line
+    status: ok
+    language: sv
+
+- id: quarterly_trend_all_time
+  question: "Hur har försäljningen utvecklats per kvartal sedan starten?"
+  # derived: quarter grouping over all_time; reconciles to per_supplier[...].net_sales_sek
+  derivation: {measure: net_sales_sek, group_by: quarter, where: {relative: all_time}}
+  expects:
+    series:
+      group_by: quarter
+      tolerance_pct: 0.5
+      points:
+        "2024-07-01": 7072608.71
+        "2024-10-01": 14566849.75
+        "2025-01-01": 7193997.71
+        "2025-04-01": 7574360.63
+        "2025-07-01": 8593009.41
+        "2025-10-01": 16236078.16
+        "2026-01-01": 8007295.95
+        "2026-04-01": 8293081.07
+    tools_called: [query_sales]
+    dimensions: [quarter]
+    chart_type: [line, bar]
+    status: ok
+    language: sv
+
+- id: yearly_trend
+  question: "Hur ser försäljningen ut år för år?"
+  # derived: calendar years. 2024 and 2026 are partial (data starts 1 juli 2024 and ends
+  # 30 juni 2026) — an answer that compares them without saying so is misleading.
+  derivation: {measure: net_sales_sek, group_by: year, where: {relative: all_time}}
+  expects:
+    series:
+      group_by: year
+      tolerance_pct: 0.5
+      points:
+        "2024": 21639458.46
+        "2025": 39597445.91
+        "2026": 16300377.02
+    tools_called: [query_sales]
+    dimensions: [year]
+    chart_type: [bar, line]
+    caveats_min: 1
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- top-N: revenue vs units
+# These two questions differ only in the measure and must produce DIFFERENT orderings.
+# Revenue concentrates on TVs and laptops; units concentrate on cheap accessories and
+# speakers. A system that quietly answers both with "top by revenue" fails here.
+
+- id: top_products_by_revenue_last_12m
+  question: "Vilka är våra tio mest säljande produkter i kronor senaste året?"
+  # derived: product × net_sales_sek, last_12_months
+  derivation: {measure: net_sales_sek, group_by: product, top: 5,
+               where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 4251150.76, unit: SEK, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Nordström TV N100 Pro"
+        - "Nordström TV N230 Ultra"
+        - "Nordström Laptop N139 Elite"
+        - "Nordström TV N295 Air"
+        - "Vidar Hörlurar V191 Studio"
+    tools_called: [query_sales]
+    dimensions: [product]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: top_products_by_units_last_12m
+  question: "Vilka produkter sålde vi flest enheter av senaste året?"
+  # derived: product × units, last_12_months — a different top list from the revenue one
+  derivation: {measure: units, group_by: product, top: 5,
+               where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 2535, unit: st, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Vidar Tillbehör V139 Compact"
+        - "Vidar Tillbehör V217 Air"
+        - "Vidar Högtalare V178 Max"
+        - "Nordström Tillbehör N282 Elite"
+        - "Nordström Högtalare N165 Ultra"
+    tools_called: [query_sales]
+    dimensions: [product]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: top_products_by_revenue_all_time
+  question: "Vilka produkter har sålt bäst i kronor under hela perioden?"
+  # gt: per_supplier["Nordström Audio AB"].top_10_products_by_net_sales
+  derivation: {measure: net_sales_sek, group_by: product, top: 5,
+               where: {relative: all_time}}
+  expects:
+    numeric: {value: 8824779.51, unit: SEK, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Nordström TV N100 Pro"
+        - "Nordström TV N230 Ultra"
+        - "Nordström TV N295 Air"
+        - "Vidar Hörlurar V191 Studio"
+        - "Vidar Ljudsystem V113 Max"
+    tools_called: [query_sales]
+    dimensions: [product]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: top_products_by_units_all_time
+  question: "Vilken produkt har vi sålt flest exemplar av totalt?"
+  # gt: the `units` values inside top_10_products_by_net_sales confirm the accessory skew;
+  # the ordering itself is derived, because that gt list is ordered by revenue
+  derivation: {measure: units, group_by: product, top: 3, where: {relative: all_time}}
+  expects:
+    numeric: {value: 5046, unit: st, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Vidar Tillbehör V139 Compact"
+        - "Vidar Tillbehör V217 Air"
+        - "Vidar Högtalare V178 Max"
+    must_contain: ["Vidar Tillbehör V139 Compact"]
+    tools_called: [query_sales]
+    dimensions: [product]
+    chart_type: [bar, kpi]
+    status: ok
+    language: sv
+
+- id: top_products_stockholm_all_time
+  question: "Vilka produkter har sålt bäst i Stockholm under hela perioden?"
+  # Fourth case in this file to name its period explicitly. "Stockholm" stays
+  # deliberately loose — resolving the city to the län is the point of the case — but
+  # the window cannot be left implicit while the expectation is all_time.
+  # gt: per_supplier["Nordström Audio AB"].top_10_products_stockholm_by_net_sales
+  # (their own example question; requires resolve_entities to turn "Stockholm" into the län)
+  derivation: {measure: net_sales_sek, group_by: product, top: 5,
+               where: {relative: all_time, region: "Stockholms län"}}
+  expects:
+    numeric: {value: 3253417.23, unit: SEK, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Nordström TV N100 Pro"
+        - "Nordström TV N230 Ultra"
+        - "Nordström TV N295 Air"
+        - "Vidar Hörlurar V191 Studio"
+        - "Vidar Ljudsystem V113 Max"
+    tools_called: [resolve_entities, query_sales]
+    dimensions: [product]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: top_stores_last_12m
+  question: "Vilka butiker säljer mest av våra produkter?"
+  # derived: store × net_sales_sek, last_12_months. `store` is below the rollup's grain,
+  # so this question must fall through to the fact table.
+  derivation: {measure: net_sales_sek, group_by: store, top: 3,
+               where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 4233255.51, unit: SEK, tolerance_pct: 0.5}
+    top_n:
+      group_by: store
+      prefix_only: true
+      order:
+        - "Onlinebutik – Stockholms län"
+        - "Göteborg Centrum"
+        - "Borås Handelsplats 2"
+    tools_called: [query_sales]
+    dimensions: [store]
+    chart_type: bar
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- geography
+
+- id: sales_by_region_all_time
+  question: "Hur fördelar sig försäljningen mellan länen under hela perioden?"
+  # The period is named in the question on purpose. Without it the compiler defaults to
+  # last_12_months (compiler.py :: resolve_time_range) — correctly — and an expectation
+  # demanding all_time would be testing the eval author's assumption, not the system.
+  # gt: per_supplier["Nordström Audio AB"].net_sales_by_region
+  derivation: {measure: net_sales_sek, group_by: region, where: {relative: all_time}}
+  expects:
+    series:
+      group_by: region
+      tolerance_pct: 0.5
+      points:
+        "Stockholms län": 28163619.5
+        "Västra Götalands län": 10606922.18
+        "Skåne län": 7490254.35
+        "Gotlands län": 318035.55
+    tools_called: [query_sales]
+    dimensions: [region]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: strongest_region_all_time
+  question: "Vilket län är vårt starkaste sett över hela perioden?"
+  # Period named for the same reason as sales_by_region_all_time: an unqualified
+  # question correctly resolves to last_12_months, not to all_time.
+  # gt: net_sales_by_region, the largest key — Stockholms län is deliberately over-indexed
+  derivation: {measure: net_sales_sek, group_by: region, top: 1,
+               where: {relative: all_time}}
+  expects:
+    numeric: {value: 28163619.5, unit: SEK, tolerance_pct: 0.5}
+    must_contain: ["Stockholm"]
+    tools_called: [query_sales]
+    dimensions: [region]
+    chart_type: [bar, kpi]
+    status: ok
+    language: sv
+
+- id: sales_by_region_last_12m
+  question: "Visa försäljning per län för de senaste tolv månaderna."
+  # derived: region × net_sales_sek over last_12_months
+  derivation: {measure: net_sales_sek, group_by: region,
+               where: {relative: last_12_months}}
+  expects:
+    # No `numeric` here on purpose. This derivation groups without `top:`, so it yields the
+    # all-region total, not any one region — an earlier revision asserted the Stockholm
+    # figure as `numeric` and it could never have re-derived. The series below already
+    # pins every region, which is what the question actually asks for.
+    series:
+      group_by: region
+      tolerance_pct: 0.5
+      points:
+        "Stockholms län": 14495308.84
+        "Västra Götalands län": 5740152.55
+        "Skåne län": 4106627.88
+    tools_called: [query_sales]
+    dimensions: [region]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: stockholm_share_of_own_sales
+  question: "Hur stor andel av hela periodens försäljning kommer från Stockholms län?"
+  # Same reason as sales_by_region_all_time: name the window or get the default.
+  # derived: Stockholm net / total own net, all_time — both figures are gt keys
+  # (net_sales_by_region["Stockholms län"] / net_sales_sek)
+  derivation:
+    measure: net_sales_sek
+    where: {relative: all_time, region: "Stockholms län"}
+    share_of_where: {relative: all_time}
+  expects:
+    numeric: {value: 36.23, unit: "%", tolerance_pct: 2.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, pie]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- channel
+
+- id: sales_by_channel_last_12m
+  question: "Hur mycket säljer vi i fysisk butik jämfört med online?"
+  # derived: channel × net_sales_sek over last_12_months
+  derivation: {measure: net_sales_sek, group_by: channel,
+               where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: channel
+      tolerance_pct: 0.5
+      points:
+        fysisk: 29759524.42
+        online: 11369940.17
+    tools_called: [query_sales]
+    dimensions: [channel]
+    chart_type: [bar, pie, stacked_bar]
+    status: ok
+    language: sv
+
+- id: online_share_last_12m
+  question: "Hur stor andel av försäljningen är online senaste året?"
+  # derived: online net / total net over last_12_months
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months, channel: online}
+    share_of_where: {relative: last_12_months}
+  expects:
+    numeric: {value: 27.62, unit: "%", tolerance_pct: 2.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, pie, bar]
+    status: ok
+    language: sv
+
+- id: units_by_channel_last_12m
+  question: "Hur många enheter sålde vi online respektive i butik senaste året?"
+  # derived: channel × units over last_12_months
+  derivation: {measure: units, group_by: channel, where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: channel
+      tolerance_pct: 0.5
+      points:
+        fysisk: 17932
+        online: 6764
+    tools_called: [query_sales]
+    dimensions: [channel]
+    chart_type: [bar, pie, stacked_bar]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- price and discount
+
+- id: avg_price_last_12m
+  question: "Vad är vårt snittpris senaste tolv månaderna?"
+  # derived: net_sales_sek / units over last_12_months
+  derivation: {measure: avg_price_sek, where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 1665.43, unit: SEK, tolerance_pct: 1.0}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: avg_price_by_channel_last_12m
+  question: "Är snittpriset högre online eller i fysisk butik?"
+  # derived: avg_price_sek per channel over last_12_months (online is marginally higher)
+  derivation: {measure: avg_price_sek, group_by: channel,
+               where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: channel
+      tolerance_pct: 1.0
+      points:
+        fysisk: 1659.58
+        online: 1680.95
+    tools_called: [query_sales]
+    dimensions: [channel]
+    chart_type: [bar, kpi]
+    status: ok
+    language: sv
+
+- id: discount_rate_last_12m
+  question: "Hur stor är vår rabattgrad senaste året?"
+  # derived: 100 * discount / gross over last_12_months
+  derivation: {measure: discount_rate, where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 22.51, unit: "%", tolerance_pct: 2.0}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: discount_sek_all_time
+  question: "Hur mycket har vi gett i rabatt totalt, i kronor?"
+  # gt: per_supplier[...].gross_sales_sek - net_sales_sek = 100063499.07 - 77537281.39
+  derivation: {measure: discount_sek, where: {relative: all_time}}
+  expects:
+    numeric: {value: 22526217.68, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    dimensions: []
+    chart_type: kpi
+    status: ok
+    language: sv
+
+- id: discount_rate_by_month_last_12m
+  question: "Visa rabattgraden per månad senaste året."
+  # derived: discount_rate per month; campaign months spike, ordinary months are near zero
+  derivation: {measure: discount_rate, group_by: month,
+               where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: month
+      tolerance_pct: 3.0
+      points:
+        "2025-08-01": 22.48
+        "2025-11-01": 22.45
+        "2026-01-01": 22.31
+        "2026-05-01": 22.92
+    tools_called: [query_sales]
+    dimensions: [month]
+    chart_type: [line, bar]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- comparisons
+
+- id: yoy_last_12m_vs_previous_12m
+  question: "Hur går det senaste tolv månaderna jämfört med tolv månaderna innan?"
+  # derived: 41 129 464.59 vs 36 407 816.80 — both windows are sums of gt monthly keys
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months}
+    compare_where: {from: "2024-07-01", to: "2025-06-30"}
+  expects:
+    numeric: {value: 41129464.59, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 13.05, tolerance_pct: 5.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+- id: yoy_q2_2026
+  question: "Hur var andra kvartalet 2026 jämfört med samma kvartal förra året?"
+  # gt: months 2026-04..06 (8 293 081.07) vs 2025-04..06 (7 574 360.63)
+  derivation:
+    measure: net_sales_sek
+    where: {from: "2026-04-01", to: "2026-06-30"}
+    compare_where: {from: "2025-04-01", to: "2025-06-30"}
+  expects:
+    numeric: {value: 8293081.07, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 9.79, tolerance_pct: 5.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+- id: mom_september_vs_august_2025
+  question: "Hur var september 2025 jämfört med föregående månad?"
+  # derived: net_sales_by_month 2025-09 (2 925 114.25) vs 2025-08 (3 364 657.88) — a decline
+  # of 13.06 %, which is the more interesting case: the answer must not silently report
+  # growth. This case used to sit on juni 2026 vs maj 2026; in the current data that pair
+  # rises (+0.96 %), which would have quietly turned a decline test into an ordinary delta
+  # check. It moved to a pair that still falls rather than being rescaled.
+  derivation:
+    measure: net_sales_sek
+    where: {from: "2025-09-01", to: "2025-09-30"}
+    compare_where: {from: "2025-08-01", to: "2025-08-31"}
+  expects:
+    numeric: {value: 2925114.25, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: -13.06, tolerance_pct: 8.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+- id: yoy_june_2026_vs_2025
+  question: "Sålde vi mer i juni i år än i juni förra året?"
+  # gt: net_sales_by_month 2026-06 (2 803 465.62) vs 2025-06 (2 552 872.97)
+  derivation:
+    measure: net_sales_sek
+    where: {from: "2026-06-01", to: "2026-06-30"}
+    compare_where: {from: "2025-06-01", to: "2025-06-30"}
+  expects:
+    numeric: {value: 2803465.62, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 9.73, tolerance_pct: 5.0}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- market share and rank
+# query_market_share is the only tool that reads beyond the tenant's own rows, and it
+# returns aggregates only. Note the k-anonymity guard is NOT expected to fire here: all
+# four subcategories below hold ≥ 5 competing brands. The thin one lives in adversarial.yaml.
+
+- id: market_share_tv_last_12m
+  question: "Vad är vår marknadsandel inom TV senaste tolv månaderna?"
+  # derived: own 10 097 196.09 of a 20 011 440.98 subcategory total, 5 brands competing.
+  # gt cross-check: brands_per_subcategory["TV"] == 5, and demo_supplier_market_share
+  # carries the same share per month.
+  derivation:
+    market_share: {subcategory: TV, brand: Nordström}
+    where: {relative: last_12_months}
+  expects:
+    numeric: {value: 50.60, unit: "%", tolerance_pct: 3.0}
+    tools_called: [query_market_share]
+    chart_type: [kpi, pie, bar]
+    status: ok
+    language: sv
+
+- id: rank_tv_last_12m
+  question: "Vilken placering har vi bland TV-varumärkena?"
+  # derived: rank 1 of 5. gt: brands_per_subcategory["TV"] == 5
+  derivation:
+    market_share: {subcategory: TV, brand: Nordström}
+    where: {relative: last_12_months}
+  expects:
+    rank: 1
+    n_brands: 5
+    tools_called: [query_market_share]
+    chart_type: [kpi, bar, table]
+    status: ok
+    language: sv
+
+- id: market_share_speakers_last_12m
+  question: "Hur stor andel av högtalarkategorin står vi för?"
+  # derived: Nordström 3 215 984.25 of 9 921 171.47, rank 1 of 5.
+  # gt: brands_per_subcategory["Högtalare"] == 5 (above the k-threshold, so not suppressed)
+  derivation:
+    market_share: {subcategory: Högtalare, brand: Nordström}
+    where: {relative: last_12_months}
+  expects:
+    numeric: {value: 32.37, unit: "%", tolerance_pct: 3.0}
+    rank: 1
+    n_brands: 5
+    tools_called: [query_market_share]
+    chart_type: [kpi, pie, bar]
+    status: ok
+    language: sv
+
+- id: market_share_headphones_both_brands
+  question: "Hur stora andelar har våra varumärken av hörlursmarknaden?"
+  # derived: Nordström 10.59 %, Vidar 31.14 % of the same 13 020 164.17 subcategory total.
+  # Two own brands compete separately in one subcategory — they must not be summed before
+  # ranking. gt: brands_per_subcategory["Hörlurar"] == 6
+  derivation:
+    market_share: {subcategory: Hörlurar, brands: [Nordström, Vidar]}
+    where: {relative: last_12_months}
+  expects:
+    series:
+      group_by: brand
+      tolerance_pct: 3.0
+      points:
+        Nordström: 10.59
+        Vidar: 31.22
+    n_brands: 6
+    tools_called: [query_market_share]
+    chart_type: [bar, table, pie]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- deliberate data oddities
+# The generator injects these on purpose (§5.1). They are where a system that pattern-matches
+# instead of reading the data gives itself away.
+
+- id: discontinued_product_series
+  question: "Visa försäljningen per månad för Nordström Hörlurar N178 Pro."
+  # derived: launched 2024-12-07, discontinued 2025-05-29 — the series exists for six
+  # months and then stops. dim_product.discontinued_date is the source of the truncation.
+  derivation:
+    measure: net_sales_sek
+    group_by: month
+    where: {relative: all_time, product: "Nordström Hörlurar N178 Pro"}
+  expects:
+    series:
+      group_by: month
+      tolerance_pct: 0.5
+      points:
+        "2024-12-01": 454100.62
+        "2025-01-01": 265554.52
+        "2025-02-01": 182653.17
+        "2025-03-01": 183760.17
+        "2025-04-01": 199565.07
+        "2025-05-01": 224297.8
+    tools_called: [resolve_entities, query_sales]
+    dimensions: [month]
+    chart_type: line
+    caveats_min: 1
+    status: ok
+    language: sv
+
+- id: discontinued_product_total
+  question: "Hur mycket sålde Nordström Hörlurar N178 Pro innan den utgick?"
+  # derived: 1 509 931.35 SEK over 1 334 units, all of it inside 2024-12 … 2025-05
+  derivation:
+    measure: net_sales_sek
+    where: {relative: all_time, product: "Nordström Hörlurar N178 Pro"}
+  expects:
+    numeric: {value: 1509931.35, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, line, bar]
+    status: ok
+    language: sv
+
+- id: new_store_series
+  question: "Hur har butiken Täby Handelsplats 4 (ny) utvecklats per månad?"
+  # derived: dim_store.opened_date == 2025-08-05, so the series starts in August 2025 and
+  # the first month is partial. Anything before that is genuinely absent, not missing.
+  derivation:
+    measure: net_sales_sek
+    group_by: month
+    where: {relative: all_time, store: "Täby Handelsplats 4 (ny)"}
+  expects:
+    series:
+      group_by: month
+      tolerance_pct: 0.5
+      points:
+        "2025-08-01": 121097.29
+        "2025-09-01": 133832.86
+        "2025-12-01": 197993.05
+        "2026-06-01": 92392.93
+    tools_called: [resolve_entities, query_sales]
+    dimensions: [month]
+    chart_type: line
+    caveats_min: 1
+    status: ok
+    language: sv
+
+- id: new_store_total
+  question: "Hur mycket har vi sålt i Täby Handelsplats 4 sedan den öppnade?"
+  # derived: 1 223 902.11 SEK, all of it after 2025-08-05
+  derivation:
+    measure: net_sales_sek
+    where: {relative: all_time, store: "Täby Handelsplats 4 (ny)"}
+  expects:
+    numeric: {value: 1223902.11, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- loose free text
+# None of these strings is a column value. Each one must go through resolve_entities before
+# a filter can be built — otherwise the model has to invent an id, which is exactly the
+# hallucination entry point §5.4 closes.
+
+- id: loose_headphones_subcategory
+  question: "Hur går det för våra hörlurar?"
+  # derived: subcategory Hörlurar, own brands only, last_12_months = 6 509 538.92 SEK
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months, subcategory: Hörlurar}
+  expects:
+    numeric: {value: 5432808.19, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, line, bar]
+    status: ok
+    language: sv
+
+- id: loose_sthlm_abbreviation
+  question: "Vad sålde vi i sthlm senaste året?"
+  # derived: "sthlm" is a seeded synonym for Stockholms län; last_12_months = 14 495 308.84
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months, region: "Stockholms län"}
+  expects:
+    numeric: {value: 14495308.84, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+- id: loose_best_brand
+  question: "Vilket är vårt bästa märke under hela perioden?"
+  # gt: per_supplier[...] covers the supplier, not the brand split; derived per brand —
+  # Nordström 47 117 567.07 vs Vidar 30 419 714.32, and the two sum to the gt supplier total
+  derivation: {measure: net_sales_sek, group_by: brand, top: 1,
+               where: {relative: all_time}}
+  expects:
+    numeric: {value: 47117567.07, unit: SEK, tolerance_pct: 0.5}
+    must_contain: ["Nordström"]
+    tools_called: [query_sales]
+    dimensions: [brand]
+    chart_type: [bar, kpi, pie]
+    status: ok
+    language: sv
+
+- id: loose_tv_apparater
+  question: "hur går det för tv-apparater hos oss?"
+  # derived: resolves to subcategory TV; own net over last_12_months = 12 086 730.19
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months, subcategory: TV}
+  expects:
+    numeric: {value: 10097196.09, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, line, bar]
+    status: ok
+    language: sv
+
+- id: brand_split_last_12m
+  question: "Hur fördelar sig försäljningen mellan Nordström och Vidar senaste året?"
+  # derived: brand × net_sales_sek over last_12_months; sums to total_net_sales_last_12m
+  derivation: {measure: net_sales_sek, group_by: brand,
+               where: {relative: last_12_months}}
+  expects:
+    series:
+      group_by: brand
+      tolerance_pct: 0.5
+      points:
+        Nordström: 24588263.36
+        Vidar: 16541201.23
+    tools_called: [query_sales]
+    dimensions: [brand]
+    chart_type: [bar, pie, stacked_bar]
+    status: ok
+    language: sv
+
+- id: subcategory_breakdown_last_12m
+  question: "Vilka underkategorier står för mest av vår försäljning senaste året?"
+  # derived: subcategory × net_sales_sek, last_12_months; sums to total_net_sales_last_12m
+  derivation: {measure: net_sales_sek, group_by: subcategory, top: 4,
+               where: {relative: last_12_months}}
+  expects:
+    numeric: {value: 10097196.09, unit: SEK, tolerance_pct: 0.5}
+    top_n:
+      group_by: subcategory
+      prefix_only: true
+      order: ["TV", "Ljudanläggningar", "Högtalare", "Hörlurar"]
+    tools_called: [query_sales]
+    dimensions: [subcategory]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: stockholm_online_last_12m
+  question: "Hur mycket sålde vi online i Stockholms län senaste tolv månaderna?"
+  # derived: two filters at once (region + channel) over last_12_months = 5 022 033.59
+  derivation:
+    measure: net_sales_sek
+    where: {relative: last_12_months, region: "Stockholms län", channel: online}
+  expects:
+    numeric: {value: 4233255.51, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [resolve_entities, query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv

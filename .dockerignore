@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+node_modules/
+web/node_modules/
+web/dist/
+
+.git/
+.github/
+
+# Mounted as a volume by the seed service, so it must not bloat the build context —
+# the fact CSV alone is ~50 MB.
+data/
+
+*.md
+!README.md

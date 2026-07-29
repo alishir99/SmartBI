@@ -1,0 +1,56 @@
+[project]
+name = "solvigo-insights"
+version = "0.1.0"
+description = "AI-native sales dashboard for suppliers — MCP semantic layer over a Swedish retail star schema"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.30",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-jose[cryptography]>=3.3",
+    "argon2-cffi>=23.1",
+    # Upper bound is load-bearing, not caution: mcp 2.0 renamed mcp.server.fastmcp to
+    # mcp.server.mcpserver, so an unpinned rebuild fails at import in mcp_server/server.py.
+    "mcp>=1.2,<2",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "pandas>=2.2",
+    "numpy>=2.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "mypy>=1.13",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["api", "mcp_server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# `Depends(...)` and `Query(...)` in a default argument is the FastAPI idiom, not the mutable
+# default B008 is meant to catch — FastAPI reads these markers off the signature. Listing them
+# here keeps B008 switched on everywhere it is actually useful, rather than littering the
+# routes with per-line noqa.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+                          "fastapi.Header", "fastapi.Form", "fastapi.File"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["mcp_server/tests", "api/tests", "eval/tests"]

@@ -1,0 +1,82 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+
+    # A real Postgres with pgvector, so CI verifies what a laptop without Docker cannot:
+    # that the schema applies, the RLS policies are accepted, the barrier views compile, and
+    # the tools return the numbers ground_truth.json says they should.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: solvigo
+          POSTGRES_PASSWORD: solvigo
+          POSTGRES_DB: solvigo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U solvigo -d solvigo"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_USER: solvigo
+      POSTGRES_PASSWORD: solvigo
+      POSTGRES_DB: solvigo
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install -e ".[dev]" sqlglot
+
+      - name: Lint
+        run: |
+          ruff check mcp_server api scripts eval
+          mypy mcp_server api --ignore-missing-imports
+
+      - name: Unit tests (no database needed)
+        run: pytest mcp_server/tests api/tests eval/tests -q
+
+      - name: Apply schema
+        run: |
+          for file in db/sql/*.sql; do
+            echo "--- $file"
+            PGPASSWORD=solvigo psql -h localhost -U solvigo -d solvigo -v ON_ERROR_STOP=1 -f "$file"
+          done
+
+      - name: Generate and seed
+        run: |
+          python scripts/generate_data.py --seed 42
+          python scripts/seed.py
+
+      - name: Prove tenant isolation at the database level
+        run: PGPASSWORD=solvigo psql -h localhost -U solvigo -d solvigo -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
+
+      - name: Integration tests (against the seeded database)
+        run: pytest -q -m integration
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm install
+      - run: npx tsc --noEmit
+      # The chart contract (§8) is deterministic frontend logic — order, limit, series
+      # ranking, colour, scale — so it is unit-tested rather than eyeballed.
+      - run: npm test
+      - run: npm run build

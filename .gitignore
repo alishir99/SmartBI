@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+node_modules/
+dist/
+.vite/
+
+.env
+*.local
+
+# generated data + ground truth (regenerate with scripts/generate_data.py --seed 42)
+data/generated/

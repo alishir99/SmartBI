@@ -13,7 +13,7 @@ against single brands would flatter it.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from .. import db
 from ..semantic.compiler import Params, resolve_time_range
@@ -81,9 +81,31 @@ SELECT br.name          AS brand,
 """
 
 
+def _snap_to_whole_months(window: tuple[date, date]) -> tuple[date, date]:
+    """Widen a window so it starts and ends on calendar month boundaries.
+
+    The own-brand and peer figures come from monthly rollups, so the numerator is
+    always a whole number of months. Leaving the category total on the exact
+    requested dates put a full-month numerator over a part-month denominator, which
+    is how a share above 100 % was reachable from the dashboard's own last_7_days
+    chip. Snapping both sides to the same months is what makes the ratio meaningful.
+
+    It also removes the finest axis for differencing the k-anonymity guard: an
+    arbitrary date window can no longer be nudged a day at a time to isolate a
+    single competitor's contribution (§11.3).
+    """
+    start, end = window
+    first = start.replace(day=1)
+    # Day 28 + 4 days always lands in the next month, whatever the month length.
+    last = (end.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    return first, last
+
+
 async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
     coverage = await db.coverage()
-    window = resolve_time_range(spec, coverage)
+    requested = resolve_time_range(spec, coverage)
+    window = _snap_to_whole_months(requested)
+    snapped = window != requested
 
     params = Params()
     params.add(window[0])          # $1
@@ -120,7 +142,19 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
             "scope": scope_label(tenant.supplier_id),
             "currency": "SEK",
             "vat": "exkl. moms",
-            "time_range": {"from": window[0].isoformat(), "to": window[1].isoformat()},
+            # The reported range is the one actually measured, not the one asked for.
+            # A source chip that showed the requested dates would misdescribe the number.
+            "time_range": {
+                "from": window[0].isoformat(),
+                "to": window[1].isoformat(),
+                "requested_from": requested[0].isoformat(),
+                "requested_to": requested[1].isoformat(),
+                "snapped_to_whole_months": snapped,
+            },
+            **({"note": (
+                f"Marknadsandel mäts per hel kalendermånad. Det begärda intervallet "
+                f"{requested[0].isoformat()}–{requested[1].isoformat()} har utökats till "
+                f"{window[0].isoformat()}–{window[1].isoformat()}.")} if snapped else {}),
             "k_anonymity": {"min_brands": MIN_BRANDS, "min_transactions": MIN_TRANSACTIONS},
             "policy": "Konkurrenters siffror returneras aldrig, varken namngivna eller "
                       "itemiserade. Endast egen andel, egen placering och kategoritotal.",

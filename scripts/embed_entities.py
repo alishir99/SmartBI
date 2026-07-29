@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import asyncpg
+from console import use_utf8_stdout
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -41,6 +42,7 @@ LISTS = 16
 
 
 async def main() -> None:
+    use_utf8_stdout()
     if os.getenv("ENABLE_VECTOR_SEARCH", "false").lower() not in ("1", "true", "yes"):
         raise SystemExit("set ENABLE_VECTOR_SEARCH=true to run this")
 

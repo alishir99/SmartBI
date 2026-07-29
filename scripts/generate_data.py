@@ -23,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from console import use_utf8_stdout
 from reference_data import (
     AGE_BUCKETS,
     BRAND_SUBCATEGORIES,
@@ -659,6 +660,7 @@ def reconcile(facts: pd.DataFrame, ground_truth: dict) -> None:
 
 
 def main() -> None:
+    use_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--lines", type=int, default=DEFAULT_LINES)

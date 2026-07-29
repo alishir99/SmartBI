@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import asyncpg
+from console import use_utf8_stdout
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data" / "generated"
@@ -240,6 +241,7 @@ async def refresh_rollups(connection: asyncpg.Connection) -> None:
 
 
 async def main() -> None:
+    use_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true",
                         help="reload even if the database already holds facts")

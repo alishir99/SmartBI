@@ -131,7 +131,8 @@ De sa att de ställer egna frågor live — det stryker kolumn 2. Allt annat str
 Konkret: `mcp_server/semantic/model.py` är ett register över vad som får mätas och delas upp.
 `compiler.py` översätter en typad spec till SQL där **varje identifierare kommer från
 registret** och **varje värde är en bunden parameter**. En fientlig sträng blir ett
-valideringsfel, inte en fråga. Det finns 38 tester på just det.
+valideringsfel, inte en fråga. Det finns 43 tester på just det — de flesta parsar den
+genererade SQL:en med `sqlglot` och kontrollerar att inget literalvärde tog sig in i den.
 
 ### 2. Så vet vi att siffrorna är verkliga
 
@@ -237,7 +238,11 @@ struktur marknadsandel kräver: flera konkurrerande varumärken per kategori, ä
 leverantörer, med överlappande sortiment. Och ingen ger ett **facit**.
 
 `scripts/generate_data.py --seed 42` är deterministisk — samma seed ger byte-identisk
-utdata, vilket är verifierat — och skriver både CSV:erna och `ground_truth.json`.
+utdata — och skriver både CSV:erna och `ground_truth.json`. Att det stämmer är inget
+påstående: `eval/tests/test_determinism.py` genererar två gånger och jämför SHA-256 per
+fil, och kontrollerar dessutom att en *annan* seed ger andra siffror, så testet inte
+skulle kunna passera på en generator som ignorerar sin seed. Hela facit vilar på det —
+`ground_truth.json` beskriver bara datan om ingen oseedad slump når utdatan.
 Formen: 8 leverantörer, 14 varumärken, 6 kategorier / 22 underkategorier, 392 produkter,
 81 butiker över alla 21 län plus onlinekanal, 24 månader, ~811 000 orderrader, 848 MSEK.
 
@@ -275,7 +280,7 @@ solvigo-insights/
 ├─ mcp_server/
 │  ├─ semantic/          registret + spec→SQL-kompilatorn
 │  ├─ tools/             de fyra verktygen + deras scheman
-│  └─ tests/             90 tester, ingen databas krävs
+│  └─ tests/             86 tester, varav 79 utan databas
 ├─ api/                  FastAPI: auth, MCP-klient, agentloop, validator, SSE
 ├─ web/src/
 │  ├─ charts/            spec→diagram, deterministiskt (+ enhetstester)

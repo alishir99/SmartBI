@@ -56,7 +56,12 @@ _NON_PLOTTABLE = frozenset({"suppressed", "truncated"})
 
 def _plottable(column: dict) -> bool:
     key = column.get("key", "")
-    return key not in _NON_PLOTTABLE and not key.endswith("_id")
+    # `_compare` covers the comparison period's own date column as well as its measures.
+    # It labels the prior period rather than splitting the current one, so treating it as
+    # a dimension would turn a 12-month year-on-year line into twelve one-point series.
+    return (key not in _NON_PLOTTABLE
+            and not key.endswith("_id")
+            and not key.endswith("_compare"))
 
 
 def _dimensions(result: CachedResult) -> list[dict]:

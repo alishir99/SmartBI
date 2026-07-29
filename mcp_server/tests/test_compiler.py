@@ -176,6 +176,75 @@ def test_compare_emits_delta_columns_and_a_full_outer_join():
     assert compiled.compare_range == (date(2024, 7, 1), date(2025, 6, 30))
 
 
+def test_compare_over_a_date_dimension_joins_on_position_not_on_value():
+    """The regression behind "visa månadsförsäljning jämfört med i fjol".
+
+    cur.month lives in 2025-07..2026-06 and prev.month in 2024-07..2025-06, so
+    joining on the value matched zero rows: 24 rows instead of 12, every delta NULL.
+    The join has to be on position within the window.
+    """
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["month"],
+        "compare_to": "same_period_last_year",
+        "time_range": "last_12_months",
+    })
+    assert "USING (month)" not in compiled.sql
+    assert "c.month__ord = pv.month__ord" in compiled.sql
+    assert "DENSE_RANK() OVER (ORDER BY" in compiled.sql
+
+
+def test_compare_over_a_date_dimension_returns_both_real_dates():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["month"],
+        "compare_to": "same_period_last_year",
+        "time_range": "last_12_months",
+    })
+    keys = [c["key"] for c in compiled.columns]
+    assert keys == ["month", "month_compare", "net_sales_sek",
+                    "net_sales_sek_compare", "net_sales_sek_delta_pct"]
+    # The comparison series has to be labellable with the period it came from.
+    assert "pv.month AS month_compare" in compiled.sql
+
+
+def test_the_internal_ordinal_never_reaches_the_caller():
+    """__ord is a join mechanism. Leaking it would put a meaningless integer
+    column in the table view and the CSV export."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["month"],
+        "compare_to": "same_period_last_year",
+        "time_range": "last_12_months",
+    })
+    assert not any(c["key"].endswith("__ord") for c in compiled.columns)
+
+
+def test_compare_mixing_a_date_and_a_plain_dimension():
+    """Position for the date, value for the product — and DENSE_RANK rather than
+    ROW_NUMBER so the repeated month keeps one shared position across products."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["month", "product"],
+        "compare_to": "same_period_last_year",
+        "time_range": "last_12_months",
+    })
+    assert "c.month__ord = pv.month__ord" in compiled.sql
+    assert "c.product IS NOT DISTINCT FROM pv.product" in compiled.sql
+    assert "COALESCE(c.product, pv.product) AS product" in compiled.sql
+
+
+def test_compare_without_a_date_dimension_needs_no_ordinal():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "compare_to": "same_period_last_year",
+        "time_range": "last_12_months",
+    })
+    assert "__ord" not in compiled.sql
+    assert "DENSE_RANK()" not in compiled.sql
+
+
 def test_compare_without_dimensions_uses_cross_join():
     compiled = compile_ok({"measures": ["net_sales_sek"], "compare_to": "previous_period"})
     assert "CROSS JOIN" in compiled.sql

@@ -232,8 +232,15 @@ def _where(source: str, filters: dict, window: tuple[date, date],
 
 
 def _select_block(source: str, measures: list[str], dimensions: list[str],
-                  window: tuple[date, date], filters: dict, params: Params) -> str:
-    """One aggregated SELECT over the chosen source."""
+                  window: tuple[date, date], filters: dict, params: Params,
+                  date_ordinals: bool = False) -> str:
+    """One aggregated SELECT over the chosen source.
+
+    `date_ordinals` adds a hidden position-within-the-window column for every date
+    dimension. Comparing two periods cannot join on the date value itself — this
+    July and last July are different dates — so the compare branch joins on this
+    ordinal instead. The column never reaches the caller; only the join uses it.
+    """
     joins: set[str] = set(BASE_JOINS[source])
     date_expr = DATE_EXPR[source]
 
@@ -244,6 +251,11 @@ def _select_block(source: str, measures: list[str], dimensions: list[str],
         expr = dimension.expr[source].format(date=date_expr)
         select_parts.append(f"{expr} AS {key}")
         group_parts.append(expr)
+        if date_ordinals and dimension.type == "date":
+            # Window functions run after GROUP BY, so this ranks the grouped periods.
+            # DENSE_RANK rather than ROW_NUMBER: with a second dimension present the
+            # same period repeats across rows and must keep one shared position.
+            select_parts.append(f"DENSE_RANK() OVER (ORDER BY {expr}) AS {key}__ord")
 
     for key in measures:
         measure = MEASURES[key]
@@ -282,15 +294,34 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         sql = current
         columns = _columns(dimensions, measures, compare=False)
     else:
+        date_dimensions = [key for key in dimensions if DIMENSIONS[key].type == "date"]
+        if date_dimensions:
+            # Both blocks have to be rebuilt with the ordinal, including the current one.
+            params = Params()
+            current = _select_block(source, measures, dimensions, window, filters,
+                                    params, date_ordinals=True)
         previous = _select_block(source, measures, dimensions, compare_window,
-                                 filters, params)
+                                 filters, params, date_ordinals=bool(date_dimensions))
 
         if dimensions:
-            # USING merges the join columns, so each dimension is one unqualified column
-            # holding whichever side is present — which is what makes FULL OUTER the right
-            # join: a product that sold in only one of the two periods still appears.
-            join = f"FULL OUTER JOIN prev pv USING ({', '.join(dimensions)})"
-            select_parts = list(dimensions)
+            # FULL OUTER is the right join: a product that sold in only one of the two
+            # periods still appears. Date dimensions join on position within the window
+            # rather than on value — cur.month and prev.month are disjoint by
+            # construction, so joining on the value matched zero rows and every delta
+            # came back NULL. Non-date dimensions join on value, with IS NOT DISTINCT
+            # FROM so a NULL group still matches its counterpart.
+            conditions, select_parts = [], []
+            for key in dimensions:
+                if key in date_dimensions:
+                    conditions.append(f"c.{key}__ord = pv.{key}__ord")
+                    # Both real dates are returned: the caller needs to label the
+                    # comparison series with the period it actually came from.
+                    select_parts.append(f"c.{key}")
+                    select_parts.append(f"pv.{key} AS {key}_compare")
+                else:
+                    conditions.append(f"c.{key} IS NOT DISTINCT FROM pv.{key}")
+                    select_parts.append(f"COALESCE(c.{key}, pv.{key}) AS {key}")
+            join = f"FULL OUTER JOIN prev pv ON {' AND '.join(conditions)}"
         else:
             join = "CROSS JOIN prev pv"
             select_parts = []
@@ -321,7 +352,9 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         direction = "DESC" if str(order_by.get("dir", "desc")).lower() == "desc" else "ASC"
         sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {key} {direction} NULLS LAST"
     elif dimensions and DIMENSIONS[dimensions[0]].type == "date":
-        sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {dimensions[0]} ASC"
+        # NULLS LAST matters under compare: a period present only in the comparison
+        # window has no current date, and should trail rather than lead the series.
+        sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {dimensions[0]} ASC NULLS LAST"
 
     limit = spec.get("limit")
     if limit is None:
@@ -337,8 +370,14 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
 
 
 def _columns(dimensions: list[str], measures: list[str], compare: bool) -> list[dict]:
-    columns = [{"key": key, "type": DIMENSIONS[key].type, "label": DIMENSIONS[key].label}
-               for key in dimensions]
+    columns = []
+    for key in dimensions:
+        dimension = DIMENSIONS[key]
+        columns.append({"key": key, "type": dimension.type, "label": dimension.label})
+        if compare and dimension.type == "date":
+            # The compare row carries its own real date, not just the current one.
+            columns.append({"key": f"{key}_compare", "type": dimension.type,
+                            "label": f"{dimension.label} (jämförelse)"})
     for key in measures:
         measure = MEASURES[key]
         columns.append({"key": key, "type": "number", "unit": measure.unit,

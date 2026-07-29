@@ -46,22 +46,45 @@ def split_answer(text: str) -> tuple[str, dict[str, Any]]:
     return narrative, envelope if isinstance(envelope, dict) else {}
 
 
-# Columns that are carried for provenance and policy, not for plotting. `suppressed` is a
-# boolean the k-anonymity guard sets and `_infer_columns` types as text, which made it look
-# like a third dimension and pushed every market-share result onto the `table` branch; an
-# `_id` is an identifier, never a quantity, so charting it puts a primary key on a value
-# axis. Both were invisible while the model always sent its own chart spec.
-_NON_PLOTTABLE = frozenset({"suppressed", "truncated"})
+# Columns the tools carry for policy and joining, which are not part of the answer.
+# `suppressed` is a boolean the k-anonymity guard sets — `_infer_columns` types it as text,
+# which made it look like a third dimension and pushed every market-share result onto the
+# `table` branch. An `_id` is an identifier, never a quantity.
+_INTERNAL_COLUMNS = frozenset({"suppressed", "truncated"})
+
+
+def _presentable(column: dict) -> bool:
+    """Belongs in anything a user reads: the table view, the CSV, the card's columns.
+
+    The distinction from `_plottable` is `_compare`: a comparison figure is real data and a
+    reader may well want it in a spreadsheet, it just cannot share an axis with the current
+    period. Everything excluded here is internal bookkeeping in English, and shipping it
+    turned an export into something a supplier could not hand to a colleague.
+    """
+    key = column.get("key", "")
+    return key not in _INTERNAL_COLUMNS and not key.endswith("_id")
+
+
+def presentable_columns(result: CachedResult) -> list[dict]:
+    """The result's columns, minus the ones that exist for the machine."""
+    return [c for c in result.columns if _presentable(c)]
+
+
+def presentable_row(row: dict) -> dict:
+    """A row carrying only the keys `presentable_columns` describes.
+
+    An endpoint should not ship what it does not describe: leaving `product_id` in the JSON
+    while omitting it from `columns` would keep the identifier on the wire and merely hide
+    it from the table.
+    """
+    return {key: value for key, value in row.items() if _presentable({"key": key})}
 
 
 def _plottable(column: dict) -> bool:
-    key = column.get("key", "")
     # `_compare` covers the comparison period's own date column as well as its measures.
     # It labels the prior period rather than splitting the current one, so treating it as
     # a dimension would turn a 12-month year-on-year line into twelve one-point series.
-    return (key not in _NON_PLOTTABLE
-            and not key.endswith("_id")
-            and not key.endswith("_compare"))
+    return _presentable(column) and not column.get("key", "").endswith("_compare")
 
 
 def _dimensions(result: CachedResult) -> list[dict]:
@@ -174,9 +197,10 @@ def validate_chart(spec: ChartSpec, result: CachedResult) -> tuple[ChartSpec, li
 
 
 def to_columns(result: CachedResult) -> list[Column]:
+    """What the card's table view renders — the answer's columns, not the tool's."""
     return [Column(key=c["key"], type=c.get("type", "text"),
                    label=c.get("label", c["key"]), unit=c.get("unit"))
-            for c in result.columns]
+            for c in presentable_columns(result)]
 
 
 def _window(raw: Any) -> TimeWindow | None:

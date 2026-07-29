@@ -191,3 +191,72 @@ describe('axis scale', () => {
     expect(prepared.unit).toBe('st')
   })
 })
+
+describe('pie slices', () => {
+  const pie = (overrides: Partial<ChartSpec> = {}) =>
+    spec({ type: 'pie', x: 'subcategory', ...overrides })
+
+  const SUBCATEGORY: Column = { key: 'subcategory', type: 'text', label: 'Underkategori' }
+
+  const shares = (pairs: Array<[string, number]>) => rows(pairs, 'subcategory')
+
+  it('gives every slice its own colour', () => {
+    // The bug this pins: colour was matched against `series`, which for a pie holds the
+    // single measure and never a dimension value — so every wedge came out --series-1.
+    const prepared = prepareChart(
+      pie(),
+      [SUBCATEGORY, NET],
+      shares([
+        ['Hörlurar', 40],
+        ['TV', 30],
+        ['Högtalare', 20],
+      ]),
+    )
+
+    const colours = prepared.slices.map((slice) => slice.color)
+    expect(colours).toEqual(['var(--series-1)', 'var(--series-2)', 'var(--series-3)'])
+    expect(new Set(colours).size).toBe(3)
+  })
+
+  it('labels each slice with its dimension value, in drawn order', () => {
+    const prepared = prepareChart(
+      pie(),
+      [SUBCATEGORY, NET],
+      shares([
+        ['TV', 30],
+        ['Hörlurar', 40],
+      ]),
+    )
+
+    expect(prepared.slices.map((slice) => slice.label)).toEqual(['Hörlurar', 'TV'])
+    expect(prepared.slices.map((slice) => slice.label)).toEqual(
+      prepared.rows.map((row) => row.subcategory),
+    )
+  })
+
+  it('keeps the folded remainder on the muted slot', () => {
+    const prepared = prepareChart(
+      pie({ limit: 2 }),
+      [SUBCATEGORY, NET],
+      shares([
+        ['A', 50],
+        ['B', 30],
+        ['C', 10],
+        ['D', 5],
+      ]),
+    )
+
+    expect(prepared.folded).toBe(true)
+    const last = prepared.slices[prepared.slices.length - 1]
+    expect(last.label).toBe('Övrigt')
+    expect(last.color).toBe('var(--series-muted)')
+  })
+
+  it('leaves slices empty for every other chart type', () => {
+    // The legend switches on this, so a non-pie must never look like one.
+    for (const type of ['bar', 'line', 'stacked_bar'] as const) {
+      const prepared = prepareChart(spec({ type }), [PRODUCT, NET], rows([['A', 1]]))
+      expect(prepared.slices).toEqual([])
+    }
+  })
+})

@@ -100,7 +100,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
           isAnimationActive={false}
         >
           {rows.map((row, index) => (
-            <Cell key={String(row[nameKey] ?? index)} fill={sliceColor(prepared, row, index)} />
+            <Cell key={String(row[nameKey] ?? index)} fill={sliceColor(prepared, index)} />
           ))}
         </Pie>
         <Tooltip content={pieTooltip(prepared)} cursor={false} />
@@ -276,12 +276,14 @@ function categoryAxisWidth(prepared: PreparedChart): number {
   return Math.min(190, Math.max(96, longest * 6.4 + 12))
 }
 
-/** A pie's colour follows the slice, not the measure, so it indexes on the row. */
-function sliceColor(prepared: PreparedChart, row: ResultRow, index: number): string {
-  const nameKey = prepared.xColumn?.key
-  const name = nameKey ? String(row[nameKey] ?? '') : ''
-  const match = prepared.series.find((descriptor) => descriptor.label === name)
-  return match?.color ?? prepared.series[Math.min(index, prepared.series.length - 1)]?.color ?? 'var(--series-1)'
+/**
+ * A pie's colour follows the slice, not the measure, so it reads from `slices` — which
+ * prepare.ts builds from the dimension values, in the same row order Recharts draws.
+ * Matching against `series` here looked right and never matched: those are the measures,
+ * and a pie has one, so every wedge came out `--series-1`.
+ */
+function sliceColor(prepared: PreparedChart, index: number): string {
+  return prepared.slices[index]?.color ?? 'var(--series-1)'
 }
 
 function pieTooltip(prepared: PreparedChart) {
@@ -328,10 +330,15 @@ function yLabel(prepared: PreparedChart, value: number): string {
  * dropped for space.
  */
 function Legend({ prepared }: { prepared: PreparedChart }) {
-  if (prepared.series.length < 2) return null
+  // A pie legends its slices, and it needs one at any count: the wedges carry no axis, so
+  // without it the colours name nothing. Every other chart labels its categories on the
+  // axis already, which is why a single-series legend is noise there.
+  const isPie = prepared.slices.length > 0
+  const entries = isPie ? prepared.slices : prepared.series
+  if (entries.length === 0 || (!isPie && entries.length < 2)) return null
   return (
     <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      {prepared.series.map((descriptor) => (
+      {entries.map((descriptor) => (
         <li key={descriptor.key} className="flex items-center gap-2 text-xs text-ink-secondary">
           <span
             className="h-2 w-2 shrink-0 rounded-full"

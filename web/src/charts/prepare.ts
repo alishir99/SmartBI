@@ -8,7 +8,7 @@
  */
 
 import type { ChartSpec, Column, ColumnUnit, ResultRow } from '../types'
-import { MAX_SERIES, seriesColor } from './palette'
+import { MAX_SERIES, SERIES_MUTED, seriesColor } from './palette'
 import { moneyScale, truncateLabel, type MoneyScale } from '../lib/format'
 
 export type SeriesDescriptor = {
@@ -30,6 +30,17 @@ export type PreparedChart = {
   columns: Column[]
   /** True when a tail of small categories was folded into "Övrigt". */
   folded: boolean
+  /**
+   * One descriptor per pie slice, in row order; empty for every other chart type.
+   *
+   * A pie is the one chart whose colour varies along the *dimension* rather than along
+   * the measures. `series` describes the measures, and a pie has exactly one — so
+   * colouring slices from it painted every slice `--series-1` and hid the legend behind
+   * a "two or more series" rule. Computed here rather than in the component so the wedge
+   * and its legend swatch read from one array and cannot drift apart, and so it is
+   * testable without rendering.
+   */
+  slices: SeriesDescriptor[]
 }
 
 const OTHER_LABEL = 'Övrigt'
@@ -59,7 +70,29 @@ export function prepareChart(
     xColumn,
     unit,
     scale: unit === 'SEK' ? moneyScale(max) : null,
+    slices: spec.type === 'pie' ? sliceDescriptors(prepared.rows, xColumn, prepared.folded) : [],
   }
+}
+
+/**
+ * Colour and label per slice, following the dimension value. The folded tail keeps the
+ * muted slot it has everywhere else — "Övrigt" is a remainder, not a category, and giving
+ * it a palette hue makes it read as one.
+ */
+function sliceDescriptors(
+  rows: ResultRow[],
+  xColumn: Column | null,
+  folded: boolean,
+): SeriesDescriptor[] {
+  const key = xColumn?.key
+  return rows.map((row, index) => {
+    const label = key ? String(row[key] ?? '–') : `#${index + 1}`
+    return {
+      key: label,
+      label,
+      color: folded && label === OTHER_LABEL ? SERIES_MUTED : seriesColor(index),
+    }
+  })
 }
 
 /** Wide input: every measure in `spec.y` is already its own column. */
@@ -68,7 +101,7 @@ function direct(
   measures: Column[],
   rows: ResultRow[],
   xColumn: Column | null,
-): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale'> {
+): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale' | 'slices'> {
   const series = measures.map((column, index) => ({
     key: column.key,
     label: column.label,
@@ -96,7 +129,7 @@ function pivot(
   columns: Column[],
   rows: ResultRow[],
   xColumn: Column | null,
-): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale'> {
+): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale' | 'slices'> {
   const seriesKey = spec.series as string
   const measureKey = spec.y[0]
   const measure = byKey(columns, measureKey)
@@ -133,7 +166,7 @@ function pivot(
     key: name,
     label: name,
     // "Övrigt" is never a real entity, so it never takes a categorical hue.
-    color: name === OTHER_LABEL && folded ? 'var(--series-muted)' : seriesColor(index),
+    color: name === OTHER_LABEL && folded ? SERIES_MUTED : seriesColor(index),
   }))
 
   const pivoted = xOrder.map((x) => buckets.get(x) as ResultRow)

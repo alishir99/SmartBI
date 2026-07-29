@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from api.agent.render import (
     build_card,
+    presentable_columns,
+    presentable_row,
     propose_chart,
     split_answer,
+    to_columns,
     validate_chart,
 )
 from api.models import ChartSpec
@@ -192,3 +195,64 @@ def test_provenance_is_built_from_the_tools_own_meta():
     assert card.provenance.source == "mv_sales_daily (rollup)"
     assert card.provenance.scope == "supplier:abcd"
     assert card.provenance.vat == "exkl. moms"
+
+
+# ------------------------------------------------------------- what a reader is shown (F2)
+
+SUPPRESSED = {"key": "suppressed", "type": "text", "label": "suppressed"}
+PRODUCT_ID = {"key": "product_id", "type": "number", "label": "product_id"}
+COMPARE = {"key": "net_sales_sek_compare", "type": "number", "label": "Netto i fjol",
+           "unit": "SEK"}
+
+MARKET_SHARE_ROW = {"brand": "Nordström", "category_id": 4, "suppressed": False,
+                    "share_pct": 29.5, "product_id": 91}
+
+
+def market_share_result() -> CachedResult:
+    return make([{"key": "brand", "type": "text", "label": "Varumärke"},
+                 {"key": "category_id", "type": "number", "label": "category_id"},
+                 SUPPRESSED,
+                 {"key": "share_pct", "type": "number", "label": "Andel", "unit": "%"},
+                 PRODUCT_ID],
+                [MARKET_SHARE_ROW])
+
+
+def test_internal_columns_never_reach_the_table_view():
+    """A supplier reading the table should not meet a boolean flag in English."""
+    columns = to_columns(market_share_result())
+
+    keys = [c.key for c in columns]
+    assert keys == ["brand", "share_pct"]
+
+
+def test_identifier_columns_are_dropped_whatever_they_hold():
+    columns = presentable_columns(market_share_result())
+
+    assert not any(c["key"].endswith("_id") for c in columns)
+
+
+def test_comparison_columns_are_kept_for_reading_even_though_they_are_not_plotted():
+    """`_compare` is real data — it just cannot share an axis with the current period."""
+    result = make([MONTH, MEASURE, COMPARE],
+                  [{"month": "2026-01-01", "net_sales_sek": 5.0,
+                    "net_sales_sek_compare": 4.0}])
+
+    assert [c.key for c in to_columns(result)] == ["month", "net_sales_sek",
+                                                   "net_sales_sek_compare"]
+    # ...but the chart still leaves it off the axis.
+    assert propose_chart(result).y == ["net_sales_sek"]
+
+
+def test_a_row_carries_only_the_keys_the_columns_describe():
+    """Filtering the column list alone would keep the identifier on the wire."""
+    filtered = presentable_row(MARKET_SHARE_ROW)
+
+    assert filtered == {"brand": "Nordström", "share_pct": 29.5}
+
+
+def test_a_clean_result_passes_through_untouched():
+    result = make([PRODUCT, MEASURE], [{"product": "A", "net_sales_sek": 1.0}])
+
+    assert [c.key for c in to_columns(result)] == ["product", "net_sales_sek"]
+    assert presentable_row({"product": "A", "net_sales_sek": 1.0}) == {
+        "product": "A", "net_sales_sek": 1.0}

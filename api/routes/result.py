@@ -15,6 +15,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
+from ..agent.render import presentable_columns, presentable_row
 from ..deps import TenantContext, get_cache, get_supplier_scope
 from ..models import ResultPage
 from ..result_cache import ResultCache
@@ -41,12 +42,16 @@ async def get_result(query_id: str,
                      cache: ResultCache = Depends(get_cache)) -> ResultPage:
     result = _lookup(query_id, tenant, cache)
     page = result.rows[offset:offset + limit]
+    # The same filter the card and the chart use. Without it the table view rendered a
+    # `suppressed` column of English true/false next to a raw `product_id` — bookkeeping
+    # the tools need and a reader never asked for.
+    columns = presentable_columns(result)
     return ResultPage(
         query_id=result.query_id,
         columns=[{"key": c["key"], "type": c.get("type", "text"),
                   "label": c.get("label", c["key"]), "unit": c.get("unit")}
-                 for c in result.columns],
-        rows=page,
+                 for c in columns],
+        rows=[presentable_row(row) for row in page],
         row_count=result.row_count,
         truncated=offset + len(page) < len(result.rows),
     )
@@ -57,14 +62,17 @@ async def export_csv(query_id: str,
                      tenant: TenantContext = Depends(get_supplier_scope),
                      cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     result = _lookup(query_id, tenant, cache)
-    keys = [c["key"] for c in result.columns]
+    # An export is the most likely thing to be forwarded to someone who never saw the app,
+    # so it is the worst place for internal columns — same filter as the table view.
+    columns = presentable_columns(result)
+    keys = [c["key"] for c in columns]
 
     buffer = io.StringIO()
     # Semicolon delimiter and comma decimals: what Excel in a sv-SE locale expects. A
     # comma-delimited file with dot decimals opens as one column per row for a Swedish user,
     # which makes "export" useless in practice.
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-    writer.writerow([c.get("label", c["key"]) for c in result.columns])
+    writer.writerow([c.get("label", c["key"]) for c in columns])
     for row in result.rows:
         writer.writerow([_sv(row.get(key)) for key in keys])
 

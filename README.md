@@ -24,7 +24,23 @@ docker compose up
 
 - Webb: http://localhost:5173
 - API: http://localhost:8000/docs
-- MCP health: http://localhost:8081/health
+
+MCP-servern och Postgres publiceras **inte** på värden i standarduppsättningen. De behöver
+det inte — API:t når dem över compose-nätverket — och `internal_token` är tänkt som
+djupförsvar bakom en oåtkomlig port, inte som hela åtkomstkontrollen. För att kunna anropa
+verktygen direkt eller öppna `psql` och se RLS neka en läsning över tenant-gränsen:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+```
+
+Då finns MCP health på http://localhost:8081/health och Postgres på `localhost:5432`.
+
+`SOLVIGO_ENV=dev` i `.env.example` är det som tillåter de inkomna standardhemligheterna.
+Utan den vägrar både API:t och MCP-servern att starta så länge `JWT_SECRET`,
+`INTERNAL_TOKEN`, `POSTGRES_PASSWORD` eller `APP_DB_PASSWORD` står kvar på värdena som
+ligger i repot — de är publika, och en okonfigurerad driftsättning ska falla högljutt
+i stället för att köra vidare på dem.
 
 Demokonton (lösenord `demo1234`):
 

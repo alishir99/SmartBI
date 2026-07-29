@@ -174,6 +174,9 @@ async def health(_request: Request) -> JSONResponse:
 def main() -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # Before the pool, before the port. `internal_token` is the whole access control on
+    # this surface, so serving with the published default is worse than not serving.
+    settings.assert_secrets_rotated()
 
     async def run() -> None:
         await db.init_pool()

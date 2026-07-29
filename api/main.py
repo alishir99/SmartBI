@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Before anything else, and before the port is listening: an unconfigured deployment
+    # must not reach the point of answering a request. SOLVIGO_ENV=dev opts out for the
+    # local demo, which is the only place the in-repo secrets are acceptable.
+    settings.assert_secrets_rotated()
     await db.init_pool()
     app.state.mcp = McpClient()
     app.state.cache = ResultCache()

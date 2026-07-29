@@ -5,8 +5,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-solvigo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solvigo}
       POSTGRES_DB: ${POSTGRES_DB:-solvigo}
-    ports:
-      - "5432:5432"
+    # No published port. The services that need Postgres are on this network; publishing
+    # 5432 put a database whose credentials are in db/sql/04_rls.sql on the host interface.
+    # docker-compose.demo.yml adds it back for hands-on work.
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/sql:/docker-entrypoint-initdb.d:ro
@@ -39,10 +40,10 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db
-    # Not published to the host in production; exposed here so the tools can be
-    # exercised directly during the demo. See §11.4 (ingress: internal on Cloud Run).
-    ports:
-      - "8081:8081"
+    # Deliberately not published. `internal_token` is the only thing between this port and
+    # a full cross-tenant read, and a shared secret is defence in depth, not the boundary
+    # itself — the boundary is that the port is not reachable (§11.4, ingress: internal on
+    # Cloud Run). docker-compose.demo.yml publishes it for exercising the tools by hand.
     depends_on:
       seed:
         condition: service_completed_successfully

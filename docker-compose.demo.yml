@@ -1,0 +1,22 @@
+# Demo overlay — publishes the two internal ports to the host.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+#
+# Both are genuinely useful when showing the system: 8081 lets the four MCP tools be called
+# directly, which is how you demonstrate that the semantic layer is the data API and not a
+# side-car for the model, and 5432 lets you open psql and watch RLS refuse a cross-tenant
+# read. Neither belongs in the default posture, because a published 8081 turns
+# `internal_token` from defence in depth into the only thing between a stranger on the host
+# and every tenant's rows.
+#
+# Keeping this as an overlay rather than deleting the mappings is the honest version: the
+# affordance still exists, it is just no longer what you get by not thinking about it.
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  mcp:
+    ports:
+      - "8081:8081"

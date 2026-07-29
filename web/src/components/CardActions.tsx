@@ -14,6 +14,21 @@ import { useDeleteCard, useSaveCard, useShareCard } from '../lib/queries'
 import { Button } from './Button'
 import { IconCheck, IconDownload, IconPin, IconShare, IconTrash } from './Icons'
 
+/**
+ * The share UI is deferred, not broken.
+ *
+ * `POST /api/share` mints a real signed token and returns `/delad/{token}`, and the token
+ * design is the part worth showing (§10): snapshot by default, live links re-executing
+ * under the *originating* supplier's scope rather than the reader's. What does not exist
+ * yet is the reading end — the hash router has no parameterised routes, so there is no
+ * `/delad/:token` page to verify the token and render the card.
+ *
+ * Handing a reviewer a button that produces a URL leading to a blank screen is worse than
+ * not offering it, so the control stays hidden until the route exists. The endpoint,
+ * the token and its tests stay in place: this is a scoped gap, not a dead feature.
+ */
+const SHARE_UI_ENABLED = false
+
 type Props = {
   card: AnswerCard
   view: 'chart' | 'table'
@@ -92,7 +107,7 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
         />
       )}
 
-      {card.card_id && <ShareMenu cardId={card.card_id} />}
+      {SHARE_UI_ENABLED && card.card_id && <ShareMenu cardId={card.card_id} />}
 
       {card.card_id && onDelete && (
         <Button

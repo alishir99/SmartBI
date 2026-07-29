@@ -336,6 +336,14 @@ Kända luckor i det som ligger här: ingen realtidsström; rollup-refresh är ma
 utvärderingsuppsättningen är min egen och delar därmed mina blinda fläckar; syntetisk data
 kan inte visa verklig smuts; ingen återkoppling från tummen upp/ner tillbaka in i evalen.
 
+**Delningslänkar är halva.** `POST /api/share` finns och gör den intressanta delen — en
+signerad, tidsbegränsad token som bär *ursprungsleverantörens* omfång, så att en live-länk
+körs om under den som delade och aldrig under den som läser. Läsänden saknas: hash-routern
+har inga parametriserade rutter, så `/delad/{token}` leder ingenstans. Knappen är därför
+dold (`SHARE_UI_ENABLED` i `CardActions.tsx`) i stället för att erbjuda en länk till en tom
+sida. Det som återstår är en sida som verifierar token och renderar kortet under det omfång
+token anger — en halvdag, inte ett designproblem.
+
 Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än städar undan:
 
 - **Modellen är inte Claude.** Allt är kört mot `deepseek-v4-pro` via Anthropic-SDK:t

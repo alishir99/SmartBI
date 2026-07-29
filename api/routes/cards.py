@@ -90,6 +90,12 @@ async def share(body: ShareRequest,
     under the *original* supplier's scope rather than the viewer's — getting that backwards is
     a cross-tenant data leak, so "live" is an explicit opt-in and the token carries the scope
     it must run under.
+
+    The **reading end is deferred**: there is no `/delad/{token}` route yet, so this URL does
+    not resolve to a page. The frontend control is hidden accordingly (see SHARE_UI_ENABLED
+    in web/src/components/CardActions.tsx) rather than offering a link that goes nowhere.
+    What remains is the part worth reviewing — the scope-carrying token — and the missing
+    piece is a page that verifies it and renders the card under the scope it names.
     """
     card = await db.get_card(body.card_id, int(tenant.supplier_id))
     if card is None:

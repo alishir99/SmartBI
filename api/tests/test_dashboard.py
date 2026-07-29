@@ -1,0 +1,121 @@
+"""Tests for the deterministic dashboard KPI assembly (§2, requirement 1).
+
+No LLM is involved on this path, so the tiles are pure arithmetic over tool output and can
+be pinned exactly. The load-bearing case is the category-share denominator: query_market_share
+returns one row per *brand × subcategory*, so a supplier with several brands in the same
+subcategory gets that subcategory's total back once per brand. Summing the column naively
+counts the denominator twice while own sales are counted once, which silently understates the
+headline share — the failure mode this file exists to prevent regressing.
+"""
+
+from __future__ import annotations
+
+from api.routes.dashboard import _kpis
+
+TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
+                    "net_sales_sek_delta_pct": 12.5, "units_delta_pct": 3.0,
+                    "avg_price_sek_delta_pct": 9.2}]}
+
+NO_SHARE: dict = {"rows": []}
+
+
+def share_row(brand: str, category_id: int, own: float, category: float, **kwargs) -> dict:
+    return {"brand": brand, "subcategory": f"kategori-{category_id}",
+            "category_id": category_id, "own_net_sek": own, "own_units": 100,
+            "category_net_sek": category, "n_brands": kwargs.get("n_brands", 8),
+            "rank": kwargs.get("rank", 3), "suppressed": kwargs.get("suppressed", False),
+            "share_pct": round(100 * own / category, 2)}
+
+
+def share_kpi(kpis):
+    return next((k for k in kpis if k.key == "category_share_pct"), None)
+
+
+# ------------------------------------------------------------------ category-share weighting
+
+def test_two_brands_in_one_subcategory_count_the_category_total_once():
+    """The D3 regression: same category_id twice must not double the denominator."""
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                      share_row("Nordvik", 10, own=200.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    # 500 own / 1000 category = 50 %, not 500 / 2000 = 25 %.
+    assert kpi is not None
+    assert kpi.value == 50.0
+
+
+def test_distinct_subcategories_each_contribute_their_own_total():
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                      share_row("Bruksbo", 20, own=100.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.value == 20.0
+
+
+def test_the_mixed_case_dedupes_per_category_not_globally():
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                      share_row("Nordvik", 10, own=200.0, category=1000.0),
+                      share_row("Bruksbo", 20, own=250.0, category=2000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    # own 750 over a denominator of 1000 + 2000.
+    assert kpi.value == 25.0
+
+
+def test_suppressed_rows_are_excluded_from_both_sides():
+    """A k-anonymity-suppressed row has no category_net_sek; it must not reach either sum."""
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                      {"brand": "Nordvik", "subcategory": "smal", "category_id": 99,
+                       "own_net_sek": 5000.0, "own_units": 2, "n_brands": 2,
+                       "suppressed": True, "reason": "för få varumärken"}]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.value == 30.0
+
+
+def test_the_rank_label_names_the_strongest_subcategory():
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0, rank=4),
+                      share_row("Bruksbo", 20, own=100.0, category=1000.0, rank=1,
+                                n_brands=12)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.rank_label == "#1 av 12 varumärken i kategori-20"
+
+
+def test_a_zero_category_total_drops_the_tile_rather_than_dividing_by_zero():
+    share = {"rows": [share_row("Bruksbo", 10, own=0.0, category=1.0) | {"category_net_sek": 0}]}
+
+    assert share_kpi(_kpis(TOTALS, share)) is None
+
+
+def test_no_share_rows_drops_the_tile():
+    assert share_kpi(_kpis(TOTALS, NO_SHARE)) is None
+
+
+# ------------------------------------------------------------------------ the other tiles
+
+def test_the_remaining_kpis_pass_through_the_tools_own_deltas():
+    kpis = {k.key: k for k in _kpis(TOTALS, NO_SHARE)}
+
+    assert [k for k in kpis] == ["net_sales_sek", "units", "avg_price_sek"]
+    assert kpis["net_sales_sek"].value == 1_000_000.0
+    assert kpis["net_sales_sek"].delta_pct == 12.5
+    assert kpis["units"].unit == "st"
+    assert kpis["avg_price_sek"].delta_pct == 9.2
+
+
+def test_a_missing_measure_drops_only_its_own_tile():
+    totals = {"rows": [{"net_sales_sek": 42.0}]}
+
+    kpis = _kpis(totals, NO_SHARE)
+
+    assert [k.key for k in kpis] == ["net_sales_sek"]
+
+
+def test_an_empty_totals_payload_yields_no_kpis():
+    assert _kpis({"rows": []}, NO_SHARE) == []

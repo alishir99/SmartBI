@@ -171,7 +171,12 @@ def _kpis(totals: dict, share: dict) -> list[Kpi]:
     rows = [r for r in (share.get("rows") or []) if not r.get("suppressed")]
     if rows:
         own = sum(float(r.get("own_net_sek") or 0) for r in rows)
-        category = sum(float(r.get("category_net_sek") or 0) for r in rows)
+        # The tool's grain is brand × subcategory, so a supplier with two brands in the same
+        # subcategory gets that subcategory's total back twice. Summing the column naively
+        # double-counted the denominator while own sales were counted once, understating the
+        # demo tenant's share by nine points. Deduplicate on category_id first.
+        category = sum({r.get("category_id"): float(r.get("category_net_sek") or 0)
+                        for r in rows}.values())
         if category:
             best = min(rows, key=lambda r: r.get("rank") or 99)
             kpis.append(Kpi(

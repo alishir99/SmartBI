@@ -36,15 +36,17 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: pip install -e ".[dev]" sqlglot
+      - run: pip install -e ".[dev]"
 
       - name: Lint
         run: |
           ruff check mcp_server api scripts eval
           mypy mcp_server api --ignore-missing-imports
 
+      # Deselected rather than skipped: the Postgres service is up at this point but the
+      # schema has not been applied yet, so the integration suite has nothing to talk to.
       - name: Unit tests (no database needed)
-        run: pytest mcp_server/tests api/tests eval/tests -q
+        run: pytest mcp_server/tests api/tests eval/tests -q -m "not integration"
 
       - name: Apply schema
         run: |
@@ -61,6 +63,8 @@ jobs:
       - name: Prove tenant isolation at the database level
         run: PGPASSWORD=solvigo psql -h localhost -U solvigo -d solvigo -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
 
+      # The tools connect as app_readonly, so RLS applies to them exactly as it does in
+      # production — which is the whole point of running them here rather than mocking.
       - name: Integration tests (against the seeded database)
         run: pytest -q -m integration
 

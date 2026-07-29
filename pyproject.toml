@@ -25,6 +25,10 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    # test_compiler.py parses every generated statement to prove it is valid Postgres and
+    # that no literal reached the SQL. That is a test dependency, not an ad-hoc CI install:
+    # leaving it out of here meant a reviewer following the README got 38 collection errors.
+    "sqlglot>=25.0",
     "ruff>=0.7",
     "mypy>=1.13",
 ]
@@ -54,3 +58,10 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["mcp_server/tests", "api/tests", "eval/tests"]
+markers = [
+    # Needs a seeded Postgres. These are the assertions a laptop without Docker cannot make:
+    # that RLS actually stops a cross-tenant read, and that the tools reproduce
+    # ground_truth.json. They skip themselves when no database answers, so `pytest -q` stays
+    # a clean-clone command.
+    "integration: requires a running, seeded Postgres (see README).",
+]

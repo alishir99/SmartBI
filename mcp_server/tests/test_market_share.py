@@ -20,7 +20,6 @@ from mcp_server.tools.market_share import (
     _snap_to_whole_months,
 )
 
-
 # --------------------------------------------------------------------------- snapping
 
 @pytest.mark.parametrize(

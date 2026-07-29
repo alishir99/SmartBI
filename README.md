@@ -50,11 +50,22 @@ cd web && npm install && npm run dev        # :5173
 ### Tester
 
 ```bash
+pip install -e ".[dev]"       # allt testerna behöver, inklusive sqlglot
 pytest                        # semantiskt lager, verktyg, API, validator
 cd web && npm test            # diagramkontraktet: ordning, gräns, serier, skala
 cd web && npm run build       # typkontroll + bygge
 python eval/run_eval.py       # gyllene frågor mot ground truth
 python eval/run_eval.py --adversarial
+```
+
+`pytest` kräver ingen databas. Sviten innehåller också ett fåtal integrationstester —
+de påståenden som bara en riktig, seedad Postgres kan pröva: att RLS faktiskt stoppar en
+läsning över tenant-gränsen när anropet går genom verktygen, och att verktygen
+reproducerar `ground_truth.json`. De hoppas över automatiskt när ingen databas svarar,
+och körs så här mot en igång-körande stack:
+
+```bash
+POSTGRES_HOST=localhost pytest -q -m integration
 ```
 
 Frontenden kan köras utan backend för design- och demoarbete: sätt `VITE_USE_MOCKS=true`

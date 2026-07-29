@@ -1,0 +1,75 @@
+"""query_sales — the workhorse tool.
+
+Compiles a typed spec into SQL, runs it under the caller's tenant scope, and returns rows
+plus the provenance needed to render a source chip (§9.3).
+
+The returned payload holds the *full* result set, capped at MAX_ROWS. Truncating for the
+model's context window happens one layer up, in the API, precisely so that the chart can be
+drawn from data the model never saw. That is the mechanical form of the grounding claim.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from .. import db
+from ..semantic.compiler import compile_query
+from ..tenant import TenantContext
+
+
+def _jsonable(value):
+    if isinstance(value, Decimal):
+        # NUMERIC arrives as Decimal. Rounding here, once, means the number the chart draws
+        # and the number the validator checks the prose against are the same number.
+        return float(round(value, 2))
+    if isinstance(value, date | datetime):
+        return value.isoformat()
+    return value
+
+
+def scope_label(supplier_id: int) -> str:
+    """A stable, non-reversible label for the audit trail and the source chip."""
+    digest = hashlib.sha256(f"supplier:{supplier_id}".encode()).hexdigest()
+    return f"supplier:{digest[:8]}"
+
+
+async def query_sales(tenant: TenantContext, spec: dict) -> dict:
+    coverage = await db.coverage()
+    compiled = compile_query(spec, coverage)
+
+    async with db.tenant_connection(tenant.supplier_id) as connection:
+        records = await connection.fetch(compiled.sql, *compiled.params)
+
+    rows = [{key: _jsonable(value) for key, value in record.items()} for record in records]
+    limit = spec.get("limit")
+
+    return {
+        "query_id": f"q_{uuid4().hex[:16]}",
+        "columns": compiled.columns,
+        "rows": rows,
+        "row_count": len(rows),
+        "meta": {
+            "tool": "query_sales",
+            "source": "mv_sales_daily (rollup)" if compiled.source == "rollup"
+                      else "fact_sales_line",
+            "scope": scope_label(tenant.supplier_id),
+            "currency": "SEK",
+            "vat": "exkl. moms",
+            "time_range": {"from": compiled.time_range[0].isoformat(),
+                           "to": compiled.time_range[1].isoformat()},
+            "compare_range": ({"from": compiled.compare_range[0].isoformat(),
+                               "to": compiled.compare_range[1].isoformat()}
+                              if compiled.compare_range else None),
+            "coverage": {"from": coverage[0].isoformat(), "to": coverage[1].isoformat()},
+            "filters_applied": {k: v for k, v in (spec.get("filters") or {}).items() if v},
+            "measures": list(spec.get("measures") or []),
+            "dimensions": list(spec.get("dimensions") or []),
+            # True when the caller's own limit cut the result, so the model can say "topp 10"
+            # rather than implying it saw everything.
+            "truncated": bool(limit) and len(rows) >= int(limit),
+            "executed_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        },
+    }

@@ -1,0 +1,236 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Design tokens. Light is the base; dark is declared twice — once for the OS
+   setting and once for the explicit theme stamp, which must win in both
+   directions (the :not() guard lets a light stamp beat OS dark).
+   Chart series come from the dataviz reference palette with slot 1 swapped for
+   Apple blue; both modes were run through the palette validator.
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --page: #fbfbfd;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #ececf0;
+
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-muted: #86868b;
+
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.16);
+
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(0, 113, 227, 0.1);
+
+  --pos: #007a33;
+  --neg: #c9342c;
+
+  --notice-bg: rgba(250, 178, 25, 0.1);
+  --notice-border: rgba(160, 110, 0, 0.24);
+  --notice-ink: #7a4b00;
+
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.03), 0 6px 20px -8px rgba(0, 0, 0, 0.08);
+  --shadow-lift: 0 1px 1px rgba(0, 0, 0, 0.03), 0 12px 34px -10px rgba(0, 0, 0, 0.12);
+  --shadow-pop: 0 10px 40px -6px rgba(0, 0, 0, 0.18);
+
+  /* chart chrome */
+  --grid: #ebebef;
+  --axis: #d2d2d7;
+  --axis-text: #86868b;
+
+  /* categorical series — fixed order, never cycled */
+  --series-1: #0071e3;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  /* the de-emphasised comparison series (category benchmark) */
+  --series-muted: #b0b0b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --page: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #26262a;
+    --surface-3: #323236;
+
+    --text: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --text-muted: #8e8e93;
+
+    --hairline: rgba(255, 255, 255, 0.1);
+    --hairline-strong: rgba(255, 255, 255, 0.2);
+
+    --accent: #0a84ff;
+    --accent-hover: #3d9bff;
+    --accent-fg: #ffffff;
+    --accent-soft: rgba(10, 132, 255, 0.16);
+
+    --pos: #30d158;
+    --neg: #ff6b64;
+
+    --notice-bg: rgba(250, 178, 25, 0.12);
+    --notice-border: rgba(250, 178, 25, 0.3);
+    --notice-ink: #fab219;
+
+    --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.4), 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+    --shadow-lift: 0 1px 1px rgba(0, 0, 0, 0.4), 0 12px 34px -10px rgba(0, 0, 0, 0.7);
+    --shadow-pop: 0 10px 40px -6px rgba(0, 0, 0, 0.8);
+
+    --grid: #2c2c2e;
+    --axis: #3a3a3c;
+    --axis-text: #8e8e93;
+
+    --series-1: #0a84ff;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --series-muted: #6a6a72;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --page: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #26262a;
+  --surface-3: #323236;
+
+  --text: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-muted: #8e8e93;
+
+  --hairline: rgba(255, 255, 255, 0.1);
+  --hairline-strong: rgba(255, 255, 255, 0.2);
+
+  --accent: #0a84ff;
+  --accent-hover: #3d9bff;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+
+  --pos: #30d158;
+  --neg: #ff6b64;
+
+  --notice-bg: rgba(250, 178, 25, 0.12);
+  --notice-border: rgba(250, 178, 25, 0.3);
+  --notice-ink: #fab219;
+
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.4), 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lift: 0 1px 1px rgba(0, 0, 0, 0.4), 0 12px 34px -10px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 10px 40px -6px rgba(0, 0, 0, 0.8);
+
+  --grid: #2c2c2e;
+  --axis: #3a3a3c;
+  --axis-text: #8e8e93;
+
+  --series-1: #0a84ff;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-muted: #6a6a72;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-page text-ink font-sans antialiased;
+    font-size: 0.9375rem;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Quiet, Apple-ish focus ring — visible for keyboard users, never removed. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+
+  /* sv-SE tabular figures wherever numbers form a column */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .hairline-b {
+    border-bottom: 1px solid var(--hairline);
+  }
+  .hairline-t {
+    border-top: 1px solid var(--hairline);
+  }
+  .hairline-r {
+    border-right: 1px solid var(--hairline);
+  }
+  .ring-hairline {
+    box-shadow: inset 0 0 0 1px var(--hairline);
+  }
+
+  /* Scrollbars that do not shout. */
+  .quiet-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+  .quiet-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .quiet-scroll::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 999px;
+  }
+  .quiet-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Recharts resets: we draw our own grid/axis, so kill the defaults we don't want. */
+.recharts-wrapper,
+.recharts-surface {
+  overflow: visible;
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  display: none;
+}
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

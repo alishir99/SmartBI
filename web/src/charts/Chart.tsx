@@ -1,0 +1,370 @@
+/**
+ * The one renderer for every `ChartSpec`. It receives the spec from the model and the
+ * rows from `/api/result/{query_id}` — the model's output never carries a value, so a
+ * hallucinated number cannot reach this component. Everything visual is decided by
+ * `prepareChart`; this file only draws.
+ */
+
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import type { TooltipProps } from 'recharts'
+import type { ChartSpec, Column, ResultRow } from '../types'
+import { CHART_INK, MARK } from './palette'
+import { axisCategoryLabel, prepareChart, type PreparedChart } from './prepare'
+import { ChartTooltip } from './ChartTooltip'
+import { DataTable } from './DataTable'
+import { formatCell, formatKpiValue, formatMoneyOnScale, formatNumber } from '../lib/format'
+
+type Props = {
+  spec: ChartSpec
+  columns: Column[]
+  rows: ResultRow[]
+  height?: number
+}
+
+const AXIS_TICK = { fill: CHART_INK.axisText, fontSize: 11 }
+const MARGIN = { top: 4, right: 8, bottom: 0, left: 0 }
+
+export function Chart({ spec, columns, rows, height = 280 }: Props) {
+  if (rows.length === 0) return <EmptyPlot height={height} />
+
+  const prepared = prepareChart(spec, columns, rows)
+
+  if (spec.type === 'table') {
+    return <DataTable columns={prepared.columns} rows={prepared.rows} caption={spec.title} />
+  }
+  if (spec.type === 'kpi') {
+    return <KpiPlot prepared={prepared} />
+  }
+
+  // A sideways chart grows with its rows instead of squeezing them: the caller's height
+  // is a floor, not a ceiling.
+  const sideways = isSideways(spec, prepared)
+  const plotHeight = sideways
+    ? Math.max(height, sidewaysHeight(prepared.rows.length))
+    : height
+
+  return (
+    <figure className="m-0">
+      {/* The unit sits above the axis rather than on it — overlaying the top tick is
+          exactly how a chart ends up with an unreadable largest value. */}
+      {prepared.scale && <p className="mb-1 text-2xs text-ink-muted">{prepared.scale.unit}</p>}
+      <div style={{ height: plotHeight }}>
+        <ResponsiveContainer width="100%" height="100%">
+          {plot(spec, prepared, sideways)}
+        </ResponsiveContainer>
+      </div>
+      <Legend prepared={prepared} />
+      {prepared.folded && (
+        <p className="mt-2 text-2xs text-ink-muted">
+          Mindre poster är summerade till “Övrigt”.
+        </p>
+      )}
+    </figure>
+  )
+}
+
+/** Recharts wants a single element child, so each type returns one complete chart. */
+function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
+  const { rows, series } = prepared
+  const stacked = spec.type === 'stacked_bar'
+
+  if (spec.type === 'pie') {
+    const nameKey = prepared.xColumn?.key ?? 'name'
+    const valueKey = series[0]?.key ?? 'value'
+    return (
+      <PieChart margin={MARGIN}>
+        <Pie
+          data={rows}
+          dataKey={valueKey}
+          nameKey={nameKey}
+          innerRadius="56%"
+          outerRadius="82%"
+          paddingAngle={1}
+          stroke={CHART_INK.surface}
+          strokeWidth={MARK.surfaceGap}
+          isAnimationActive={false}
+        >
+          {rows.map((row, index) => (
+            <Cell key={String(row[nameKey] ?? index)} fill={sliceColor(prepared, row, index)} />
+          ))}
+        </Pie>
+        <Tooltip content={pieTooltip(prepared)} cursor={false} />
+      </PieChart>
+    )
+  }
+
+  const axes = buildAxes(prepared, sideways)
+
+  if (spec.type === 'line') {
+    return (
+      <LineChart data={rows} margin={MARGIN}>
+        {axes}
+        {series.map((descriptor) => (
+          <Line
+            key={descriptor.key}
+            type="monotone"
+            dataKey={descriptor.key}
+            name={descriptor.label}
+            stroke={descriptor.color}
+            strokeWidth={MARK.lineWidth}
+            // `fill` is explicit on both dots. Recharts defaults a dot's fill to white
+            // rather than to the line's stroke, which on a light surface renders the marker
+            // as a hole — the line reads as broken at exactly the points it is labelling.
+            // The dot carries the series colour; the ring around the active one stays
+            // surface-coloured, so it separates the marker from the line beneath it.
+            dot={rows.length <= 12
+              ? { r: MARK.dotRadius, strokeWidth: 0, fill: descriptor.color }
+              : false}
+            activeDot={{ r: MARK.dotRadius + 1, strokeWidth: 2,
+                         stroke: CHART_INK.surface, fill: descriptor.color }}
+            isAnimationActive={false}
+          />
+        ))}
+      </LineChart>
+    )
+  }
+
+  if (spec.type === 'area') {
+    return (
+      <AreaChart data={rows} margin={MARGIN}>
+        {axes}
+        {series.map((descriptor) => (
+          <Area
+            key={descriptor.key}
+            type="monotone"
+            dataKey={descriptor.key}
+            name={descriptor.label}
+            stroke={descriptor.color}
+            strokeWidth={MARK.lineWidth}
+            fill={descriptor.color}
+            fillOpacity={MARK.areaOpacity}
+            isAnimationActive={false}
+          />
+        ))}
+      </AreaChart>
+    )
+  }
+
+  return (
+    <BarChart data={rows} margin={MARGIN} layout={sideways ? 'vertical' : 'horizontal'}>
+      {axes}
+      {series.map((descriptor) => (
+        <Bar
+          key={descriptor.key}
+          dataKey={descriptor.key}
+          name={descriptor.label}
+          fill={descriptor.color}
+          stackId={stacked ? 'stack' : undefined}
+          maxBarSize={MARK.barMaxSize}
+          radius={
+            stacked
+              ? 0
+              : sideways
+                ? [0, MARK.barRadius, MARK.barRadius, 0]
+                : [MARK.barRadius, MARK.barRadius, 0, 0]
+          }
+          isAnimationActive={false}
+        />
+      ))}
+    </BarChart>
+  )
+}
+
+/**
+ * Ranked categories go sideways. Ten product names on a vertical axis collapse into
+ * "Nordström TV N1…" five times over — Recharts drops every tick that will not fit, and
+ * the reader is left with bars they cannot name. Turning the chart puts each label on
+ * its own line with room to breathe. Time never turns: a date axis reads left to right.
+ */
+function isSideways(spec: ChartSpec, prepared: PreparedChart): boolean {
+  if (spec.type !== 'bar' || !prepared.xColumn || prepared.xColumn.type === 'date') return false
+  const longest = Math.max(
+    0,
+    ...prepared.rows.map((row) => String(row[prepared.xColumn?.key ?? ''] ?? '').length),
+  )
+  return prepared.rows.length > 6 || longest > 14
+}
+
+/** Height a sideways chart needs so every category row keeps a legible band. */
+function sidewaysHeight(rowCount: number): number {
+  return rowCount * 34 + 28
+}
+
+/**
+ * An array, not a fragment: Recharts scans its *direct* children for axes, grid and
+ * tooltip, and a fragment hides them from that scan — the chart then silently renders
+ * with no axes at all. Arrays are flattened by Children.toArray, so they are seen.
+ */
+function buildAxes(prepared: PreparedChart, sideways: boolean) {
+  const categoryKey = prepared.xColumn?.key
+  const tooltip = (
+    <Tooltip
+      key="tooltip"
+      content={<ChartTooltip columns={prepared.columns} labelFormatter={(v) => xLabel(prepared, v)} />}
+      cursor={{ fill: 'var(--surface-2)', stroke: CHART_INK.grid }}
+    />
+  )
+
+  if (sideways) {
+    return [
+      <CartesianGrid key="grid" stroke={CHART_INK.grid} strokeDasharray="0" horizontal={false} />,
+      <XAxis
+        key="x"
+        type="number"
+        tick={AXIS_TICK}
+        tickMargin={8}
+        tickFormatter={(value: number) => yLabel(prepared, value)}
+      />,
+      <YAxis
+        key="y"
+        type="category"
+        dataKey={categoryKey}
+        tick={AXIS_TICK}
+        tickMargin={8}
+        width={categoryAxisWidth(prepared)}
+        interval={0}
+        tickFormatter={(value: string) => tickLabel(prepared, value, true)}
+      />,
+      tooltip,
+    ]
+  }
+
+  return [
+    <CartesianGrid key="grid" stroke={CHART_INK.grid} strokeDasharray="0" vertical={false} />,
+    <XAxis
+      key="x"
+      dataKey={categoryKey}
+      tick={AXIS_TICK}
+      tickMargin={10}
+      minTickGap={12}
+      interval="preserveStartEnd"
+      tickFormatter={(value: string) => tickLabel(prepared, value, false)}
+    />,
+    <YAxis
+      key="y"
+      tick={AXIS_TICK}
+      tickMargin={8}
+      width={52}
+      tickFormatter={(value: number) => yLabel(prepared, value)}
+    />,
+    tooltip,
+  ]
+}
+
+/** Wide enough for the labels, capped so the bars never lose more than a third of the width. */
+function categoryAxisWidth(prepared: PreparedChart): number {
+  const key = prepared.xColumn?.key
+  const longest = Math.max(
+    0,
+    ...prepared.rows.map((row) => xLabel(prepared, String(row[key ?? ''] ?? '')).length),
+  )
+  return Math.min(190, Math.max(96, longest * 6.4 + 12))
+}
+
+/** A pie's colour follows the slice, not the measure, so it indexes on the row. */
+function sliceColor(prepared: PreparedChart, row: ResultRow, index: number): string {
+  const nameKey = prepared.xColumn?.key
+  const name = nameKey ? String(row[nameKey] ?? '') : ''
+  const match = prepared.series.find((descriptor) => descriptor.label === name)
+  return match?.color ?? prepared.series[Math.min(index, prepared.series.length - 1)]?.color ?? 'var(--series-1)'
+}
+
+function pieTooltip(prepared: PreparedChart) {
+  const valueColumn = prepared.columns.find((column) => column.type === 'number')
+  return ({ active, payload }: TooltipProps<number, string>) => {
+    if (!active || !payload?.length) return null
+    const entry = payload[0]
+    const value = typeof entry.value === 'number' ? entry.value : null
+    return (
+      <div className="pointer-events-none rounded-xl bg-surface px-3.5 py-2.5 shadow-pop ring-hairline">
+        <p className="text-xs text-ink-secondary">{String(entry.name ?? '')}</p>
+        <p className="tabular text-sm font-medium text-ink">
+          {value !== null && valueColumn ? formatCell(value, valueColumn) : '–'}
+        </p>
+      </div>
+    )
+  }
+}
+
+/** Full label — for the tooltip, which has room for the whole name. */
+function xLabel(prepared: PreparedChart, value: string): string {
+  return prepared.xColumn ? formatCell(value, prepared.xColumn) : value
+}
+
+/**
+ * Axis label. A sideways chart gives each category its own line, so it can carry a
+ * much longer name than a crowded vertical axis can.
+ */
+function tickLabel(prepared: PreparedChart, value: string, sideways: boolean): string {
+  const formatted = xLabel(prepared, value)
+  if (prepared.xColumn?.type === 'date') return formatted
+  return axisCategoryLabel(formatted, sideways || prepared.rows.length <= 6)
+}
+
+function yLabel(prepared: PreparedChart, value: number): string {
+  if (prepared.scale) return formatMoneyOnScale(value, prepared.scale)
+  if (prepared.unit === '%') return formatNumber(value, value % 1 === 0 ? 0 : 1)
+  return formatNumber(value)
+}
+
+/**
+ * Our own legend rather than Recharts': it is the relief for the light-mode hues that
+ * sit below 3:1 on white, so it ships with every multi-series chart and is never
+ * dropped for space.
+ */
+function Legend({ prepared }: { prepared: PreparedChart }) {
+  if (prepared.series.length < 2) return null
+  return (
+    <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      {prepared.series.map((descriptor) => (
+        <li key={descriptor.key} className="flex items-center gap-2 text-xs text-ink-secondary">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: descriptor.color }}
+            aria-hidden="true"
+          />
+          {descriptor.label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function KpiPlot({ prepared }: { prepared: PreparedChart }) {
+  const descriptor = prepared.series[0]
+  const column = prepared.columns.find((candidate) => candidate.key === descriptor?.key)
+  const raw = descriptor ? prepared.rows[0]?.[descriptor.key] : null
+  const value = typeof raw === 'number' ? raw : null
+
+  return (
+    <p className="tabular py-4 text-3xl font-semibold tracking-tight text-ink">
+      {value !== null && column ? formatKpiValue(value, column.unit ?? 'st') : '–'}
+    </p>
+  )
+}
+
+function EmptyPlot({ height }: { height: number }) {
+  return (
+    <div
+      className="flex items-center justify-center rounded-tile bg-surface-2 text-sm text-ink-muted"
+      style={{ height }}
+    >
+      Inga rader matchade urvalet.
+    </div>
+  )
+}

@@ -55,6 +55,49 @@ GRADED_KEYS = frozenset({
     "caveats_min", "suggestions_min", "suppressed", "status", "language",
 })
 
+# Which family each check belongs to, and the reason this file's central observation is
+# worth acting on rather than just documenting.
+#
+# The header already says it: `series`, `top_n`, `rank`, `n_brands` and `suppressed` are
+# graded against the ROWS the chart is drawn from, while `numeric`, `must_contain` and the
+# rest are graded against the PROSE. Those measure two different systems. The first measures
+# the grounding architecture — whether the right query ran and the right rows came back. The
+# second measures the language model — whether it transcribed them honestly.
+#
+# The conjunctive score collapses both into one boolean per case, so "picked a bar chart
+# where a line was expected" scores exactly the same as "reported a fabricated total", and
+# the one number the project most wants to state ends up computed and then discarded. Split
+# apart, the report can say: grounded checks pass at X %, prose checks at Y %. The gap is
+# the model. The floor is the architecture.
+#
+# `transport` is its own family for a related reason. A rate limit or a dropped connection
+# is an infrastructure event, and scoring it as a wrong answer inflates the reported
+# non-determinism with something the model never did.
+CHECK_FAMILIES: dict[str, str] = {
+    # graded against rows from the result cache — the architecture
+    "series": "grounded", "top_n": "grounded", "rank": "grounded",
+    "n_brands": "grounded", "suppressed": "grounded",
+    # graded against the narrative — the model
+    "numeric": "prose", "delta_pct": "prose", "must_contain": "prose",
+    "must_not_contain": "prose", "must_not_contain_numbers": "prose",
+    "language": "prose",
+    # graded against what the agent chose to do — planning, not values
+    "tools_called": "routing", "tools_not_called": "routing", "dimensions": "routing",
+    "chart_type": "routing", "status": "routing", "caveats_min": "routing",
+    "suggestions_min": "routing",
+    # not a check at all: the turn never got far enough to be judged
+    "transport": "transport", "error_event": "transport",
+}
+
+FAMILIES = ("grounded", "prose", "routing", "transport")
+
+
+def family_of(check: str) -> str:
+    """An unrecognised check is reported under `routing` rather than dropped — a check
+    missing from the table must not vanish from the totals."""
+    return CHECK_FAMILIES.get(check, "routing")
+
+
 # A bare integer at or below this, carrying no unit at all, is not a money or quantity
 # claim. It is a count of rows, a rank, a brand count or a policy threshold — the
 # suppression text the market-share tool emits literally reads "minst 5 varumärken och 100
@@ -176,10 +219,28 @@ class CaseResult:
     tools_called: list[str] = field(default_factory=list)
     row_count: int = 0
     category: str | None = None
+    # Which checks this case actually ran. Failures alone cannot give a pass *rate*: a
+    # family with no failures is indistinguishable from a family that was never asserted,
+    # and the second must not be reported as 100 %.
+    checks_run: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
         return not self.failures
+
+    def family_tally(self) -> dict[str, tuple[int, int]]:
+        """{family: (passed_checks, total_checks)} for this one case."""
+        failed = {failure.check for failure in self.failures}
+        tally: dict[str, list[int]] = {name: [0, 0] for name in FAMILIES}
+        for check in self.checks_run:
+            entry = tally[family_of(check)]
+            entry[1] += 1
+            entry[0] += check not in failed
+        # A transport failure is never in `checks_run` — nothing was asserted, the turn
+        # simply did not arrive — so it is counted here rather than being lost.
+        for check in failed - set(self.checks_run):
+            tally[family_of(check)][1] += 1
+        return {name: (ok, total) for name, (ok, total) in tally.items() if total}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -193,7 +254,11 @@ class CaseResult:
             "tools_called": self.tools_called,
             "row_count": self.row_count,
             "latency_ms": self.latency_ms,
-            "failures": [{"check": f.check, "message": f.message} for f in self.failures],
+            "checks_run": self.checks_run,
+            "families": {name: {"passed": ok, "total": total}
+                         for name, (ok, total) in self.family_tally().items()},
+            "failures": [{"check": f.check, "family": family_of(f.check),
+                          "message": f.message} for f in self.failures],
         }
 
 
@@ -227,8 +292,24 @@ def grade(case: dict, observed: Observed, suite: str) -> CaseResult:
 
     expects = case.get("expects") or {}
     for key in sorted(expects):
+        result.checks_run.append(key)
         result.failures += _grade_one(key, expects[key], observed)
     return result
+
+
+def family_rates(results: list[CaseResult]) -> dict[str, tuple[int, int]]:
+    """{family: (passed_checks, total_checks)} across a run.
+
+    The resolution the conjunctive score throws away. Counted per *check*, not per case,
+    because that is the unit that means something: a case asserting six things and failing
+    one is not the same evidence as a case asserting one thing and failing it.
+    """
+    totals: dict[str, list[int]] = {name: [0, 0] for name in FAMILIES}
+    for result in results:
+        for name, (ok, total) in result.family_tally().items():
+            totals[name][0] += ok
+            totals[name][1] += total
+    return {name: (ok, total) for name, (ok, total) in totals.items() if total}
 
 
 def _grade_one(key: str, expected: Any, observed: Observed) -> list[Failure]:

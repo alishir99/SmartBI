@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cases  # noqa: E402
 import grade  # noqa: E402
-from grade import CaseResult, Observed  # noqa: E402
+from grade import FAMILIES, CaseResult, Observed, family_of, family_rates  # noqa: E402
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 DEFAULT_EMAIL = "anna@nordstromaudio.se"
@@ -260,6 +260,48 @@ def print_case(result: CaseResult, style: Style, verbose: bool) -> None:
                         f"query_id={result.query_id!r} rows={result.row_count}"))
 
 
+_FAMILY_BLURB = {
+    "grounded": "rows from the result cache — the architecture",
+    "prose":    "the narrative — the model",
+    "routing":  "tools, dimensions, chart and status — the plan",
+    "transport": "the turn never arrived — infrastructure, not an answer",
+}
+
+
+def print_family_rates(results: list[CaseResult], style: Style) -> None:
+    """Pass rates per check family, which is the resolution the case-level score destroys.
+
+    A case fails if *any* of its five or six checks fails, so "picked a bar chart where a
+    line was expected" and "reported a fabricated total" score identically. Worse, the two
+    kinds of check measure different systems — grounded checks read the rows the chart is
+    drawn from, prose checks read what the model wrote about them — so collapsing them
+    discards the one comparison the project most wants to make. The numbers were already
+    being computed; they were just being thrown away at the end.
+    """
+    rates = family_rates(results)
+    if not rates:
+        return
+    print()
+    print("pass rate by check family:")
+    for name in FAMILIES:
+        if name not in rates:
+            continue
+        passed, total = rates[name]
+        rate = 100.0 * passed / total
+        line = (f"  {name:<10} {passed:>4}/{total:<4} checks  ({rate:5.1f}%)   "
+                f"{_FAMILY_BLURB[name]}")
+        print(style.ok(line) if passed == total else style.dim(line))
+
+    grounded, prose = rates.get("grounded"), rates.get("prose")
+    if grounded and prose:
+        print(style.bold(
+            # ASCII arrow deliberately: this line is the one a reader quotes, and a plain
+            # cp1252 console (the Windows default) cannot encode a real arrow at all.
+            f"  -> grounded {100.0 * grounded[0] / grounded[1]:.0f} % vs prose "
+            f"{100.0 * prose[0] / prose[1]:.0f} % — the gap is the model, "
+            f"the floor is the architecture"))
+
+
 def print_summary(results: list[CaseResult], style: Style) -> None:
     print()
     print("-" * 78)
@@ -285,12 +327,14 @@ def print_summary(results: list[CaseResult], style: Style) -> None:
         print(f"{'latency':<12} mean {statistics.mean(latencies):.1f}s   "
               f"median {statistics.median(latencies):.1f}s   p95 {p95:.1f}s")
 
+    print_family_rates(results, style)
+
     categories = Counter(failure.check for r in results for failure in r.failures)
     if categories:
         print()
         print("failures by check:")
         for check, count in categories.most_common():
-            print(f"  {check:<26} {count}")
+            print(f"  {check:<26} {count}  [{family_of(check)}]")
 
     breaches = [r for r in results if r.suite == "adversarial" and not r.passed]
     if breaches:
@@ -316,6 +360,12 @@ def write_json(path: Path, results: list[CaseResult], session: Session,
             "passed": sum(1 for r in results if r.passed),
             "failed": sum(1 for r in results if not r.passed),
         },
+        # Per-check rather than per-case: the conjunctive score above cannot distinguish a
+        # wrong chart type from a fabricated total, and these two families measure two
+        # different systems (the architecture and the model).
+        "families": {name: {"passed": passed, "total": total,
+                            "rate_pct": round(100.0 * passed / total, 1)}
+                     for name, (passed, total) in family_rates(results).items()},
         "cases": [r.to_dict() for r in results],
     }
     path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -390,6 +440,16 @@ def assert_vocabulary_is_graded() -> None:
     if ungraded:
         raise SetupError(f"grade.py implements no check for {sorted(ungraded)} — those "
                          f"expectations would silently pass. Refusing to run.")
+
+    # Same argument one level down. `family_of` defaults an unknown check to `routing` so a
+    # gap can never drop a check out of the totals — but a *silently* miscategorised check
+    # would put a prose failure in the architecture's column, which is exactly the number
+    # the split exists to state honestly.
+    unclassified = grade.GRADED_KEYS - set(grade.CHECK_FAMILIES)
+    if unclassified:
+        raise SetupError(f"grade.py grades {sorted(unclassified)} but assigns them no check "
+                         f"family — they would be reported under 'routing' by default. "
+                         f"Refusing to run.")
 
 
 async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],

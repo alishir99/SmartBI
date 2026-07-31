@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from .. import db
+from .. import db, ratelimit
 from ..agent.loop import run_turn
 from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
@@ -31,6 +31,16 @@ async def chat(body: ChatRequest,
                tenant: TenantContext = Depends(get_supplier_scope),
                mcp: McpClient = Depends(get_mcp),
                cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
+    # Both refusals happen before the response starts, so they are a plain 429 with a Swedish
+    # `detail` — which the frontend renders verbatim (web/src/lib/api.ts) — rather than an
+    # error frame inside a 200 stream that a client has to know to look for.
+    #
+    # Two limits, because they bound different things. The turn cap bounds *requests* per
+    # user, which is what stops a loop; the budget bounds *money* per tenant, which the turn
+    # cap cannot, since one question can read 200 k tokens of context and the next one 3 k.
+    ratelimit.enforce_chat_turn(tenant.user_id)
+    await ratelimit.enforce_tenant_budget(int(tenant.supplier_id))
+
     return StreamingResponse(
         _stream(body, tenant, mcp, cache),
         media_type="text/event-stream",

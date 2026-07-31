@@ -99,6 +99,33 @@ async def record_turn(
         log.exception("kunde inte skriva audit_turn")
 
 
+async def tokens_used_since(supplier_id: int, window_hours: int) -> int:
+    """What one tenant has spent on the agent in the trailing window (api/ratelimit.py).
+
+    Cached tokens are deliberately not counted: they live in `row_counts` and bill at roughly
+    a tenth of the rate, so charging them against the same ceiling would price away the
+    caching that makes the agent affordable.
+
+    NULLs count as zero here, unlike in the audit row itself. There the distinction is
+    load-bearing — a NULL says "this turn's cost is unknown", a zero would say "it was free".
+    A budget check has to turn that gap into *some* number, and treating unknown cost as zero
+    is the direction that fails open, consistent with the rest of this cap.
+
+    Reads the (supplier_id, occurred_at DESC) index, so it is one range scan per turn rather
+    than anything worth caching in front of.
+    """
+    row = await pool().fetchrow(
+        """
+        SELECT COALESCE(SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)), 0) AS used
+          FROM audit_turn
+         WHERE supplier_id = $1
+           AND occurred_at >= now() - make_interval(hours => $2)
+        """,
+        supplier_id, window_hours,
+    )
+    return int(row["used"]) if row else 0
+
+
 # ------------------------------------------------------------------------ saved cards
 
 async def insert_card(*, user_id: int, supplier_id: int, title: str,
@@ -116,11 +143,13 @@ async def insert_card(*, user_id: int, supplier_id: int, title: str,
     return int(row["card_id"])
 
 
-async def list_cards(supplier_id: int) -> list[dict[str, Any]]:
+async def list_cards(supplier_id: int, limit: int) -> list[dict[str, Any]]:
+    # The LIMIT is in the SQL rather than in the route because every one of these rows costs
+    # an MCP round-trip when the caller refreshes it — see the note in routes/cards.py.
     rows = await pool().fetch(
         "SELECT card_id, title, chart_spec, tool_name, tool_args FROM saved_card "
-        "WHERE supplier_id = $1 ORDER BY created_at DESC",
-        supplier_id,
+        "WHERE supplier_id = $1 ORDER BY created_at DESC LIMIT $2",
+        supplier_id, limit,
     )
     return [_decode_card(dict(row)) for row in rows]
 

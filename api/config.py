@@ -65,6 +65,45 @@ class Settings(BaseSettings):
     # what a user will wait for the whole turn.
     llm_timeout_seconds: float = 60.0
 
+    # --- Rate limits and cost cap (api/ratelimit.py) ---
+    # Every limit here is picked to be generous for a human and tight for a script, because a
+    # limit that trips during a live demo is worse than no limit at all. Any of them can be
+    # switched off by setting it to 0, which is also what keeps this from ever locking the
+    # demo out of its own machine.
+    #
+    # Five minutes for both login windows: long enough that a guessing loop cannot simply
+    # wait it out, short enough that a locked-out human does not give up and file a ticket.
+    login_window_seconds: int = 300
+    # A human retyping a password gets it wrong two or three times — capslock, an old saved
+    # password. Five leaves room for that; a credential-guessing run wants thousands.
+    login_attempts_per_identifier: int = 5
+    # Higher, because an office (or a demo room) shares one NAT address, and locking out a
+    # whole building because one person forgot their password is its own outage. Still two
+    # orders of magnitude below what stuffing a leaked credential list needs.
+    login_attempts_per_ip: int = 30
+
+    # A chat turn is several LLM calls and takes 10–30 s, so ten in five minutes is already
+    # faster than a person can read the answers — but a human is not the binding constraint
+    # here. `eval/run_eval.py --all` logs in as one demo user and puts 85 questions through
+    # this endpoint at concurrency 4, which is roughly 40 turns per five minutes, and that
+    # suite is the project's own headline evidence. A cap that throttles it would turn the
+    # eval's transport-failure column red and look exactly like the model breaking.
+    #
+    # So the cap is set above the heaviest legitimate client rather than above a human: 100
+    # in five minutes clears a full eval run with room to spare, and still sits three orders
+    # of magnitude below what a runaway loop does in the same window. That is the honest
+    # shape of this limit — it exists to stop a client that has lost its mind, not to ration
+    # a user who is working quickly.
+    chat_turns_per_user: int = 100
+    chat_window_seconds: int = 300
+
+    # Per-tenant cost cap, in input+output tokens over the trailing window, read from
+    # `audit_turn`. Sized from the measured ~30 k tokens a turn costs: 5 M is roughly 150
+    # turns a day for one supplier, several times the heaviest realistic day and far below
+    # what a runaway client burns in an hour. 0 or None disables it entirely.
+    tenant_token_budget: int | None = 5_000_000
+    tenant_budget_window_hours: int = 24
+
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     public_web_url: str = "http://localhost:5173"

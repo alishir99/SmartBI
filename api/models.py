@@ -8,9 +8,9 @@ be omitted; a missing key and a `null` are different things to a TypeScript cons
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Role = Literal["supplier_viewer", "supplier_admin", "retail_analyst", "system_admin"]
 Unit = Literal["SEK", "st", "%"]
@@ -177,9 +177,34 @@ class ChatTurn(BaseModel):
     content: str
 
 
+# The history caps. `question` was capped at 2000 chars while `history` was unbounded, which
+# made that cap decorative: history goes into the same prompt, so a single request could carry
+# megabytes of "prior conversation" and bill the tenant for all of it on every LLM call in the
+# turn. The frontend sends at most the last 8 entries (web/src/lib/chat.ts), and a card
+# narrative runs a few hundred characters, so a real client lands around 8 turns / 10 k chars.
+# Both ceilings are roughly double that: invisible to the product, immediately fatal to the
+# amplifier.
+MAX_HISTORY_TURNS = 20
+MAX_HISTORY_CHARS = 24_000
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    history: list[ChatTurn] = Field(default_factory=list)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
+
+    @field_validator("history")
+    @classmethod
+    def _history_fits_in_a_prompt(cls, turns: list[ChatTurn]) -> list[ChatTurn]:
+        """Turn count alone is not a bound — one turn can hold a megabyte of text.
+
+        Rejected rather than truncated: silently dropping half of what a client sent would
+        make the model answer a conversation the user cannot see, and no legitimate client
+        can reach this ceiling anyway.
+        """
+        if (total := sum(len(turn.content) for turn in turns)) > MAX_HISTORY_CHARS:
+            raise ValueError(
+                f"historiken är {total} tecken, högst {MAX_HISTORY_CHARS} tillåts")
+        return turns
 
 
 # The SSE event union. Modelled so the shapes are checked in one place before they are
@@ -245,10 +270,23 @@ class ResultPage(BaseModel):
 
 # ------------------------------------------------------------- saved views and sharing
 
+# The tools a saved card may re-run. A free string here meant an authenticated user could
+# name any tool the MCP server exposes — or one it does not — and have `GET /api/cards` call
+# it on every dashboard load, forever. Scope was never at risk (the supplier id is a header
+# the client cannot set), so this is resource exhaustion rather than a leak, but the fix is
+# the same either way: an allowlist. Only the two row-returning tools are listed;
+# `get_capabilities` and `resolve_entities` return no rows and cannot become a chart, so a
+# card naming them is meaningless rather than merely unsupported.
+CardTool = Literal["query_sales", "query_market_share"]
+#: The same allowlist as a set, for the read path — derived from the type rather than written
+#: twice, so the two can never drift apart.
+ALLOWED_CARD_TOOLS = frozenset(get_args(CardTool))
+
+
 class SaveCardRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     chart: ChartSpec
-    tool_name: str
+    tool_name: CardTool
     # Persisting the arguments rather than the rows is what lets a saved card re-run live
     # against fresh data (§10). A screenshot would freeze both the numbers and the bug.
     tool_args: dict[str, Any] = Field(default_factory=dict)

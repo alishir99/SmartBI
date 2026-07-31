@@ -20,9 +20,9 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from . import db
+from . import db, ratelimit
 from .config import settings
 from .deps import TenantContext, get_current_user
 from .models import LoginRequest, LoginResponse, User
@@ -130,7 +130,20 @@ def _to_user(row: dict) -> User:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest) -> LoginResponse:
+async def login(body: LoginRequest, request: Request) -> LoginResponse:
+    # Throttled *before* the lookup and before `verify_password`, per identifier and per
+    # address. Argon2id at 19 MiB is the reason this cannot wait until after a failed attempt:
+    # each verification allocates 19 MiB, so an unthrottled login endpoint is a memory
+    # amplifier and not only a brute-force surface. See the comment in ratelimit.py for the
+    # second half of that — why the same traffic pins this worker's event loop.
+    #
+    # Throttling ahead of the lookup is also what keeps the refusal from becoming an account
+    # oracle: the counter is keyed on what the caller submitted, never on whether it matched
+    # anything, so a throttled request for a real account and for a made-up one produce the
+    # identical 429.
+    ip = ratelimit.client_ip(request)
+    ratelimit.enforce_login(identifier=body.email, client_ip=ip)
+
     row = await db.user_by_email(body.email)
     # One message and one code path for "no such user" and "wrong password", so the endpoint
     # is not a registration oracle. The hash is still verified against a dummy when the user
@@ -138,6 +151,8 @@ async def login(body: LoginRequest) -> LoginResponse:
     # by the DB round-trip anyway and the demo has two known accounts.
     if row is None or not verify_password(body.password, row["password_hash"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Felaktig e-post eller lösenord")
+
+    ratelimit.clear_login(identifier=body.email, client_ip=ip)
     return LoginResponse(access_token=create_access_token(row), user=_to_user(row))
 
 

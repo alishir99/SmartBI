@@ -7,6 +7,7 @@ difference between a saved view and an exported image (§10).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -17,50 +18,91 @@ from ..auth import create_share_token
 from ..config import settings
 from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
-from ..models import AnswerCard, SaveCardRequest, ShareRequest, ShareResponse
+from ..models import (
+    ALLOWED_CARD_TOOLS,
+    AnswerCard,
+    SaveCardRequest,
+    ShareRequest,
+    ShareResponse,
+)
 from ..result_cache import ResultCache, from_tool_result
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["cards"])
 
 
+# One GET here used to fan out into one MCP round-trip per saved card, serially and without a
+# ceiling: 200 saved views meant 200 queries on one request, and a client could hold the
+# database busy for minutes with a single authenticated GET. Both halves are bounded now.
+#
+# MAX_REFRESHED caps the work: a "Mina vyer" board past a dozen tiles is not something anyone
+# reads on one screen, so the newest 12 are refreshed and the rest are not fetched at all —
+# the LIMIT lives in the SQL, so the older rows cost nothing.
+#
+# REFRESH_CONCURRENCY caps the burst. Concurrency turns a 12-second wall of serial round-trips
+# into about three seconds, but unbounded `gather` would just move the exhaustion downstream:
+# each call opens its own MCP session and its own database connection (the API pool tops out
+# at 10), so 12 at once is a self-inflicted spike. Four is roughly the point where the wall
+# clock stops improving.
+MAX_REFRESHED_CARDS = 12
+REFRESH_CONCURRENCY = 4
+
+
 @router.get("/cards", response_model=list[AnswerCard])
 async def get_cards(tenant: TenantContext = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> list[AnswerCard]:
-    """Re-run every saved card so the numbers are current, not as-of-save."""
-    cards: list[AnswerCard] = []
-    for row in await db.list_cards(int(tenant.supplier_id)):
+    """Re-run the most recent saved cards so the numbers are current, not as-of-save."""
+    rows = await db.list_cards(int(tenant.supplier_id), MAX_REFRESHED_CARDS)
+    limit = asyncio.Semaphore(REFRESH_CONCURRENCY)
+
+    async def refresh(row: dict) -> AnswerCard:
+        async with limit:
+            return await _refresh_card(row, int(tenant.supplier_id), mcp, cache)
+
+    # `gather` preserves order, so the newest-first ordering from the query survives.
+    return list(await asyncio.gather(*(refresh(row) for row in rows)))
+
+
+async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
+                        cache: ResultCache) -> AnswerCard:
+    if row["tool_name"] not in ALLOWED_CARD_TOOLS:
+        # Belt and braces against rows that predate the allowlist on SaveCardRequest, or that
+        # arrived by any path other than POST /api/cards. This is the point where a stored
+        # name turns into a call, so this is where refusing it actually costs an attacker
+        # something.
+        logger.warning("saved card %s names unknown tool %r", row["card_id"], row["tool_name"])
+        return AnswerCard(
+            card_id=str(row["card_id"]), status="cannot_answer",
+            narrative=f"'{row['title']}' använder ett verktyg som inte finns längre.")
+
+    try:
+        payload = await mcp.call(supplier_id, row["tool_name"], row["tool_args"])
+    except Exception:  # noqa: BLE001 — one broken saved view must not hide the others
+        logger.warning("could not refresh card %s", row["card_id"], exc_info=True)
+        return AnswerCard(
+            card_id=str(row["card_id"]), status="cannot_answer",
+            narrative=f"Kunde inte uppdatera '{row['title']}' mot aktuell data.")
+
+    result = cache.put(from_tool_result(
+        supplier_id=supplier_id, tool=row["tool_name"],
+        tool_args=row["tool_args"], payload=payload))
+    chart = render.propose_chart(result, title=row["title"])
+    if row.get("chart_spec"):
+        # The saved spec is re-validated against today's result: a column that existed
+        # when the card was saved may not exist now.
         try:
-            payload = await mcp.call(int(tenant.supplier_id), row["tool_name"],
-                                     row["tool_args"])
-        except Exception:  # noqa: BLE001 — one broken saved view must not hide the others
-            logger.warning("could not refresh card %s", row["card_id"], exc_info=True)
-            cards.append(AnswerCard(
-                card_id=str(row["card_id"]), status="cannot_answer",
-                narrative=f"Kunde inte uppdatera '{row['title']}' mot aktuell data."))
-            continue
+            saved = AnswerCard.model_validate(
+                {"chart": row["chart_spec"], "status": "ok"}).chart
+            if saved is not None:
+                chart, _ = render.validate_chart(saved, result)
+        except Exception:  # noqa: BLE001
+            pass
 
-        result = cache.put(from_tool_result(
-            supplier_id=int(tenant.supplier_id), tool=row["tool_name"],
-            tool_args=row["tool_args"], payload=payload))
-        chart = render.propose_chart(result, title=row["title"])
-        if row.get("chart_spec"):
-            # The saved spec is re-validated against today's result: a column that existed
-            # when the card was saved may not exist now.
-            try:
-                saved = AnswerCard.model_validate(
-                    {"chart": row["chart_spec"], "status": "ok"}).chart
-                if saved is not None:
-                    chart, _ = render.validate_chart(saved, result)
-            except Exception:  # noqa: BLE001
-                pass
-
-        cards.append(AnswerCard(
-            card_id=str(row["card_id"]), status="ok", chart=chart,
-            query_id=result.query_id, columns=render.to_columns(result),
-            provenance=render.build_provenance(result)))
-    return cards
+    return AnswerCard(
+        card_id=str(row["card_id"]), status="ok", chart=chart,
+        query_id=result.query_id, columns=render.to_columns(result),
+        provenance=render.build_provenance(result))
 
 
 @router.post("/cards", response_model=AnswerCard, status_code=status.HTTP_201_CREATED)

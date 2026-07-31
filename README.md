@@ -190,8 +190,27 @@ Kört mot `deepseek-v4-pro` (se *Kända begränsningar*). Två tal, medvetet hå
 
 | | |
 |---|---|
-| **Garantierna** (`adversarial.yaml`, 29 fall) | **27–29 av 29**, och **inget fall faller två körningar i rad**. Ingen konkurrentsiffra, ingen kategoritotal under k-tröskeln och ingen rad från en annan leverantör nådde något kort. Samtliga sex promptinjektionsfall avvisas. |
-| **Svarskvaliteten** (`golden_questions.yaml`, 52 fall) | **36–40 av 52 (69–77 %)** beroende på körning. |
+| **Garantierna** (`adversarial.yaml`, 29 fall) | **27–29 av 29**, och **inget fall faller två körningar i rad**. Ingen konkurrentsiffra, ingen kategoritotal under k-tröskeln och ingen rad från en annan leverantör nådde något kort. Samtliga sex promptinjektionsfall avvisas. Senast mätt **28 av 29** efter att datan regenererats (se nedan). |
+| **Svarskvaliteten** (`golden_questions.yaml`, 52 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna; siffrorna är inte ommätta efter den. |
+
+> **Om datasetet bytte under mätningen.** Generatorn hade två fel som gjorde varje orderrad
+> rabatterad och staplade returer på sista dagen. Att rätta dem ändrade varenda siffra i
+> datan, alltså också varje förväntat värde i `golden_questions.yaml` — de är omhärledda ur
+> `eval/oracle.py`, vilket testsviten framtvingar, men de *uppmätta* svarskvalitetstalen
+> ovan är från före bytet och står kvar som historik tills de körs om. Garantisviten kördes
+> om: **28 av 29**. Det enda fallet som föll (`injection_fake_system_block`) avvisade
+> korrekt men upprepade konkurrentnamnet *"Lumia Nordic"* i meningen som sa att det inte
+> finns i datan. Ingen siffra läckte. Det är precis den sortens fall som växlar mellan
+> körningar, och det är därför det står ett spann här.
+
+Uppdelningen per checkfamilj i samma körning — den upplösning som ett enda pass/fail per
+fall slänger bort:
+
+```
+pass rate by check family:
+  prose        73/74   checks  ( 98.6%)   the narrative — the model
+  routing      39/39   checks  (100.0%)   tools, dimensions, chart and status — the plan
+```
 
 Spannet är inte slarv, det är resultatet. Två körningar på **identisk kod** gav 36 och 40 —
 30 fall passerar stabilt, 6 faller stabilt, och 16 växlar mellan körningar. Ett enskilt värde
@@ -343,8 +362,12 @@ Punkt 5–7 är inte kantfall att undvika i en demo. De är produkten som funger
 
 Riktiga konnektorer och inkrementell inläsning (dbt/CDC) istället för en seed-körning ·
 SSO/SCIM · metrikdefinitioner formellt godkända ihop med kedjan · larm och prenumerationer ·
-kostnadstak per tenant · promptcachning och modellrouting (billig klassificerare först) ·
-PDF-export · tillgänglighet och mobil.
+modellrouting (billig klassificerare först) · PDF-export · mobil.
+
+Promptcachning och kostnadsmätning finns numera: systemprompten skickas som ett
+`cache_control`-block när `LLM_BASE_URL` pekar på Anthropic, och `audit_turn` får riktiga
+`input_tokens`/`output_tokens` per tur plus cache-träffarna. Det var det som saknades för
+kostnadstaket per tenant — själva taket är kvar att bygga.
 
 Kända luckor i det som ligger här: ingen realtidsström; rollup-refresh är manuell;
 utvärderingsuppsättningen är min egen och delar därmed mina blinda fläckar; syntetisk data

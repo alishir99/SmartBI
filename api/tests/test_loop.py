@@ -1,10 +1,17 @@
-"""Tests for the agent turn's validation gate (§9.2).
+"""Tests for the agent turn: the validation gate, the loop's bounds, and its bookkeeping.
 
 The validator is the second line of the grounding defence, and what these tests pin is *when*
 it runs. It used to be gated on `status == "ok"`, a field the model writes itself in its own
 JSON envelope — which made the whole numeric guarantee opt-out from inside the generated text.
 `clarify` is precisely the status a model reaches for when it is unsure what was asked, i.e.
 when its prose is most likely to be improvised, so that gate leaked exactly the wrong answers.
+
+Around that sit three more things the loop has to get right and had no coverage of. The tool
+budget bounds the work but not the conversation, so a model that keeps asking for tools drove
+`while True` forever. The retry that protects the grounding guarantee dropped its `tools`
+declaration and would 400 on a real endpoint, losing the chart to save the prose. And
+`_result_for` decides which cached result a card points at from an id that arrives inside
+generated text — the one place where believing the model would cross a tenant boundary.
 
 Driving the loop needs a stand-in for the LLM and for MCP. Both are small: the loop only ever
 calls `messages.create`, and the MCP surface it touches is three methods.
@@ -228,6 +235,46 @@ async def test_the_tool_budget_is_never_exceeded(monkeypatch):
     assert client.messages.calls == agent_loop.MAX_ROUNDS
     assert agent_loop.MAX_TOOL_CALLS < agent_loop.MAX_ROUNDS, (
         "a round cap at or below the tool budget would cut turns off before they spend it")
+
+
+# --------------------------------------------------------- which result the card is about
+
+class FakeResult:
+    """`_result_for` only ever reads `.query_id`."""
+
+    def __init__(self, query_id: str):
+        self.query_id = query_id
+
+
+def test_a_query_id_we_minted_is_honoured():
+    a, b = FakeResult("q_a"), FakeResult("q_b")
+    assert agent_loop._result_for({"query_id": "q_a"}, [a, b]) is a
+
+
+def test_a_query_id_we_never_minted_falls_back_to_our_own():
+    """The security reason this function has a docstring: `query_id` arrives inside the
+    model's JSON envelope, which is generated text. Honouring an id we did not mint is how
+    a card could end up pointing at a cache entry belonging to someone else — so an
+    unrecognised id is not looked up anywhere, it is simply not believed.
+    """
+    ours = FakeResult("q_ours")
+    assert agent_loop._result_for({"query_id": "q_someone_elses"}, [ours]) is ours
+
+
+@pytest.mark.parametrize("envelope_value", [
+    {},                                  # the model said nothing
+    {"query_id": None},
+    {"query_id": ""},                    # falsy, so the lookup is skipped entirely
+    {"query_id": 12345},                 # not even a string
+    {"query_id": ["q_a"]},               # unhashable-ish shapes must not raise
+])
+def test_a_missing_or_malformed_query_id_never_raises(envelope_value):
+    last = FakeResult("q_last")
+    assert agent_loop._result_for(envelope_value, [FakeResult("q_first"), last]) is last
+
+
+def test_no_results_means_no_card_source():
+    assert agent_loop._result_for({"query_id": "q_a"}, []) is None
 
 
 # ------------------------------------------------------------------- cost accounting

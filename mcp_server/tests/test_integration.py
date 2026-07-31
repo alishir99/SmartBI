@@ -19,6 +19,7 @@ clean-clone command. CI runs them explicitly against its Postgres service with `
 from __future__ import annotations
 
 import json
+import os
 import socket
 from pathlib import Path
 
@@ -214,3 +215,204 @@ async def test_a_thin_slice_is_suppressed_rather_than_answered(pool, truth, supp
             assert row.get("reason")
         else:
             assert row["n_brands"] >= thresholds.get("min_brands", 5)
+
+
+# ------------------------------------------------- the rollup and the fact table agree
+
+# Compared with an absolute floor rather than a relative one: these are sums over hundreds of
+# thousands of NUMERIC(12,2) rows aggregated in a different order, so the last öre can differ.
+# A genuinely half-refreshed rollup is off by whole days, not by rounding.
+RECONCILE_TOLERANCE_SEK = 1.0
+
+
+@pytest.fixture
+async def owner():
+    """A connection as the *owner* role, which the rest of this module deliberately never uses.
+
+    Reconciliation is an operator concern, not an application one, and the first attempt at
+    these tests proved it by failing with `permission denied for materialized view
+    mv_category_daily`. That error is the design working: `app_readonly` may reach the category
+    rollup only through a barrier view, and `fact_sales_line` only under an RLS predicate. So
+    the application role structurally *cannot* compare the two objects — it can never see both
+    sides of the comparison at once, which is exactly the property the privacy model is built
+    on and exactly why this check needs a different connection.
+    """
+    if not _reachable():
+        pytest.skip(f"ingen databas på {db.settings.postgres_host}:{db.settings.postgres_port}")
+    dsn = (f"postgresql://{os.getenv('POSTGRES_USER', 'solvigo')}:"
+           f"{os.getenv('POSTGRES_PASSWORD', 'solvigo')}"
+           f"@{db.settings.postgres_host}:{db.settings.postgres_port}/"
+           f"{os.getenv('POSTGRES_DB', 'solvigo')}")
+    try:
+        connection = await asyncpg.connect(dsn)
+    except (OSError, asyncpg.PostgresError) as exc:
+        pytest.skip(f"ingen ägaranslutning: {exc}")
+    try:
+        yield connection
+    finally:
+        await connection.close()
+
+# The rollup's grouping keys. Checked one at a time rather than as one grand total, because a
+# grand total that matches can still hide two errors that cancel — and the fact-table side has
+# to re-join dim_date and dim_store to reach these keys, which is precisely the work the
+# rollup exists to avoid and precisely where it could have gone wrong.
+_ROLLUP_KEYS = [
+    ("supplier_id", "f.supplier_id"),
+    ("date", "d.date"),
+    ("region", "st.region"),
+    ("channel", "st.channel"),
+    ("product_id", "f.product_id"),
+]
+
+
+async def test_the_rollup_reproduces_the_fact_table_at_every_grain(owner):
+    """Nothing anywhere asserted that `mv_sales_daily` agrees with `fact_sales_line`.
+
+    That is the load-bearing gap under the project's central product claim. `choose_source` is
+    free to answer the same question from either object — the rollup normally, the fact table
+    when a dimension or measure is not available in it — so "chat and the dashboard cannot
+    disagree" holds only if the two objects hold the same numbers. A half-refreshed
+    materialised view breaks that silently: every query still succeeds, and the answers are
+    merely wrong by however much the refresh missed.
+    """
+    for rollup_key, fact_key in _ROLLUP_KEYS:
+            rows = await owner.fetch(f"""
+                WITH rollup AS (
+                    SELECT {rollup_key} AS k, SUM(net_sales_sek) AS net, SUM(qty) AS qty
+                    FROM mv_sales_daily GROUP BY 1
+                ), fact AS (
+                    SELECT {fact_key} AS k,
+                           SUM(f.net_amount_sek) AS net, SUM(f.quantity) AS qty
+                    FROM fact_sales_line f
+                    JOIN dim_date  d  ON d.date_id  = f.date_id
+                    JOIN dim_store st ON st.store_id = f.store_id
+                    GROUP BY 1
+                )
+                SELECT COALESCE(rollup.k::text, fact.k::text) AS k,
+                       COALESCE(rollup.net, 0) AS rollup_net,
+                       COALESCE(fact.net, 0)   AS fact_net,
+                       COALESCE(rollup.qty, 0) AS rollup_qty,
+                       COALESCE(fact.qty, 0)   AS fact_qty
+                FROM rollup FULL OUTER JOIN fact USING (k)
+                WHERE rollup.k IS NULL
+                   OR fact.k IS NULL
+                   OR ABS(COALESCE(rollup.net, 0) - COALESCE(fact.net, 0)) > $1
+                   OR COALESCE(rollup.qty, 0) <> COALESCE(fact.qty, 0)
+                ORDER BY 1 LIMIT 5
+            """, RECONCILE_TOLERANCE_SEK)
+
+            detail = "; ".join(
+                f"{row['k']}: rollup {row['rollup_net']}/{row['rollup_qty']} "
+                f"vs fact {row['fact_net']}/{row['fact_qty']}" for row in rows)
+            assert not rows, (
+                f"mv_sales_daily disagrees with fact_sales_line grouped by {rollup_key} — "
+                f"the rollup is stale or half-refreshed (REFRESH MATERIALIZED VIEW). {detail}")
+
+
+async def test_the_category_rollup_reproduces_the_fact_table(owner):
+    """`mv_category_daily` is the privacy boundary rather than a convenience:
+    `query_market_share` may read nothing else. A drift here moves every share and every rank
+    the product reports about a market the caller cannot otherwise see, and there is no second
+    source to notice it."""
+    rows = await owner.fetch("""
+        WITH rollup AS (
+            SELECT category_id AS k, SUM(total_net_sek) AS net, SUM(total_qty) AS qty
+            FROM mv_category_daily GROUP BY 1
+        ), fact AS (
+            SELECT p.category_id AS k,
+                   SUM(f.net_amount_sek) AS net, SUM(f.quantity) AS qty
+            FROM fact_sales_line f
+            JOIN dim_product p ON p.product_id = f.product_id
+            GROUP BY 1
+        )
+        SELECT COALESCE(rollup.k, fact.k) AS k,
+               rollup.net AS rollup_net, fact.net AS fact_net
+        FROM rollup FULL OUTER JOIN fact USING (k)
+        WHERE rollup.k IS NULL OR fact.k IS NULL
+           OR ABS(rollup.net - fact.net) > $1
+           OR rollup.qty <> fact.qty
+        ORDER BY 1 LIMIT 5
+    """, RECONCILE_TOLERANCE_SEK)
+
+    detail = "; ".join(f"category {row['k']}: rollup {row['rollup_net']} "
+                       f"vs fact {row['fact_net']}" for row in rows)
+    assert not rows, f"mv_category_daily disagrees with fact_sales_line. {detail}"
+
+
+async def test_the_brand_rollup_agrees_with_its_own_rows(owner):
+    """`mv_brand_monthly` computes category_net_sek, share_pct, rank and n_brands in window
+    functions at refresh time. Those are the only numbers in the schema that are *derived*
+    rather than summed, and n_brands is what the k-anonymity threshold is tested against — so
+    a wrong count is a wrong suppression decision, which is a privacy outcome rather than an
+    accuracy one. The window has to still agree with the rows it was computed over."""
+    rows = await owner.fetch("""
+        SELECT month, category_id, region,
+               MAX(category_net_sek) AS carried,
+               SUM(net_sales_sek)    AS summed,
+               MAX(n_brands)         AS carried_brands,
+               COUNT(*)              AS actual_brands
+        FROM mv_brand_monthly
+        GROUP BY month, category_id, region
+        HAVING ABS(MAX(category_net_sek) - SUM(net_sales_sek)) > $1
+            OR MAX(n_brands) <> COUNT(*)
+        ORDER BY 1, 2, 3 LIMIT 5
+    """, RECONCILE_TOLERANCE_SEK)
+
+    detail = "; ".join(f"{row['month']}/{row['category_id']}/{row['region']}: "
+                       f"total {row['carried']} vs {row['summed']}, "
+                       f"brands {row['carried_brands']} vs {row['actual_brands']}"
+                       for row in rows)
+    assert not rows, ("mv_brand_monthly's carried category total or peer count disagrees "
+                      f"with its own rows. {detail}")
+
+
+async def test_the_two_sources_answer_the_same_question_identically(
+        monkeypatch, pool, truth, suppliers):
+    """The "chat and the dashboard cannot disagree" claim, tested where it could break.
+
+    The three tests above compare the *objects*. This one compares the *answers*, through the
+    compiler, with every join, filter and GROUP BY the tool actually emits — which is the
+    layer a divergence would have to cross to reach a user. Forcing the source is the only way
+    to ask the question at all: `choose_source` is deterministic, so in normal operation one
+    of these two paths is simply never exercised for a given spec.
+    """
+    from mcp_server.semantic import compiler
+
+    spec = {
+        "measures": ["net_sales_sek", "units", "gross_sales_sek", "discount_sek"],
+        "dimensions": ["month", "region"],
+        "time_range": {"from": truth["coverage"]["from"], "to": truth["coverage"]["to"]},
+        # Explicit, and above the 528 groups this produces (24 months x 22 regions).
+        # The first draft of this test left it at DEFAULT_LIMIT=500 and failed with the two
+        # sources returning *different regions* for the last month — not a reconciliation
+        # failure but finding B2 in the review: with `order_by` absent the compiler orders by
+        # the leading date dimension alone, so a LIMIT that bites cuts an arbitrary slice of
+        # the trailing group, and "arbitrary" differs between two physical sources. That is a
+        # real defect and it belongs to the ordering fix, not here; this test asks whether the
+        # two sources hold the same numbers, and it should not be able to fail for a second
+        # reason.
+        "limit": 5000,
+    }
+
+    answers = {}
+    for forced in ("rollup", "fact"):
+        monkeypatch.setattr(compiler, "choose_source",
+                            lambda *_args, _forced=forced, **_kw: _forced)
+        payload = await query_sales(tenant(suppliers[truth["demo_supplier"]]), dict(spec))
+        answers[forced] = {(str(row["month"]), row["region"]): row
+                           for row in payload["rows"]}
+
+    rollup, fact = answers["rollup"], answers["fact"]
+    assert rollup, "the fixture produced no rows, so this test proved nothing"
+    assert set(rollup) == set(fact), (
+        "the rollup and the fact table returned different groups: "
+        f"only in rollup {sorted(set(rollup) - set(fact))[:3]}, "
+        f"only in fact {sorted(set(fact) - set(rollup))[:3]}")
+
+    for key, rollup_row in rollup.items():
+        fact_row = fact[key]
+        for measure in ("net_sales_sek", "gross_sales_sek", "discount_sek"):
+            assert abs(float(rollup_row[measure]) - float(fact_row[measure])) < 1.0, (
+                f"{measure} at {key}: rollup {rollup_row[measure]} "
+                f"vs fact {fact_row[measure]}")
+        assert int(rollup_row["units"]) == int(fact_row["units"]), key

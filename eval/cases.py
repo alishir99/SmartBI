@@ -45,6 +45,11 @@ STATUSES = frozenset({"ok", "clarify", "cannot_answer"})
 
 KNOWN_UNITS = frozenset({"SEK", "st", "%"})
 
+# The frontend feeds back the last eight history entries — four question/answer pairs
+# (web/src/lib/chat.ts :: toHistory). A case with more prior turns than that would be
+# asserting something about a conversation the product never sends.
+MAX_HISTORY_TURNS = 4
+
 GOLDEN_EXPECT_KEYS = frozenset({
     "numeric", "delta_pct", "series", "top_n", "rank", "n_brands",
     "tools_called", "tools_not_called", "dimensions", "chart_type",
@@ -118,6 +123,8 @@ def validate(cases: list, suite: str) -> list[str]:
         if not isinstance(question, str) or not question.strip():
             problems.append(f"{where}: missing or empty `question`")
 
+        problems += _check_history(where, case.get("history"))
+
         expects = case.get("expects")
         if not isinstance(expects, dict) or not expects:
             problems.append(f"{where}: missing or empty `expects`")
@@ -149,6 +156,44 @@ def _check_status(where: str, status) -> list[str]:
     values = status if isinstance(status, list) else [status]
     return [f"{where}: unknown status {value!r} (allowed: {sorted(STATUSES)})"
             for value in values if value not in STATUSES]
+
+
+def _check_history(where: str, history) -> list[str]:
+    """The prior turns a follow-up question is asked against.
+
+    `history` sits beside `question` rather than inside `expects` because it is an *input*,
+    not an assertion — which is also why it needs no grader and leaves
+    `assert_vocabulary_is_graded()` untouched.
+
+    Each entry is one earlier USER question and nothing else. The assistant's half is
+    deliberately absent: run_eval.py replays these turns against the live system and feeds
+    the narrative it actually produced back as the assistant message, exactly as
+    web/src/lib/chat.ts does. Writing the assistant's half here would mean pasting prose
+    nobody re-derives into the one file whose entire claim is that every value in it is
+    traceable to the data — and it would test a transcript the product never generates.
+
+    The failure this guards against is quiet: a `history` that is empty, or holds a blank
+    string, or an accidental `{role: ..., content: ...}` mapping, still loads and still runs.
+    It just runs as an ordinary single-turn case, and the multi-turn claim silently stops
+    being tested while the case keeps passing.
+    """
+    if history is None:
+        return []
+    if not isinstance(history, list) or not history:
+        return [f"{where}: `history` must be a non-empty list of earlier questions — an "
+                f"empty one is a single-turn case wearing a multi-turn label"]
+
+    problems = [f"{where}: history turn {index} must be a non-empty question string, got "
+                f"{turn!r} — only the user's half belongs here, the assistant's is whatever "
+                f"the system answers at run time"
+                for index, turn in enumerate(history)
+                if not isinstance(turn, str) or not turn.strip()]
+
+    if len(history) > MAX_HISTORY_TURNS:
+        problems.append(f"{where}: `history` has {len(history)} prior turns; the frontend "
+                        f"sends at most {MAX_HISTORY_TURNS}, so the earliest would be "
+                        f"dropped in the product but not in the eval")
+    return problems
 
 
 def _check_lists(where: str, expects: dict) -> list[str]:

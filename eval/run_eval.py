@@ -12,7 +12,7 @@ compute an expectation, a bug shared between the driver and the app would cancel
 the eval would report success — so the driver is kept small enough to audit in one sitting,
 and the only thing it is trusted to do is speak the wire protocol faithfully.
 
-Two operational choices worth stating:
+Three operational choices worth stating:
 
 **A setup failure is not a test failure.** An unreachable API or a bad password exits with
 a message about `docker compose up` and status 2. Reporting it as forty failing cases would
@@ -22,6 +22,13 @@ be technically true and completely useless.
 competitor figure are both red lines in a naive runner. Here the guarantee failures are
 marked and re-listed under their own heading, because they are the ones that mean the
 system is unsafe rather than imprecise.
+
+**A follow-up is replayed, not faked.** A case carrying `history:` has its earlier questions
+asked for real first, and the system's own narrative is fed back as the assistant turn —
+the same thing web/src/lib/chat.ts sends. That costs one extra turn per prior question and
+is the only way the eval measures what the demo actually does: carrying the entity, the
+window and the measure across turns rather than re-deriving them from a transcript an eval
+author wrote.
 
 Usage:
     python eval/run_eval.py                    # the golden suite
@@ -143,8 +150,13 @@ async def login(client: httpx.AsyncClient, base_url: str, email: str,
                    user=payload.get("user") or {})
 
 
-async def ask(session: Session, question: str, timeout: float) -> Observed:
-    """One chat turn, consumed incrementally off the SSE stream."""
+async def ask(session: Session, question: str, timeout: float,
+              history: list[dict[str, str]] | None = None) -> Observed:
+    """One chat turn, consumed incrementally off the SSE stream.
+
+    `history` is the wire shape the frontend sends — `[{"role": ..., "content": ...}]`,
+    api/models.py :: ChatTurn — and is empty for every single-turn case.
+    """
     observed = Observed()
     started = time.monotonic()
 
@@ -152,7 +164,7 @@ async def ask(session: Session, question: str, timeout: float) -> Observed:
         async with asyncio.timeout(timeout):
             async with session.client.stream(
                 "POST", f"{session.base_url}/api/chat",
-                json={"question": question, "history": []},
+                json={"question": question, "history": history or []},
                 headers={**session.headers, "Accept": "text/event-stream"},
                 timeout=httpx.Timeout(timeout, read=timeout),
             ) as response:
@@ -214,10 +226,48 @@ async def fetch_rows(session: Session, query_id: str, timeout: float) -> None | 
     return response.json()
 
 
+async def establish_history(session: Session, case: dict,
+                            timeout: float) -> tuple[list[dict[str, str]], Observed | None]:
+    """Replay a case's prior turns, returning the history its question is then asked against.
+
+    A multi-turn case lists only the earlier *user* questions. The assistant's half is
+    whatever the system actually said, fed straight back the way the product does
+    (web/src/lib/chat.ts :: toHistory) — so the follow-up is put to the model against a
+    transcript the model itself wrote. Canned assistant text in the YAML would have saved a
+    round-trip and tested a conversation that never happens: the failure mode a follow-up
+    exhibits is losing the entity, the window or the measure from its *own* previous answer.
+
+    The second element is non-None when a set-up turn never answered. Grading the follow-up
+    then would report, say, a wrong total for what is really a broken prelude, so the caller
+    fails the case on the prelude and names the turn that broke.
+    """
+    history: list[dict[str, str]] = []
+    for prior in case.get("history") or []:
+        observed = await ask(session, str(prior), timeout, history)
+        if not observed.card or not observed.narrative.strip():
+            reason = observed.error or "the turn produced no narrative to carry forward"
+            return history, Observed(
+                error=f"set-up turn {prior!r} never answered ({reason}), so the follow-up "
+                      f"was never asked",
+                latency_ms=observed.latency_ms)
+        history += [{"role": "user", "content": str(prior)},
+                    {"role": "assistant", "content": observed.narrative}]
+    return history, None
+
+
 async def run_case(session: Session, case: dict, suite: str, timeout: float,
                    semaphore: asyncio.Semaphore) -> CaseResult:
     async with semaphore:
-        observed = await ask(session, str(case["question"]), timeout)
+        # The semaphore is held across the whole conversation on purpose: a follow-up must
+        # see its own prelude, not interleave with three other cases' turns.
+        history, broken = await establish_history(session, case, timeout)
+        if broken is not None:
+            return grade.grade(case, broken, suite)
+
+        # Latency is the graded turn's alone. A multi-turn case costs more wall clock than a
+        # single-turn one by construction, and folding the set-up in would make the p95 a
+        # statement about the suite's shape rather than about the system.
+        observed = await ask(session, str(case["question"]), timeout, history)
 
         if observed.card and observed.card.get("query_id"):
             try:

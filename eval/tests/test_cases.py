@@ -213,6 +213,62 @@ def test_caveats_min_must_be_positive():
     assert "caveats_min must be a positive integer" in problems(golden(expects={"caveats_min": 0}))
 
 
+# ---------------------------------------------------------------- multi-turn history
+
+
+def test_a_case_without_history_is_still_valid():
+    """Single-turn is the overwhelming majority and must stay the zero-ceremony default."""
+    assert "history" not in GOLDEN
+    assert cases.validate([GOLDEN], "golden") == []
+
+
+def test_history_of_earlier_questions_is_accepted():
+    assert cases.validate(
+        [golden(history=["Vilka produkter säljer bäst i Stockholm?"])], "golden") == []
+
+
+def test_empty_history_is_refused():
+    # `history: []` parses, loads and runs — as an ordinary single-turn case. The label would
+    # then claim multi-turn coverage the run never exercised, which is the whole failure mode
+    # this file exists to prevent.
+    assert "single-turn case wearing a multi-turn label" in problems(golden(history=[]))
+
+
+def test_history_turns_must_be_non_empty_strings():
+    assert "must be a non-empty question string" in problems(golden(history=["  "]))
+    assert "must be a non-empty question string" in problems(golden(history=[42]))
+
+
+def test_history_may_not_carry_the_assistants_half():
+    # The tempting shape, and the wrong one: the assistant's turn is whatever the system
+    # answers at run time, so a hand-written one would be untraceable prose in a file whose
+    # claim is that everything in it is traceable.
+    assert "only the user's half belongs here" in problems(
+        golden(history=[{"role": "user", "content": "Vad sålde vi i juni 2026?"}]))
+
+
+def test_history_may_not_be_longer_than_the_frontend_sends():
+    reported = problems(golden(history=["a?", "b?", "c?", "d?", "e?"]))
+    assert "the frontend sends at most" in reported
+    assert cases.validate([golden(history=["a?", "b?", "c?", "d?"])], "golden") == []
+
+
+def test_history_is_validated_in_both_suites():
+    """`history` sits beside `question`, not inside `expects`, so nothing else in the
+    validator would notice a malformed one on an adversarial case."""
+    assert "must be a non-empty question string" in problems(
+        adversarial(history=[""]), "adversarial")
+
+
+def test_history_needs_no_grader():
+    """The guard run_eval.py runs before any HTTP: a suite key with no grader is an
+    assertion that always passes. `history` is an input rather than an expectation, which is
+    why it is not in the expects vocabulary at all — and if it were moved there, this would
+    fail alongside assert_vocabulary_is_graded()."""
+    assert "history" not in cases.GOLDEN_EXPECT_KEYS
+    assert "history" not in cases.ADVERSARIAL_EXPECT_KEYS
+
+
 # ---------------------------------------------------------------- adversarial-only rules
 
 
@@ -278,6 +334,16 @@ def test_suites_are_roughly_the_advertised_size():
     assert len(adversarial_suite) >= 15, (
         f"adversarial suite shrank to {len(adversarial_suite)} cases")
     assert len(golden_suite) + len(adversarial_suite) >= 40
+
+
+def test_the_golden_suite_actually_covers_multi_turn():
+    """A floor on the coverage this schema was added for. The suite had 52 cases and sent an
+    empty history for every one of them, while the README's demo script leads with a
+    follow-up — so the most-demoed interaction in the submission had no case behind it."""
+    multi_turn = [case for case in cases.load("golden").cases if case.get("history")]
+    assert len(multi_turn) >= 4, (
+        f"only {len(multi_turn)} golden case(s) carry a `history`; a follow-up is where the "
+        f"entity, the window and the measure are most likely to be dropped")
 
 
 def test_unknown_suite_name_is_refused():

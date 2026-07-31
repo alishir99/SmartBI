@@ -16,6 +16,12 @@
 # not on today (mcp_server/semantic/compiler.py :: resolve_time_range), so
 # `last_12_months` == 2025-07-01 → 2026-06-30 and `last_month` == May 2026.
 #
+# Optional alongside `question`:
+#   history      [...]  earlier USER questions, asked for real before this one. run_eval.py
+#                       feeds the system's own narrative back as the assistant turn, exactly
+#                       as web/src/lib/chat.ts does, and grades only the final turn — so the
+#                       tool calls and the chart below describe the FOLLOW-UP, not the setup.
+#
 # expects fields, all optional except `status`:
 #   numeric      {value, unit, tolerance_pct}  a figure the answer must carry
 #   delta_pct    {value, tolerance_pct}        period-over-period change
@@ -926,5 +932,107 @@
     numeric: {value: 5022033.59, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+# ---------------------------------------------------------------- follow-ups (multi-turn)
+# Every case above is one question against an empty history. A follow-up is a different test:
+# the entity, the time window and the measure have to survive a turn boundary that nothing in
+# the question restates, and the model has to read them off its own previous answer. That is
+# where the system is most likely to fail in front of an audience, and it is the interaction
+# the README leads its demo script with.
+#
+# `history` holds the earlier questions only. run_eval.py asks them for real and feeds the
+# narrative the system produced back as the assistant turn, so what is graded below is the
+# FOLLOW-UP's stream alone. Two consequences for the expectations: `resolve_entities` is not
+# demanded, because an entity resolved in turn one is already resolved and a re-resolution is
+# not something to require; and `dimensions` is asserted only where the shape of the answer
+# is not in question, since a follow-up may legitimately answer with a comparison.
+
+- id: followup_units_instead_of_revenue
+  question: "…mätt i antal istället?"
+  history:
+    - "Vilka produkter säljer bäst i Stockholm?"
+  # The README's own demo pair (Demofrågor #2), verbatim. Same entity, same window, one word
+  # changes the measure — and the two lists genuinely differ: by revenue Stockholm leads with
+  # Nordström TV N100 Pro (1 742 304,69 SEK), by volume with the cheap Vidar accessories. An
+  # answer that quietly re-runs the revenue query passes every other check in this file.
+  # derived: product × units, region Stockholms län, last_12_months.
+  # #1 and #2 are two units apart (888 / 886), so a flip is evidence the window moved rather
+  # than that the ordering is a coin toss — the numeric below would drift with it.
+  derivation: {measure: units, group_by: product, top: 3,
+               where: {relative: last_12_months, region: "Stockholms län"}}
+  expects:
+    numeric: {value: 888, unit: st, tolerance_pct: 0.5}
+    top_n:
+      group_by: product
+      prefix_only: true
+      order:
+        - "Vidar Tillbehör V217 Air"
+        - "Vidar Tillbehör V139 Compact"
+        - "Vidar Högtalare V178 Max"
+    tools_called: [query_sales]
+    dimensions: [product]
+    chart_type: bar
+    status: ok
+    language: sv
+
+- id: followup_narrow_to_region
+  question: "Och bara i Stockholms län?"
+  history:
+    - "Hur många enheter sålde vi senaste tolv månaderna?"
+  # The follow-up adds a filter and restates nothing else: the measure (enheter, not kronor)
+  # and the window both live in the previous turn only. Answering with 17 330 193 SEK — the
+  # right filter over the wrong measure, and a figure this data really does contain — is the
+  # specific failure this case exists to catch.
+  # derived: units, region Stockholms län, last_12_months = 8 929 of the 24 704 nationally.
+  derivation: {measure: units, where: {relative: last_12_months, region: "Stockholms län"}}
+  expects:
+    numeric: {value: 8929, unit: st, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar]
+    status: ok
+    language: sv
+
+- id: followup_previous_year
+  question: "Och förra året då?"
+  history:
+    - "Vad sålde vi för i juni 2026?"
+  # Only the window moves, and it moves relative to the month named in the previous turn:
+  # "förra året" here is June 2025, not calendar 2025 and not the trailing twelve months the
+  # compiler defaults to when a question carries no period at all.
+  # derived: net_sales_sek 2025-06-01 … 2025-06-30. The first turn answers 3 374 914,99, so a
+  # system that repeats itself instead of moving the window fails on the figure.
+  derivation: {measure: net_sales_sek, where: {from: "2025-06-01", to: "2025-06-30"}}
+  expects:
+    numeric: {value: 3070868.46, unit: SEK, tolerance_pct: 0.5}
+    tools_called: [query_sales]
+    chart_type: [kpi, bar, line]
+    status: ok
+    language: sv
+
+- id: followup_pronoun_headphones
+  question: "Hur fördelar de sig mellan våra två varumärken?"
+  history:
+    - "Hur går det för våra hörlurar?"
+  # "De" is the only reference to the subcategory anywhere in the question — strip the
+  # pronoun and nothing is being asked. The follow-up must keep the Hörlurar filter while
+  # changing the grouping, and the plausible-looking wrong answer is a brand split of ALL own
+  # sales (29 478 833,14 / 19 881 270,22, see brand_split_last_12m), which reads perfectly
+  # well and is about a different question.
+  # derived: brand × net_sales_sek, subcategory Hörlurar, last_12_months. The two points sum
+  # to the 6 511 354,07 that loose_headphones_subcategory asserts over the same slice.
+  derivation: {measure: net_sales_sek, group_by: brand,
+               where: {relative: last_12_months, subcategory: Hörlurar}}
+  expects:
+    series:
+      group_by: brand
+      tolerance_pct: 0.5
+      points:
+        Nordström: 1649276.27
+        Vidar: 4862077.80
+    tools_called: [query_sales]
+    dimensions: [brand]
+    chart_type: [bar, pie, stacked_bar]
     status: ok
     language: sv

@@ -418,7 +418,14 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
         unit_price = product.list_price_sek * price_factor
 
         # Discounts: heavy during campaigns, sporadic otherwise.
-        campaign_day = dates["campaign_id"].to_numpy()[day_pos] != None  # noqa: E711
+        #
+        # `campaign_id` is a nullable Int64, and `.to_numpy()` on that gives float64 with NaN
+        # for the missing days. `nan != None` is True, so the campaign branch fired on every
+        # single row: 100 % of order lines carried a discount at a flat 22.5 %, on campaign
+        # days and ordinary days alike, and "how did Black Week compare?" had no answer in the
+        # data. Ask pandas about missingness instead of comparing an array to None — and note
+        # that the `# noqa: E711` that used to sit here silenced the one check that catches it.
+        campaign_day = dates["campaign_id"].notna().to_numpy()[day_pos]
         discount_pct = np.where(
             campaign_day,
             rng.uniform(0.10, 0.35, size=n),
@@ -494,7 +501,18 @@ def _append_returns(rng: np.random.Generator, facts: pd.DataFrame,
     date_ids = dates["date_id"].to_numpy()
     position = pd.Series(np.arange(len(date_ids)), index=date_ids)
     shifted = position.loc[mirror["date_id"]].to_numpy() + rng.integers(3, 21, size=len(mirror))
-    mirror["date_id"] = date_ids[np.clip(shifted, 0, len(date_ids) - 1)]
+
+    # A return whose lag falls past the end of coverage has not happened yet, so it is dropped
+    # rather than clamped onto the final day. Clamping piled 252 returns onto 2026-06-30
+    # against a median of 14 — an 18x spike that gave every `last_7_days` answer and every
+    # `previous_period` comparison anchored at coverage-end a fabricated ~15 % decline. The
+    # sale still stands; only its as-yet-unmade return is left out, which is what a warehouse
+    # loaded up to today would actually contain.
+    within_coverage = shifted < len(date_ids)
+    mirror = mirror[within_coverage]
+    if mirror.empty:
+        return facts
+    mirror["date_id"] = date_ids[shifted[within_coverage]]
 
     for column in ("quantity", "gross_amount_sek", "discount_amount_sek", "net_amount_sek"):
         mirror[column] = -mirror[column]

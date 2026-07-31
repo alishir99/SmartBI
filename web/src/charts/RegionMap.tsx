@@ -149,7 +149,12 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
               onFocus={() => setActive(entry.region)}
               onBlur={() => setActive(null)}
               tabIndex={0}
-              role="button"
+              // Not a button: there is no activation here and never was. Focusing a county
+              // reveals its readout, which is the whole interaction — `role="button"`
+              // promised an Enter/Space action that nothing implements, and a promise the
+              // keyboard cannot keep is worse than no role at all. `img` matches what this
+              // actually is: a labelled mark carrying its own value.
+              role="img"
               aria-label={`${entry.region}: ${formatMoneyWithUnit(entry.value, scale)}`}
               className="cursor-default outline-none"
             >

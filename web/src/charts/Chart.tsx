@@ -58,12 +58,20 @@ export function Chart({ spec, columns, rows, height = 280 }: Props) {
     ? Math.max(height, sidewaysHeight(prepared.rows.length))
     : height
 
+  // Recharts emits a bare <svg> with no accessible name, so a screen reader reaching this
+  // point previously found nothing at all — the chart was simply absent. `DataTable` is the
+  // real fallback and it is good, but it lives behind a mouse click, which is no help to
+  // the person who needs it most. `role="img"` plus a name that states what the chart shows
+  // makes the plot itself announceable, and the caption gives the same sentence visually
+  // adjacent for anyone reading the page rather than hearing it.
+  const description = describeChart(spec, prepared)
+
   return (
     <figure className="m-0">
       {/* The unit sits above the axis rather than on it — overlaying the top tick is
           exactly how a chart ends up with an unreadable largest value. */}
       {prepared.scale && <p className="mb-1 text-2xs text-ink-muted">{prepared.scale.unit}</p>}
-      <div style={{ height: plotHeight }}>
+      <div style={{ height: plotHeight }} role="img" aria-label={description}>
         <ResponsiveContainer width="100%" height="100%">
           {plot(spec, prepared, sideways)}
         </ResponsiveContainer>
@@ -74,8 +82,53 @@ export function Chart({ spec, columns, rows, height = 280 }: Props) {
           Mindre poster är summerade till “Övrigt”.
         </p>
       )}
+      {/* sr-only rather than hidden: it must reach the accessibility tree. The visible
+          chart already carries the title in its card header, so repeating it on screen
+          would be noise. */}
+      <figcaption className="sr-only">{description}</figcaption>
     </figure>
   )
+}
+
+const CHART_KIND: Record<string, string> = {
+  line: 'Linjediagram',
+  bar: 'Stapeldiagram',
+  stacked_bar: 'Staplat stapeldiagram',
+  area: 'Ytdiagram',
+  pie: 'Cirkeldiagram',
+}
+
+/**
+ * The sentence a screen reader announces in place of the plot.
+ *
+ * Deliberately built from `prepared` rather than from the raw rows: it must describe what
+ * was actually drawn, including the fold into "Övrigt", or it becomes a second, quieter
+ * source of truth that can disagree with the picture. It carries no values beyond the
+ * count and the series names — the numbers live in the table fallback, which is exact.
+ */
+export function describeChart(spec: ChartSpec, prepared: PreparedChart): string {
+  const kind = CHART_KIND[spec.type] ?? 'Diagram'
+  const parts = [`${kind}: ${spec.title || 'utan titel'}`]
+
+  const measures = (prepared.slices.length > 0 ? prepared.slices : prepared.series)
+    .map((series) => series.label)
+    .filter(Boolean)
+  if (measures.length > 0) {
+    parts.push(`visar ${measures.join(', ')}`)
+  }
+  if (prepared.xColumn?.label) {
+    parts.push(`per ${prepared.xColumn.label.toLowerCase()}`)
+  }
+  parts.push(`${prepared.rows.length} ${prepared.rows.length === 1 ? 'värde' : 'värden'}`)
+  if (prepared.scale?.unit) {
+    parts.push(`i ${prepared.scale.unit}`)
+  }
+  if (prepared.folded) {
+    parts.push('mindre poster är summerade till Övrigt')
+  }
+  // Points at the actual control, not at a vaguely gestured "table below": the table
+  // *replaces* the chart via the Diagram/Tabell toggle in the card's actions.
+  return `${parts.join(', ')}. Välj Tabell för att läsa samma siffror som text.`
 }
 
 /** Recharts wants a single element child, so each type returns one complete chart. */

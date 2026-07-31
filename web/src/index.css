@@ -19,7 +19,13 @@
 
   --text: #1d1d1f;
   --text-secondary: #6e6e73;
-  --text-muted: #86868b;
+  /* Was #86868b, which measures 3.62:1 on white and 3.33:1 on --surface-2 — below the
+     4.5:1 WCAG AA needs for text this size, across ~15 call sites including every axis
+     tick on every chart. Dark mode was never the problem (#8e8e93 measures 5.22:1 on
+     --surface); this was a light-mode-only failure, and light is what a projector shows.
+     #6b6b70 clears 4.5:1 on all three light backgrounds, worst case 4.87:1 on
+     --surface-2, and is still visibly quieter than --text-secondary. */
+  --text-muted: #6b6b70;
 
   --hairline: rgba(0, 0, 0, 0.08);
   --hairline-strong: rgba(0, 0, 0, 0.16);
@@ -43,7 +49,9 @@
   /* chart chrome */
   --grid: #ebebef;
   --axis: #d2d2d7;
-  --axis-text: #86868b;
+  /* Same 3.62:1 failure as --text-muted was, and this is the one that matters most: it is
+     every tick on every axis, rendered at 11 px. Dark mode already passes. */
+  --axis-text: #6b6b70;
 
   /* categorical series — fixed order, never cycled */
   --series-1: #0071e3;

@@ -1,13 +1,4 @@
-"""Loading and validating the two YAML suites.
-
-The suites are data, and data rots quietly. Everything here exists so that a malformed or
-untraceable case fails loudly at load time instead of producing a green run that proves
-nothing: an expectation naming a measure the semantic layer does not have, a golden question
-with no derivation backing its number, an adversarial case that forgot to assert anything.
-
-`validate()` is pure and has no I/O, so tests/test_cases.py can feed it hand-written
-dictionaries.
-"""
+"""Loading and validating the two YAML suites."""
 
 from __future__ import annotations
 
@@ -39,15 +30,13 @@ CHART_TYPES = frozenset({
     "line", "bar", "stacked_bar", "area", "pie", "kpi", "table",
 })
 
-# Mirrors AnswerCard.status in docs/API_CONTRACT.md. `validation_failed` is deliberately
-# absent: it is a correct behaviour of the system but never a correct *expectation*.
+# Mirrors AnswerCard.status in docs/API_CONTRACT.md.
 STATUSES = frozenset({"ok", "clarify", "cannot_answer"})
 
 KNOWN_UNITS = frozenset({"SEK", "st", "%"})
 
 # The frontend feeds back the last eight history entries — four question/answer pairs
-# (web/src/lib/chat.ts :: toHistory). A case with more prior turns than that would be
-# asserting something about a conversation the product never sends.
+# (web/src/lib/chat.ts :: toHistory).
 MAX_HISTORY_TURNS = 4
 
 GOLDEN_EXPECT_KEYS = frozenset({
@@ -159,24 +148,7 @@ def _check_status(where: str, status) -> list[str]:
 
 
 def _check_history(where: str, history) -> list[str]:
-    """The prior turns a follow-up question is asked against.
-
-    `history` sits beside `question` rather than inside `expects` because it is an *input*,
-    not an assertion — which is also why it needs no grader and leaves
-    `assert_vocabulary_is_graded()` untouched.
-
-    Each entry is one earlier USER question and nothing else. The assistant's half is
-    deliberately absent: run_eval.py replays these turns against the live system and feeds
-    the narrative it actually produced back as the assistant message, exactly as
-    web/src/lib/chat.ts does. Writing the assistant's half here would mean pasting prose
-    nobody re-derives into the one file whose entire claim is that every value in it is
-    traceable to the data — and it would test a transcript the product never generates.
-
-    The failure this guards against is quiet: a `history` that is empty, or holds a blank
-    string, or an accidental `{role: ..., content: ...}` mapping, still loads and still runs.
-    It just runs as an ordinary single-turn case, and the multi-turn claim silently stops
-    being tested while the case keeps passing.
-    """
+    """The prior turns a follow-up question is asked against."""
     if history is None:
         return []
     if not isinstance(history, list) or not history:
@@ -240,8 +212,8 @@ def _check_golden(where: str, case: dict, expects: dict) -> list[str]:
             problems.append(f"{where}: golden questions must expect status 'ok' — a case "
                             f"that should be refused belongs in adversarial.yaml")
 
-    # Traceability, enforced rather than commented: every golden case carries a derivation,
-    # and tests/test_expectations.py re-computes it against the CSVs.
+    # Traceability, enforced rather than commented: every golden case carries a derivation, and
+    # tests/test_expectations.py re-computes it against the CSVs.
     derivation = case.get("derivation")
     if not isinstance(derivation, dict) or not derivation:
         problems.append(f"{where}: missing `derivation` — every expected value must be "
@@ -314,27 +286,13 @@ def _check_numeric(where: str, key: str, spec, *, require_unit: bool) -> list[st
 
 
 def _is_numeric_literal(text: str) -> bool:
-    """A `must_not_contain` entry that is a figure rather than a name. Digits, spaces and
-    Swedish decimal separators only — "22 105" and "174,9" are figures, "Lumia" is not."""
+    """A `must_not_contain` entry that is a figure rather than a name."""
     return any(ch.isdigit() for ch in text) and all(
         ch.isdigit() or ch in " ,." for ch in text)
 
 
 def _check_forbids(where: str, case: dict, expects: dict) -> list[str]:
-    """Every forbidden *figure* must be traceable to a live derivation.
-
-    This is the guard the adversarial suite was missing. Golden cases cannot carry an
-    untraceable number — `_check_golden` demands a `derivation` and test_expectations.py
-    re-runs it. Adversarial cases demanded nothing, so `174`, `118`, `158` and `22 105`
-    quietly stopped existing in the data at a regeneration and four negative controls
-    became unconditional passes: the suite making the *safety* claim had the weaker
-    traceability guard of the two.
-
-    A `forbids` block fixes that structurally rather than by re-pasting the numbers. It
-    declares where each literal comes from, tests/test_forbidden.py re-derives it against
-    the CSVs, and this check refuses a numeric literal that no entry accounts for — so the
-    next regeneration cannot silently disarm a control.
-    """
+    """Every forbidden *figure* must be traceable to a live derivation."""
     problems = []
     forbids = case.get("forbids", [])
     if not isinstance(forbids, list):
@@ -386,14 +344,7 @@ def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
     # number, forbid a substring, or require the suppression flag.
     asserted = {"must_not_contain_numbers", "suppressed", "must_not_contain"} & set(expects)
 
-    # A fourth way, narrower and only sound for a case that must be refused outright. Where
-    # the refusal itself has to carry something — `impossible_past_2019` must state the
-    # coverage window, and "2024"/"2026" are dates rather than claims about sales — demanding
-    # `must_not_contain_numbers` would forbid the very strings `must_contain` requires. A
-    # refusal status plus required content is a real assertion: it pins both that the system
-    # declined and what it said instead. Admitting it only when every allowed status is a
-    # refusal is what keeps this from becoming a hole; a case that tolerates `ok` still has
-    # to assert something negative, and the check below enforces that independently.
+    # A fourth way, narrower and only sound for a case that must be refused outright.
     if not asserted and expects.get("must_contain"):
         if statuses and all(status in ("cannot_answer", "clarify") for status in statuses):
             asserted = {"must_contain"}
@@ -403,11 +354,7 @@ def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
                         f"one of must_not_contain_numbers, suppressed, must_not_contain, or "
                         f"must_contain alongside a refusing status")
     # `must_not_contain_numbers` is deliberately NOT accepted here, though it looks like it
-    # should be. grade.py permits bare integers <= 100 so that suggestion counts, ordinals
-    # and the k-threshold text itself do not trip a false positive — which means a small
-    # integer is exactly what it lets through, and in a thin slice the small integer ("3
-    # varumärken", "#2 av 3") is the whole secret. A case that tolerates `ok` therefore has
-    # to name what may not appear, or require the suppression flag.
+    # should be.
     if "ok" in statuses and not expects.get("suppressed") and "must_not_contain" not in expects:
         problems.append(f"{where}: allows status 'ok' without requiring suppression or "
                         f"forbidding content — that permits a plain answer")

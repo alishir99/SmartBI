@@ -1,11 +1,4 @@
-/**
- * The chat rail. Two things make it worth its screen space:
- *
- * 1. The tool chips. Streaming the tool calls is a trust feature, not a latency one —
- *    the user watches the system go to the database and come back with a row count.
- * 2. The answer is an `AnswerCard`, rendered by the same component the dashboard uses,
- *    so a chat answer is a first-class, savable, exportable card — not a wall of text.
- */
+/** The chat rail. */
 
 import { useEffect, useRef, useState } from 'react'
 import { useChatStore, type ChatTurn, type ToolChip } from '../lib/chat'
@@ -33,7 +26,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
   const scroller = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
 
-  // Follow the stream. Chat reads bottom-up, so new content should never be below the fold.
+  // Follow the stream.
   useEffect(() => {
     const node = scroller.current
     if (node) node.scrollTop = node.scrollHeight

@@ -1,10 +1,4 @@
-/**
- * The root: an auth gate, then the shell with whatever the hash route points at.
- *
- * Switching account resets the chat. Leaving one supplier's turns on screen while
- * another supplier's dashboard loads would put two tenants' numbers in one window —
- * cheap to prevent, expensive to explain.
- */
+/** The root: an auth gate, then the shell with whatever the hash route points at. */
 
 import { useEffect } from 'react'
 import { useAuthStore } from './lib/auth'

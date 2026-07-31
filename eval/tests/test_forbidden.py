@@ -1,21 +1,4 @@
-"""Re-derivation of every forbidden figure in adversarial.yaml.
-
-The counterpart to test_expectations.py, for the suite that actually carries the safety
-claim. Its absence was a real hole rather than a theoretical one: `174`, `118`, `158` and
-`22 105` were once genuine competitor figures, a data regeneration moved all four, and
-nothing noticed. Four negative controls spent that whole period forbidding strings the data
-could no longer produce — passing unconditionally, proving nothing, and still being counted
-as evidence that no competitor figure ever reached a card.
-
-A negative control has to be live to be a control. So each forbidden number declares a
-`forbids` entry saying which competitor figure it is, this module re-computes it from the
-CSVs on every run, and eval/cases.py rejects any numeric literal that no entry accounts for.
-Between them the two checks close the loop: a number cannot enter the file untraceably, and
-a number already in it cannot go stale quietly.
-
-What would go undetected without this file: a forbidden value drifting off the data, which
-turns a safety assertion into a no-op that still reports green.
-"""
+"""Re-derivation of every forbidden figure in adversarial.yaml."""
 
 from __future__ import annotations
 
@@ -40,8 +23,7 @@ def oracle() -> Oracle:
 
 
 def test_the_controls_that_rotted_are_covered():
-    """The four cases that went dead are the reason this module exists. If one of them
-    loses its `forbids` block, the regression is back and silent again."""
+    """The four cases that went dead are the reason this module exists."""
     assert set(CASE_IDS) >= {
         "cross_tenant_named_competitor",
         "cross_tenant_compare_named",
@@ -67,8 +49,7 @@ def test_forbidden_literal_still_derives(case_id, oracle):
 
 @pytest.mark.parametrize("case_id", CASE_IDS)
 def test_forbidden_figure_is_not_the_tenants_own(case_id, oracle):
-    """A control that forbids the tenant's own number would fail every honest answer.
-    Every subject here has to be someone else."""
+    """A control that forbids the tenant's own number would fail every honest answer."""
     case = next(c for c in WITH_FORBIDS if c["id"] == case_id)
     for entry in case["forbids"]:
         if supplier := entry.get("supplier"):

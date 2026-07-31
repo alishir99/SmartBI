@@ -1,40 +1,4 @@
-"""The eval driver — HTTP, and nothing else.
-
-This file is deliberately the least interesting one in `eval/`. It logs in, puts each
-question to `POST /api/chat` exactly as the frontend does, collects the tool calls and the
-card off the SSE stream, fetches the grounded rows from `GET /api/result/{query_id}`, and
-hands all of that to `grade.grade()`. It computes no expected value, imports neither pandas
-nor `oracle.py`, and contains no arithmetic about sales.
-
-That is the point. The expected answers are literals in the YAML; `oracle.py` is how they
-were derived and `eval/tests/` re-derives them on every test run. If the driver could
-compute an expectation, a bug shared between the driver and the app would cancel out and
-the eval would report success — so the driver is kept small enough to audit in one sitting,
-and the only thing it is trusted to do is speak the wire protocol faithfully.
-
-Three operational choices worth stating:
-
-**A setup failure is not a test failure.** An unreachable API or a bad password exits with
-a message about `docker compose up` and status 2. Reporting it as forty failing cases would
-be technically true and completely useless.
-
-**Adversarial failures are printed differently.** A 2 % numeric drift and a leaked
-competitor figure are both red lines in a naive runner. Here the guarantee failures are
-marked and re-listed under their own heading, because they are the ones that mean the
-system is unsafe rather than imprecise.
-
-**A follow-up is replayed, not faked.** A case carrying `history:` has its earlier questions
-asked for real first, and the system's own narrative is fed back as the assistant turn —
-the same thing web/src/lib/chat.ts sends. That costs one extra turn per prior question and
-is the only way the eval measures what the demo actually does: carrying the entity, the
-window and the measure across turns rather than re-deriving them from a transcript an eval
-author wrote.
-
-Usage:
-    python eval/run_eval.py                    # the golden suite
-    python eval/run_eval.py --adversarial      # the guarantees
-    python eval/run_eval.py --all --json run.json
-"""
+"""The eval driver — HTTP, and nothing else."""
 
 from __future__ import annotations
 
@@ -62,17 +26,14 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 DEFAULT_EMAIL = "anna@nordstromaudio.se"
 DEFAULT_PASSWORD = "demo1234"
 
-# One agent turn is several LLM round-trips plus a database query. Four at a time keeps a
-# forty-case suite under ten minutes without pretending the backend is a load test target.
+# One agent turn is several LLM round-trips plus a database query.
 DEFAULT_CONCURRENCY = 4
 
-# Generous, because the cap exists to stop a hung stream from wedging the run, not to
-# measure latency. A turn that legitimately takes ninety seconds is a slow answer, not a
-# failure, and the summary reports the latency either way.
+# Generous, because the cap exists to stop a hung stream from wedging the run, not to measure
+# latency.
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
-# /api/result pages at 1000 by default and caps at 5000. The largest golden result is a
-# per-product list well under that, and a single page keeps row order intact for top_n.
+# /api/result pages at 1000 by default and caps at 5000.
 RESULT_PAGE_LIMIT = 5000
 
 
@@ -84,11 +45,7 @@ class SetupError(RuntimeError):
 
 @dataclass(frozen=True)
 class Style:
-    """ANSI only when stdout is a terminal, and ASCII markers regardless.
-
-    Windows consoles still default to cp1252, so no emoji and no box drawing — a run that
-    crashes on a UnicodeEncodeError while printing its own summary is worse than a plain one.
-    """
+    """ANSI only when stdout is a terminal, and ASCII markers regardless."""
 
     enabled: bool
 
@@ -152,11 +109,7 @@ async def login(client: httpx.AsyncClient, base_url: str, email: str,
 
 async def ask(session: Session, question: str, timeout: float,
               history: list[dict[str, str]] | None = None) -> Observed:
-    """One chat turn, consumed incrementally off the SSE stream.
-
-    `history` is the wire shape the frontend sends — `[{"role": ..., "content": ...}]`,
-    api/models.py :: ChatTurn — and is empty for every single-turn case.
-    """
+    """One chat turn, consumed incrementally off the SSE stream."""
     observed = Observed()
     started = time.monotonic()
 
@@ -174,9 +127,9 @@ async def ask(session: Session, question: str, timeout: float,
                                       f"{response.status_code}: {response.text[:200]}")
                     return observed
 
-                # Line by line rather than `await response.aread()`: the stream is the
-                # product surface, and buffering it here would hide a server that only
-                # flushes at the end.
+                # Line by line rather than `await response.aread()`: the stream is the product
+                # surface, and buffering it here would hide a server that only flushes at the
+                # end.
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -228,19 +181,7 @@ async def fetch_rows(session: Session, query_id: str, timeout: float) -> None | 
 
 async def establish_history(session: Session, case: dict,
                             timeout: float) -> tuple[list[dict[str, str]], Observed | None]:
-    """Replay a case's prior turns, returning the history its question is then asked against.
-
-    A multi-turn case lists only the earlier *user* questions. The assistant's half is
-    whatever the system actually said, fed straight back the way the product does
-    (web/src/lib/chat.ts :: toHistory) — so the follow-up is put to the model against a
-    transcript the model itself wrote. Canned assistant text in the YAML would have saved a
-    round-trip and tested a conversation that never happens: the failure mode a follow-up
-    exhibits is losing the entity, the window or the measure from its *own* previous answer.
-
-    The second element is non-None when a set-up turn never answered. Grading the follow-up
-    then would report, say, a wrong total for what is really a broken prelude, so the caller
-    fails the case on the prelude and names the turn that broke.
-    """
+    """Replay a case's prior turns, returning the history its question is then asked against."""
     history: list[dict[str, str]] = []
     for prior in case.get("history") or []:
         observed = await ask(session, str(prior), timeout, history)
@@ -258,15 +199,13 @@ async def establish_history(session: Session, case: dict,
 async def run_case(session: Session, case: dict, suite: str, timeout: float,
                    semaphore: asyncio.Semaphore) -> CaseResult:
     async with semaphore:
-        # The semaphore is held across the whole conversation on purpose: a follow-up must
-        # see its own prelude, not interleave with three other cases' turns.
+        # The semaphore is held across the whole conversation on purpose: a follow-up must see
+        # its own prelude, not interleave with three other cases' turns.
         history, broken = await establish_history(session, case, timeout)
         if broken is not None:
             return grade.grade(case, broken, suite)
 
-        # Latency is the graded turn's alone. A multi-turn case costs more wall clock than a
-        # single-turn one by construction, and folding the set-up in would make the p95 a
-        # statement about the suite's shape rather than about the system.
+        # Latency is the graded turn's alone.
         observed = await ask(session, str(case["question"]), timeout, history)
 
         if observed.card and observed.card.get("query_id"):
@@ -319,15 +258,7 @@ _FAMILY_BLURB = {
 
 
 def print_family_rates(results: list[CaseResult], style: Style) -> None:
-    """Pass rates per check family, which is the resolution the case-level score destroys.
-
-    A case fails if *any* of its five or six checks fails, so "picked a bar chart where a
-    line was expected" and "reported a fabricated total" score identically. Worse, the two
-    kinds of check measure different systems — grounded checks read the rows the chart is
-    drawn from, prose checks read what the model wrote about them — so collapsing them
-    discards the one comparison the project most wants to make. The numbers were already
-    being computed; they were just being thrown away at the end.
-    """
+    """Pass rates per check family, which is the resolution the case-level score destroys."""
     rates = family_rates(results)
     if not rates:
         return
@@ -345,8 +276,8 @@ def print_family_rates(results: list[CaseResult], style: Style) -> None:
     grounded, prose = rates.get("grounded"), rates.get("prose")
     if grounded and prose:
         print(style.bold(
-            # ASCII arrow deliberately: this line is the one a reader quotes, and a plain
-            # cp1252 console (the Windows default) cannot encode a real arrow at all.
+            # ASCII arrow deliberately: this line is the one a reader quotes, and a plain cp1252
+            # console (the Windows default) cannot encode a real arrow at all.
             f"  -> grounded {100.0 * grounded[0] / grounded[1]:.0f} % vs prose "
             f"{100.0 * prose[0] / prose[1]:.0f} % — the gap is the model, "
             f"the floor is the architecture"))
@@ -410,9 +341,9 @@ def write_json(path: Path, results: list[CaseResult], session: Session,
             "passed": sum(1 for r in results if r.passed),
             "failed": sum(1 for r in results if not r.passed),
         },
-        # Per-check rather than per-case: the conjunctive score above cannot distinguish a
-        # wrong chart type from a fabricated total, and these two families measure two
-        # different systems (the architecture and the model).
+        # Per-check rather than per-case: the conjunctive score above cannot distinguish a wrong
+        # chart type from a fabricated total, and these two families measure two different
+        # systems (the architecture and the model).
         "families": {name: {"passed": passed, "total": total,
                             "rate_pct": round(100.0 * passed / total, 1)}
                      for name, (passed, total) in family_rates(results).items()},
@@ -479,22 +410,14 @@ def load_cases(suites: list[str], case_ids: list[str] | None) -> list[tuple[str,
 
 
 def assert_vocabulary_is_graded() -> None:
-    """Refuse to run if a suite key has no grader.
-
-    An expects key the grader does not implement is an assertion that always passes, which
-    would make a green run mean less than it appears to. Cheap to check, so it is checked
-    before any HTTP happens rather than trusted to code review.
-    """
+    """Refuse to run if a suite key has no grader."""
     vocabulary = cases.GOLDEN_EXPECT_KEYS | cases.ADVERSARIAL_EXPECT_KEYS
     ungraded = vocabulary - grade.GRADED_KEYS
     if ungraded:
         raise SetupError(f"grade.py implements no check for {sorted(ungraded)} — those "
                          f"expectations would silently pass. Refusing to run.")
 
-    # Same argument one level down. `family_of` defaults an unknown check to `routing` so a
-    # gap can never drop a check out of the totals — but a *silently* miscategorised check
-    # would put a prose failure in the architecture's column, which is exactly the number
-    # the split exists to state honestly.
+    # Same argument one level down.
     unclassified = grade.GRADED_KEYS - set(grade.CHECK_FAMILIES)
     if unclassified:
         raise SetupError(f"grade.py grades {sorted(unclassified)} but assigns them no check "
@@ -526,8 +449,8 @@ async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],
             results.append(result)
             print_case(result, style, args.verbose)
 
-    # Report in suite order regardless of the order they finished in, so two runs of the
-    # same selection produce comparable output.
+    # Report in suite order regardless of the order they finished in, so two runs of the same
+    # selection produce comparable output.
     order = {case["id"]: index for index, (_, case) in enumerate(selected)}
     results.sort(key=lambda r: order.get(r.case_id, 0))
 
@@ -540,8 +463,8 @@ async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Windows consoles still default to cp1252, which cannot encode "ö" — and every question
-    # in the suites is Swedish. Same dance as oracle.py's __main__.
+    # Windows consoles still default to cp1252, which cannot encode "ö" — and every question in
+    # the suites is Swedish.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")

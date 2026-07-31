@@ -1,13 +1,6 @@
-"""Swedish retail reference data for the synthetic generator.
+"""Swedish retail reference data for the synthetic generator."""
 
-Separated from generate_data.py so the generator reads as logic rather than as a wall of
-constants. Everything here is fictional apart from the geography.
-"""
-
-# --------------------------------------------------------------------- geography
-# All 21 län. Weight is roughly proportional to population; it is normalised at use.
-# (city, municipality, lat, lon) — coordinates are the city centre, used for a possible
-# map view and to make the store dimension feel real.
+# --------------------------------------------------------------------- geography All 21 län.
 REGIONS: dict[str, dict] = {
     "Stockholms län": {"weight": 235, "cities": [
         ("Stockholm", "Stockholm", 59.3293, 18.0686),
@@ -94,8 +87,8 @@ REGIONS: dict[str, dict] = {
     ]},
 }
 
-# ------------------------------------------------------------------- categories
-# level 1 → list of level 2. 6 categories, 22 subcategories.
+# ------------------------------------------------------------------- categories level 1 → list
+# of level 2.
 CATEGORIES: dict[str, list[str]] = {
     "Ljud & Bild": ["Hörlurar", "Högtalare", "TV", "Ljudanläggningar", "Bilstereo"],
     "Hem & Kök": ["Kaffebryggare", "Köksmaskiner", "Dammsugare", "Belysning"],
@@ -105,12 +98,12 @@ CATEGORIES: dict[str, list[str]] = {
     "Barn & Leksaker": ["Byggleksaker", "Sällskapsspel", "Babyprodukter"],
 }
 
-# Subcategory that deliberately has too few competing brands, so the k-anonymity
-# suppression path (§11.3) fires during the demo instead of being merely asserted.
+# Subcategory that deliberately has too few competing brands, so the k-anonymity suppression
+# path (§11.3) fires during the demo instead of being merely asserted.
 THIN_SUBCATEGORY = "Vintersport"
 
-# ----------------------------------------------------------- suppliers & brands
-# supplier name → brands it owns. 8 suppliers, 14 brands.
+# ----------------------------------------------------------- suppliers & brands supplier name →
+# brands it owns.
 SUPPLIERS: dict[str, list[str]] = {
     "Nordström Audio AB": ["Nordström", "Vidar"],
     "Lagerkvist Hem AB": ["Lagerkvist", "Bruksbo"],
@@ -125,9 +118,7 @@ SUPPLIERS: dict[str, list[str]] = {
 # The supplier the demo logs in as — the one whose dashboard is shown in the video.
 DEMO_SUPPLIER = "Nordström Audio AB"
 
-# Which brands compete in which subcategory. A brand appears in several subcategories;
-# every subcategory except the thin one has at least 5 competitors, which is what makes
-# market share meaningful and k-anonymity pass in the normal case.
+# Which brands compete in which subcategory.
 BRAND_SUBCATEGORIES: dict[str, list[str]] = {
     "Hörlurar":            ["Nordström", "Vidar", "Svea", "Norrsken", "Lumia", "Kvist"],
     "Högtalare":           ["Nordström", "Vidar", "Svea", "Lumia", "Bruksbo"],
@@ -186,7 +177,6 @@ MODEL_SUFFIXES = [
 ]
 
 # Seasonality: multiplier per calendar month (Jan=index 0) per level-1 category.
-# November/December carry Black Friday and Christmas; July is the Swedish holiday trough.
 SEASONALITY: dict[str, list[float]] = {
     "Ljud & Bild":     [0.85, 0.80, 0.85, 0.85, 0.90, 0.90, 0.75, 0.95, 1.00, 1.05, 1.75, 1.85],
     "Hem & Kök":       [1.05, 0.95, 0.95, 0.95, 1.00, 0.95, 0.80, 1.00, 1.05, 1.05, 1.45, 1.55],
@@ -196,7 +186,7 @@ SEASONALITY: dict[str, list[float]] = {
     "Barn & Leksaker": [0.75, 0.70, 0.75, 0.80, 0.85, 0.90, 0.80, 0.85, 0.90, 1.00, 1.80, 2.30],
 }
 
-# Swedish red days that matter for retail, as (month, day). Used for dim_date.is_holiday.
+# Swedish red days that matter for retail, as (month, day).
 FIXED_HOLIDAYS = [
     (1, 1), (1, 6), (5, 1), (6, 6), (12, 24), (12, 25), (12, 26), (12, 31),
 ]

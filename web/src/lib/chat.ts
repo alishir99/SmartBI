@@ -1,7 +1,4 @@
-/**
- * Chat state (Zustand). A turn holds the streamed progress chips, the streaming
- * narrative, and finally the AnswerCard — the same card type the dashboard renders.
- */
+/** Chat state (Zustand). */
 
 import { create } from 'zustand'
 import type { AnswerCard, ChatEvent, ChatHistoryEntry } from '../types'
@@ -79,10 +76,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }))
 
     // Held locally as well as on the module, because `cancel()` nulls the module-level
-    // reference synchronously while the fetch rejects a tick later. Reading it from the
-    // catch block therefore always saw `null`, the "was this aborted?" branch was
-    // unreachable, and cancelling a stream surfaced the raw English AbortError as a red
-    // failure — for the one action the user took deliberately.
+    // reference synchronously while the fetch rejects a tick later.
     const abort = new AbortController()
     controller = abort
 

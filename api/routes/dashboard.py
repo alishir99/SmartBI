@@ -1,11 +1,4 @@
-"""The standard dashboard — deterministic, no LLM anywhere in this file.
-
-This is requirement 1 of the case: the user arrives at finished answers, having configured
-nothing. It is also decision D10 in practice — the dashboard reads through the *same four MCP
-tools* the agent uses, server-side. That is what makes MCP the application's data API rather
-than a side-car for the model, and it is why the chat and the dashboard cannot disagree about
-a number: there is only one implementation of "net sales".
-"""
+"""The standard dashboard — deterministic, no LLM anywhere in this file."""
 
 from __future__ import annotations
 
@@ -23,15 +16,7 @@ from ..result_cache import ResultCache, from_tool_result
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
-# The dashboard opens on the last 12 months against the same period a year earlier. The
-# default is still the point — "BI without a BI department" means the first screen asks
-# nothing — but the window is now switchable, for two reasons that showed up in use. A user
-# comparing a figure here against a number from elsewhere could not tell which window they
-# were looking at, and a 12-month total is the wrong lens for "how did last week go?".
-#
-# The trend grain follows the window rather than being a second control: 52 daily points are
-# noise and 2 quarterly ones are not a trend. One choice, two adjustments — the user picks a
-# period, not a period *and* a granularity.
+# The dashboard opens on the last 12 months against the same period a year earlier.
 DEFAULT_PERIOD = "last_12_months"
 
 PERIODS: dict[str, dict] = {
@@ -46,14 +31,7 @@ PERIODS: dict[str, dict] = {
 
 
 def _period_spec(period: str) -> tuple[dict, dict]:
-    """Resolve a period key to its time_range and its presentation settings.
-
-    Every key here is a real relative window in the semantic layer — `last_7_days` was added
-    to `model.RELATIVE_RANGES` rather than approximated with a 30-day range, because a
-    control labelled "Senaste veckan" that returns a month of data is the kind of quiet lie
-    this whole codebase is built to avoid. Anything unknown falls back to the default rather
-    than 400-ing: a stale bookmark should not blank someone's dashboard.
-    """
+    """Resolve a period key to its time_range and its presentation settings."""
     key = period if period in PERIODS else DEFAULT_PERIOD
     return {"relative": key}, PERIODS[key]
 
@@ -70,8 +48,8 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
 
     window, settings = _period_spec(period)
     # `compare_to` is dropped for windows with no honest counterpart: "the same 90 days last
-    # year" is a comparison nobody asked for, and a delta chip against a window the user did
-    # not choose is worse than no chip at all.
+    # year" is a comparison nobody asked for, and a delta chip against a window the user did not
+    # choose is worse than no chip at all.
     totals_args: dict = {"measures": ["net_sales_sek", "units", "avg_price_sek"],
                          "time_range": window}
     if settings["compare"]:
@@ -136,8 +114,8 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
 
 
 def _card(result, title: str, subtitle: str) -> AnswerCard:
-    """A dashboard tile is the same AnswerCard the chat produces — one card type, two
-    producers (§2). The narrative is empty because the chart is the answer here."""
+    """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
+    (§2)."""
     chart = render.propose_chart(result, title=title, subtitle=subtitle)
     return AnswerCard(
         status="ok",
@@ -157,8 +135,7 @@ def _first_number(payload: dict, key: str) -> float | None:
 
 
 def _kpis(totals: dict, share: dict) -> list[Kpi]:
-    """The four headline numbers. Deltas come from the tool's own compare_to columns — the
-    API does not subtract anything, for the same reason the model does not."""
+    """The four headline numbers."""
     kpis: list[Kpi] = []
 
     net = _first_number(totals, "net_sales_sek")
@@ -167,15 +144,13 @@ def _kpis(totals: dict, share: dict) -> list[Kpi]:
                         delta_pct=_first_number(totals, "net_sales_sek_delta_pct"),
                         delta_label="vs samma period förra året"))
 
-    # Category share is weighted by own sales across subcategories rather than averaged:
-    # an unweighted mean would let a tiny subcategory with a high share dominate the tile.
+    # Category share is weighted by own sales across subcategories rather than averaged: an
+    # unweighted mean would let a tiny subcategory with a high share dominate the tile.
     rows = [r for r in (share.get("rows") or []) if not r.get("suppressed")]
     if rows:
         own = sum(float(r.get("own_net_sek") or 0) for r in rows)
         # The tool's grain is brand × subcategory, so a supplier with two brands in the same
-        # subcategory gets that subcategory's total back twice. Summing the column naively
-        # double-counted the denominator while own sales were counted once, understating the
-        # demo tenant's share by nine points. Deduplicate on category_id first.
+        # subcategory gets that subcategory's total back twice.
         category = sum({r.get("category_id"): float(r.get("category_net_sek") or 0)
                         for r in rows}.values())
         if category:

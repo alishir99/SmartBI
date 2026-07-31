@@ -1,17 +1,4 @@
-"""What the driver actually puts on the wire for a follow-up question.
-
-`eval/cases.py` decides whether a `history:` block is well-formed; this module decides
-whether it reaches the API. The two are worth separating, because the failure mode here is
-silent in a way a schema check cannot see: a driver that validated the history perfectly and
-then still posted `"history": []` would leave every multi-turn case passing as an ordinary
-single-turn one, and the suite would report coverage it never exercised. That is exactly the
-state this feature was written to end, so it is pinned with a test rather than with a
-comment.
-
-`run_eval.ask` is the only thing in the driver that touches a socket, so it is the only thing
-stubbed. Everything below the stub — the replay loop, the shape of the assistant turn, the
-verdict when a set-up turn never answers — is the real code path `run()` uses.
-"""
+"""What the driver actually puts on the wire for a follow-up question."""
 
 from __future__ import annotations
 
@@ -25,8 +12,7 @@ Observed = run_eval.Observed
 
 
 def card(narrative: str) -> dict:
-    """The minimum an answer needs to count as one. No `query_id`, so nothing tries to
-    fetch rows — the assertions here are about the request, not about grading."""
+    """The minimum an answer needs to count as one."""
     return {"status": "ok", "narrative": narrative}
 
 
@@ -40,17 +26,13 @@ def case(question: str, history: list[str] | None = None) -> dict:
 
 @pytest.fixture
 def recorder(monkeypatch):
-    """Replaces the one function that speaks HTTP, and records what each turn was asked with.
-
-    Returns the list of `(question, history)` pairs, which is precisely the payload
-    `/api/chat` would have received.
-    """
+    """Replaces the one function that speaks HTTP, and records what each turn was asked with."""
     sent: list[tuple[str, list[dict[str, str]]]] = []
     answers: dict[str, Observed] = {}
 
     async def fake_ask(session, question, timeout, history=None):
-        # Copied, not aliased: the driver mutates one history list across the conversation,
-        # and a shared reference would make every recorded turn show the final state.
+        # Copied, not aliased: the driver mutates one history list across the conversation, and
+        # a shared reference would make every recorded turn show the final state.
         sent.append((question, list(history or [])))
         return answers.get(question, Observed(card=card(f"Svar på {question}")))
 
@@ -84,8 +66,7 @@ def test_a_follow_up_is_asked_after_its_set_up_turn(recorder):
 
 
 def test_the_assistant_turn_is_the_system_s_own_narrative(recorder):
-    """Not prose from the YAML. The whole point of a follow-up case is that the model has to
-    read the entity, the window and the measure off the answer it just gave."""
+    """Not prose from the YAML."""
     sent, answers = recorder
     answers["Vad sålde vi för i juni 2026?"] = Observed(
         card=card("Ni sålde för 3 374 914,99 kr i juni 2026."))
@@ -112,9 +93,7 @@ def test_several_prior_turns_accumulate_in_order(recorder):
 
 
 def test_a_set_up_turn_that_never_answered_fails_the_case_on_the_prelude(recorder):
-    """And fails it there rather than asking the follow-up anyway. A follow-up put to an
-    empty conversation would be graded on content, and the report would blame the model for
-    a wrong total when the real fault was a turn that never arrived."""
+    """And fails it there rather than asking the follow-up anyway."""
     sent, answers = recorder
     answers["Vilka produkter säljer bäst i Stockholm?"] = Observed(
         error="timed out after 120s waiting for the card")
@@ -131,8 +110,8 @@ def test_a_set_up_turn_that_never_answered_fails_the_case_on_the_prelude(recorde
 
 
 def test_a_set_up_turn_with_a_card_but_no_narrative_is_also_a_broken_prelude(recorder):
-    """An empty assistant turn would degrade the case into a single-turn one — passing, and
-    testing nothing it claims to test."""
+    """An empty assistant turn would degrade the case into a single-turn one — passing, and testing
+    nothing it claims to test."""
     _, answers = recorder
     answers["Fråga ett?"] = Observed(card=card("   "))
 
@@ -143,8 +122,8 @@ def test_a_set_up_turn_with_a_card_but_no_narrative_is_also_a_broken_prelude(rec
 
 
 def test_a_transport_failure_in_the_prelude_is_not_charged_to_the_model(recorder):
-    """It lands in the `transport` family, the column that exists so infrastructure noise
-    does not inflate the model's error rate."""
+    """It lands in the `transport` family, the column that exists so infrastructure noise does not
+    inflate the model's error rate."""
     _, answers = recorder
     answers["Fråga ett?"] = Observed(error="transport error: ConnectError")
 

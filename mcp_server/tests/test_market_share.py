@@ -1,13 +1,4 @@
-"""Tests for the one tool that reads beyond the caller's own rows.
-
-The k-anonymity suppression here is the headline privacy claim, and until now it was
-exercised only end-to-end through the non-deterministic LLM path — a safety invariant
-verified by a flaky test. These are the pure-function tests it should have had.
-
-The window-snapping tests pin the fix for shares above 100 %: the own-brand and peer
-figures come from monthly rollups, so the category total has to cover the same whole
-months or the ratio is a full month divided by a part month.
-"""
+"""Tests for the one tool that reads beyond the caller's own rows."""
 
 from datetime import date
 
@@ -46,8 +37,8 @@ def test_snap_widens_to_month_boundaries(requested, expected):
 
 
 def test_snap_is_idempotent():
-    """An already-aligned window must survive untouched, or meta would claim a
-    snap that did not happen and the source chip would misdescribe the number."""
+    """An already-aligned window must survive untouched, or meta would claim a snap that did not
+    happen and the source chip would misdescribe the number."""
     aligned = (date(2026, 1, 1), date(2026, 3, 31))
     assert _snap_to_whole_months(aligned) == aligned
     assert _snap_to_whole_months(_snap_to_whole_months(aligned)) == aligned
@@ -108,8 +99,8 @@ def test_thin_slices_are_suppressed(thin):
     ["share_pct", "rank", "category_net_sek", "leader_share_pct"],
 )
 def test_suppression_withholds_everything_derivable(leaky):
-    """Leaving rank in while removing share would still narrow a competitor's
-    revenue, so the whole derivable set has to go together."""
+    """Leaving rank in while removing share would still narrow a competitor's revenue, so the whole
+    derivable set has to go together."""
     row = _row(_record(n_brands=MIN_BRANDS - 1))
     assert leaky not in row
 

@@ -1,15 +1,4 @@
-"""query_market_share — the one tool that reads beyond the caller's own rows.
-
-It is a separate tool for exactly that reason (§6.2): the privileged read lives in one
-auditable place instead of being a flag buried inside query_sales. Everything it returns is
-an aggregate. Competitor brands are never named and never itemised, and a slice too thin to
-aggregate safely returns `suppressed` rather than a number.
-
-Grain: one row per own brand × subcategory, over the requested window. Per *brand* rather
-than per supplier because rank is only meaningful against comparable units — a supplier with
-two brands in one subcategory competes there twice, and adding them together before ranking
-against single brands would flatter it.
-"""
+"""query_market_share — the one tool that reads beyond the caller's own rows."""
 
 from __future__ import annotations
 
@@ -20,9 +9,8 @@ from ..semantic.compiler import Params, resolve_time_range
 from ..tenant import TenantContext
 from .sales import _jsonable, scope_label
 
-# A slice must contain at least this many competing brands and this many transactions
-# before any share figure is returned. Below either threshold, "din andel" plus arithmetic
-# would recover a named competitor's revenue (§11.3).
+# A slice must contain at least this many competing brands and this many transactions before any
+# share figure is returned.
 MIN_BRANDS = 5
 MIN_TRANSACTIONS = 100
 
@@ -82,18 +70,7 @@ SELECT br.name          AS brand,
 
 
 def _snap_to_whole_months(window: tuple[date, date]) -> tuple[date, date]:
-    """Widen a window so it starts and ends on calendar month boundaries.
-
-    The own-brand and peer figures come from monthly rollups, so the numerator is
-    always a whole number of months. Leaving the category total on the exact
-    requested dates put a full-month numerator over a part-month denominator, which
-    is how a share above 100 % was reachable from the dashboard's own last_7_days
-    chip. Snapping both sides to the same months is what makes the ratio meaningful.
-
-    It also removes the finest axis for differencing the k-anonymity guard: an
-    arbitrary date window can no longer be nudged a day at a time to isolate a
-    single competitor's contribution (§11.3).
-    """
+    """Widen a window so it starts and ends on calendar month boundaries."""
     start, end = window
     first = start.replace(day=1)
     # Day 28 + 4 days always lands in the next month, whatever the month length.
@@ -114,8 +91,8 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
     category_clause = ""
     if category_ids := (spec.get("category_ids") or None):
         placeholder = params.add(list(category_ids))
-        # Same two-level expansion as query_sales, so "Ljud & Bild" works as well as
-        # "Hörlurar". Unqualified column name so the one fragment fits all three CTEs.
+        # Same two-level expansion as query_sales, so "Ljud & Bild" works as well as "Hörlurar".
+        # Unqualified column name so the one fragment fits all three CTEs.
         category_clause = (
             f" AND category_id IN (SELECT category_id FROM dim_category "
             f"WHERE category_id = ANY({placeholder}::int[]) "
@@ -143,7 +120,6 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
             "currency": "SEK",
             "vat": "exkl. moms",
             # The reported range is the one actually measured, not the one asked for.
-            # A source chip that showed the requested dates would misdescribe the number.
             "time_range": {
                 "from": window[0].isoformat(),
                 "to": window[1].isoformat(),
@@ -180,8 +156,7 @@ def _row(record: dict) -> dict:
     }
 
     if suppressed:
-        # Everything derivable from the category total is withheld together. Leaving rank
-        # in while removing share would still narrow down a competitor's revenue.
+        # Everything derivable from the category total is withheld together.
         row["reason"] = (
             f"Utelämnat: kategorin innehåller {n_brands} varumärken och {n_transactions} "
             f"köp i urvalet. Marknadsandel visas först vid minst {MIN_BRANDS} varumärken "

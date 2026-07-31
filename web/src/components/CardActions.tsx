@@ -1,10 +1,6 @@
 /**
- * The action row on a card: switch to the table view, export the underlying rows,
- * pin the card, or share it.
- *
- * Sharing defaults to a snapshot on purpose (§10). A live link re-executes the query,
- * and a link that re-executes under the *reader's* scope is a data leak — so "live"
- * is a deliberate second choice with the consequence spelled out next to it.
+ * The action row on a card: switch to the table view, export the underlying rows, pin the card,
+ * or share it.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -14,19 +10,7 @@ import { useDeleteCard, useSaveCard, useShareCard } from '../lib/queries'
 import { Button } from './Button'
 import { IconCheck, IconDownload, IconPin, IconShare, IconTrash } from './Icons'
 
-/**
- * The share UI is deferred, not broken.
- *
- * `POST /api/share` mints a real signed token and returns `/delad/{token}`, and the token
- * design is the part worth showing (§10): snapshot by default, live links re-executing
- * under the *originating* supplier's scope rather than the reader's. What does not exist
- * yet is the reading end — the hash router has no parameterised routes, so there is no
- * `/delad/:token` page to verify the token and render the card.
- *
- * Handing a reviewer a button that produces a URL leading to a blank screen is worse than
- * not offering it, so the control stays hidden until the route exists. The endpoint,
- * the token and its tests stay in place: this is a scoped gap, not a dead feature.
- */
+/** The share UI is deferred, not broken. */
 const SHARE_UI_ENABLED = false
 
 type Props = {

@@ -1,27 +1,4 @@
-"""The oracle: expected answers computed independently of the running system.
-
-Why this file exists
---------------------
-`data/generated/ground_truth.json` already holds the headline figures the generator
-computed while emitting the data (§5.1, D7). It does not hold *every* figure a good
-eval set wants — sales per channel, discount rate for a single subcategory, the
-truncated series of the discontinued product, week-level trends. This module fills that
-gap by re-aggregating the emitted CSVs with pandas.
-
-Two rules make it an oracle rather than a second opinion:
-
-1. It never calls the API, the MCP server or the database. It reads the CSVs in
-   `data/generated/` and nothing else. If the app and this file disagree, one of them
-   is wrong and the eval says so.
-2. Every figure it produces is reconciled against `ground_truth.json` where the two
-   overlap (`Oracle.reconcile()`, exercised by `tests/test_oracle.py`). That is what
-   keeps a bug in this file from silently becoming the "expected" answer.
-
-The values in `golden_questions.yaml` are literals, not calls into this module, so the
-eval driver stays trivial and reviewable. This module is how those literals were
-derived, and the tests re-derive them on every run so the YAML cannot drift from the
-data.
-"""
+"""The oracle: expected answers computed independently of the running system."""
 
 from __future__ import annotations
 
@@ -39,9 +16,7 @@ GROUND_TRUTH = DATA_DIR / "ground_truth.json"
 
 DEMO_SUPPLIER = "Nordström Audio AB"
 
-# The measure keys the semantic layer exposes (mcp_server/semantic/model.py). Kept in the
-# same vocabulary deliberately: an expectation named with a key the system does not have is
-# a bug in the eval set, and test_oracle.py asserts the two lists match.
+# The measure keys the semantic layer exposes (mcp_server/semantic/model.py).
 MEASURES = (
     "net_sales_sek",
     "gross_sales_sek",
@@ -111,8 +86,8 @@ class Oracle:
                      .rename(columns={"name": "store"}), on="store_id"))
 
         df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
-        # date_trunc('week', ...) in Postgres is ISO week — Monday-anchored, matching the
-        # `week` dimension in semantic/model.py.
+        # date_trunc('week', ...) in Postgres is ISO week — Monday-anchored, matching the `week`
+        # dimension in semantic/model.py.
         df["week"] = df["date"] - pd.to_timedelta(df["date"].dt.weekday, unit="D")
         df["quarter"] = df["date"].dt.to_period("Q").dt.to_timestamp()
         df["year"] = df["date"].dt.year
@@ -138,9 +113,7 @@ class Oracle:
         date_from: str | date | None = None,
         date_to: str | date | None = None,
     ) -> pd.DataFrame:
-        """Filter the line table. `supplier` defaults to the demo tenant on purpose —
-        a tenant-scoped question is the normal case and forgetting the scope would make
-        an expectation quietly wrong."""
+        """Filter the line table."""
         df = self.lines
         for column, value in (("supplier", supplier), ("brand", brand),
                               ("product", product), ("subcategory", subcategory),
@@ -197,8 +170,7 @@ class Oracle:
 
     def top(self, dimension: str, key: str = "net_sales_sek", n: int = 10,
             **filters) -> list[tuple[str, float]]:
-        """Top-N by a measure, descending. Revenue and units give different orders — that
-        difference is one of the more useful things the eval set checks."""
+        """Top-N by a measure, descending."""
         grouped = self.by(dimension, key, **filters)
         ranked = sorted(grouped.items(), key=lambda item: item[1], reverse=True)
         return ranked[:n]
@@ -206,8 +178,8 @@ class Oracle:
     # ------------------------------------------------------------------ windows
 
     def relative_range(self, name: str) -> tuple[date, date]:
-        """The same relative windows the compiler resolves, anchored on the last date in
-        the data rather than on today (mcp_server/semantic/compiler.py)."""
+        """The same relative windows the compiler resolves, anchored on the last date in the data
+        rather than on today (mcp_server/semantic/compiler.py)."""
         start, end = self.coverage.start, self.coverage.end
         match name:
             case "last_30_days":
@@ -238,9 +210,7 @@ class Oracle:
 
     def market_share(self, subcategory: str, *, date_from, date_to,
                      brand: str | None = None, region=None) -> dict:
-        """Own brand vs the whole subcategory, plus the peer count the k-anonymity guard
-        keys off. Deliberately mirrors the *policy*, not the SQL: it reports n_brands and
-        leaves the suppression decision to the caller."""
+        """Own brand vs the whole subcategory, plus the peer count k-anonymity keys off."""
         field = self.slice(supplier=None, subcategory=subcategory, region=region,
                            date_from=date_from, date_to=date_to)
         per_brand = (field.groupby("brand")["net_amount_sek"].sum()
@@ -269,17 +239,7 @@ class Oracle:
     # ------------------------------------------------------------------ derivations
 
     def derive(self, spec: dict) -> dict:
-        """Re-compute one golden question's expectations from a small declarative spec.
-
-        Every entry in `golden_questions.yaml` carries a `derivation:` block. The YAML
-        holds literal expected values so the eval driver never needs pandas, and
-        `tests/test_expectations.py` runs this method over every derivation and asserts
-        the literals still match. "Traceable to the data" is therefore enforced by a
-        test rather than promised by a comment.
-
-        Returns a bag of whichever of `value` / `series` / `order` / `delta_pct` /
-        `share_pct` / `rank` / `n_brands` the spec produced.
-        """
+        """Re-compute one golden question's expectations from a small declarative spec."""
         where = self._where(spec.get("where") or {})
         out: dict = {}
 
@@ -330,22 +290,7 @@ class Oracle:
         return out
 
     def derive_forbidden(self, spec: dict) -> str:
-        """Re-compute one adversarial case's forbidden literal.
-
-        The counterpart to `derive()`, and it exists because the adversarial suite — the one
-        carrying the actual safety claim — had the *weaker* traceability guard. Golden cases
-        must declare a `derivation` and every literal is re-derived on each run; adversarial
-        cases declared nothing, so four forbidden values (`174`, `118`, `158`, `22 105`) went
-        stale at a data regeneration and sat there as dead negative controls. A control that
-        forbids a string the data can no longer produce passes unconditionally, which is the
-        one failure mode a safety test may not have.
-
-        A `forbids` entry names a competitor figure the tenant must never be told, plus the
-        scale a Swedish narrative would quote it at — millions for a supplier's turnover,
-        thousands for a single product's — and renders it the way the number would actually
-        appear in prose, space-grouped. Matching on the leading digits at that scale is what
-        makes the control robust to "174,9 MSEK" vs "174 900 000 kr".
-        """
+        """Re-compute one adversarial case's forbidden literal."""
         measure = spec.get("measure", "net_sales_sek")
 
         if supplier := spec.get("supplier"):
@@ -394,12 +339,7 @@ class Oracle:
     # ------------------------------------------------------------------ reconciliation
 
     def reconcile(self, tolerance: float = 0.02) -> list[str]:
-        """Compare this module against ground_truth.json wherever they overlap.
-
-        Returns a list of human-readable mismatches; empty means the oracle reproduces
-        the generator's independently written figures. `tests/test_oracle.py` asserts it
-        is empty, which is what licences the rest of the eval set to trust it.
-        """
+        """Compare this module against ground_truth.json wherever they overlap."""
         gt = self.ground_truth
         problems: list[str] = []
 

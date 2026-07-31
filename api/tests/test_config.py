@@ -1,18 +1,4 @@
-"""The settings refuse to boot on secrets that are published in this repository (§11).
-
-Every default in `.env.example` is readable by anyone who can read the repo. That is a
-deliberate trade — the demo runs with no setup — and it is only defensible if the trade
-cannot follow the code into an environment where it matters. These tests pin the fail-closed
-half of it: `SOLVIGO_ENV=dev` opts into the demo posture explicitly, and nothing else does.
-
-Both services are covered here rather than in their own packages because the guarantee is
-symmetric and worth reading in one place; the two implementations are deliberately
-independent, since the services deploy separately and neither imports the other.
-
-Every construction is hermetic — `_env_file=None` plus explicit values for each guarded
-field — so the assertions describe the code and not whatever happens to be exported in the
-shell running them.
-"""
+"""The settings refuse to boot on secrets that are published in this repository (§11)."""
 
 from __future__ import annotations
 
@@ -31,11 +17,7 @@ SERVICES = [pytest.param(ApiSettings, API_DEFAULTS, id="api"),
 
 
 def build(cls, defaults: dict, *, solvigo_env: str = "prod", **overrides):
-    """Construct settings, then run the check the entrypoints run at boot.
-
-    Construction itself never raises — see the docstring on `assert_secrets_rotated` for
-    why the guarantee is a startup check and not a field validator.
-    """
+    """Construct settings, then run the check the entrypoints run at boot."""
     values = {**defaults, "solvigo_env": solvigo_env, **overrides}
     settings = cls(_env_file=None, **values)
     settings.assert_secrets_rotated()
@@ -125,11 +107,7 @@ def test_every_guarded_field_exists_with_that_default(cls, defaults):
 
 
 def test_importing_the_packages_never_raises():
-    """The reason this is a startup check: `import api.config` has to work everywhere.
-
-    A field validator would make a clean clone, a CI job and every test run explode on
-    import — and a guarantee that breaks pytest gets deleted rather than obeyed.
-    """
+    """The reason this is a startup check: `import api.config` has to work everywhere."""
     import importlib
 
     for module in ("api.config", "mcp_server.config", "api.main"):

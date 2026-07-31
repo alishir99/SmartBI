@@ -1,12 +1,4 @@
-/**
- * TanStack Query hooks. One place decides cache lifetimes, so no component has an
- * opinion about staleness.
- *
- * Result sets are keyed by `query_id` and effectively immutable — a query id points
- * at one frozen server-side result — so they are cached indefinitely. The dashboard
- * is refetched on demand only; nothing here polls, because a dashboard that moves
- * under the user while they read it is worse than one that is a minute old.
- */
+/** TanStack Query hooks. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SaveCardRequest } from '../types'
@@ -21,8 +13,8 @@ import {
 } from './api'
 
 export const queryKeys = {
-  // The period is part of the key: two windows are two different results, and sharing one
-  // cache entry between them would show last year's figures under this week's label.
+  // The period is part of the key: two windows are two different results, and sharing one cache
+  // entry between them would show last year's figures under this week's label.
   dashboard: (period: string) => ['dashboard', period] as const,
   cards: ['cards'] as const,
   result: (queryId: string) => ['result', queryId] as const,
@@ -33,8 +25,8 @@ export function useDashboard(period: string = DEFAULT_PERIOD) {
     queryKey: queryKeys.dashboard(period),
     queryFn: () => fetchDashboard(period),
     staleTime: 5 * 60 * 1000,
-    // Keeps the previous window on screen while the next one loads, so switching period
-    // does not blank the page and bounce the layout.
+    // Keeps the previous window on screen while the next one loads, so switching period does
+    // not blank the page and bounce the layout.
     placeholderData: (previous) => previous,
   })
 }

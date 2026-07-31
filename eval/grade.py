@@ -1,33 +1,4 @@
-"""Turning one observed answer into a verdict — the whole of the eval's judgement.
-
-The driver is deliberately stupid: it speaks HTTP, collects what came back and hands it
-here. Everything that decides *whether the system was right* lives in this file, and it is
-pure — no sockets, no files, no clock. That is what makes a hand-written `Observed` a
-complete test fixture, and it is why a broken expectation shows up as a failing unit test
-rather than as a mysterious red line in a live run.
-
-Three decisions worth understanding before changing anything here.
-
-**Where a check reads from is the assertion.** `series`, `top_n`, `rank`, `n_brands` and
-`suppressed` are graded against the rows fetched from `GET /api/result/{query_id}` — the
-cached result set the chart is drawn from. Grading those against the narrative would test
-the model's transcription, not the architecture; the claim under test is that the values
-on screen never passed through the language model, so the eval must look where the screen
-looks. `numeric`, `delta_pct`, `must_contain`, `must_not_contain` and
-`must_not_contain_numbers` are claims *about prose*, so those read the narrative.
-
-**Number extraction is imported, not re-implemented.** `api/agent/validate.py` already
-parses sv-SE money and quantity literals out of Swedish prose, with the mask list for
-dates, ISO weeks, quarters and rank chips that took real effort to get right. A second,
-subtly different regex here would mean the eval and the runtime disagree about what counts
-as a number — the eval would then be measuring its own parser. The import costs a
-`sys.path` line (below); `api.agent.validate` pulls in only `api.result_cache`, which is
-stdlib-only, so no FastAPI and no database driver is loaded by importing it.
-
-**Every failure names itself.** A `Failure` carries the expects key that produced it, so
-the summary can count failures by category and a reader of stdout alone can tell a 2 %
-numeric drift from a leaked competitor figure without opening the YAML.
-"""
+"""Turning one observed answer into a verdict — the whole of the eval's judgement."""
 
 from __future__ import annotations
 
@@ -44,10 +15,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from api.agent.validate import NumberLiteral, extract_numbers  # noqa: E402
 
-# Every key this module knows how to grade. run_eval.py checks this against
-# cases.GOLDEN_EXPECT_KEYS | cases.ADVERSARIAL_EXPECT_KEYS before running anything: a key in
-# the suite vocabulary but not in here would be an assertion that silently always passes,
-# which is the one failure mode the eval exists to prevent.
+# Every key this module knows how to grade.
 GRADED_KEYS = frozenset({
     "numeric", "delta_pct", "series", "top_n", "rank", "n_brands",
     "tools_called", "tools_not_called", "dimensions", "chart_type",
@@ -55,24 +23,8 @@ GRADED_KEYS = frozenset({
     "caveats_min", "suggestions_min", "suppressed", "status", "language",
 })
 
-# Which family each check belongs to, and the reason this file's central observation is
-# worth acting on rather than just documenting.
-#
-# The header already says it: `series`, `top_n`, `rank`, `n_brands` and `suppressed` are
-# graded against the ROWS the chart is drawn from, while `numeric`, `must_contain` and the
-# rest are graded against the PROSE. Those measure two different systems. The first measures
-# the grounding architecture — whether the right query ran and the right rows came back. The
-# second measures the language model — whether it transcribed them honestly.
-#
-# The conjunctive score collapses both into one boolean per case, so "picked a bar chart
-# where a line was expected" scores exactly the same as "reported a fabricated total", and
-# the one number the project most wants to state ends up computed and then discarded. Split
-# apart, the report can say: grounded checks pass at X %, prose checks at Y %. The gap is
-# the model. The floor is the architecture.
-#
-# `transport` is its own family for a related reason. A rate limit or a dropped connection
-# is an infrastructure event, and scoring it as a wrong answer inflates the reported
-# non-determinism with something the model never did.
+# Which family each check belongs to, and the reason this file's central observation is worth
+# acting on rather than just documenting.
 CHECK_FAMILIES: dict[str, str] = {
     # graded against rows from the result cache — the architecture
     "series": "grounded", "top_n": "grounded", "rank": "grounded",
@@ -93,37 +45,28 @@ FAMILIES = ("grounded", "prose", "routing", "transport")
 
 
 def family_of(check: str) -> str:
-    """An unrecognised check is reported under `routing` rather than dropped — a check
-    missing from the table must not vanish from the totals."""
+    """An unrecognised check is reported under `routing` rather than dropped — a check missing from
+    the table must not vanish from the totals."""
     return CHECK_FAMILIES.get(check, "routing")
 
 
-# A bare integer at or below this, carrying no unit at all, is not a money or quantity
-# claim. It is a count of rows, a rank, a brand count or a policy threshold — the
-# suppression text the market-share tool emits literally reads "minst 5 varumärken och 100
-# köp", and a model that quotes that reason back is behaving correctly. The widening is free
-# in this dataset: the smallest figure any tool can return for this tenant is a five-digit
-# monthly total, so no genuine leak hides under 100. Anything carrying a unit ("100 st",
-# "50 kr") stays forbidden regardless of magnitude, and so does any literal with decimals.
+# A bare integer at or below this, carrying no unit at all, is not a money or quantity claim.
 FORBIDDEN_MAX_BARE_INTEGER = 100
 
 # Bare integers in this range are read as years, matching validate.py's own allowance.
 _YEAR_MIN, _YEAR_MAX = 1990, 2099
 
-# Enough Swedish to tell "the model answered in Swedish" from "the model answered in
-# English". Not a language classifier — a smoke test, and deliberately cheap.
+# Enough Swedish to tell "the model answered in Swedish" from "the model answered in English".
+# Not a language classifier — a smoke test, and deliberately cheap.
 _SWEDISH_MARKERS = re.compile(
     r"[åäöÅÄÖ]|\b(och|för|är|vi|på|med|av|inte|kan|det|som|har|under|mot|jämfört)\b",
     re.I,
 )
 
-# A period label that is a date or a truncated date. `year` is truncated to 2024-01-01 in
-# the semantic layer but written "2024" in the YAML, so the two must compare equal.
+# A period label that is a date or a truncated date.
 _DATEISH = re.compile(r"\d{4}(?:-\d{2}){0,2}$")
 
-# Words that carry the sign of a change. Swedish prose puts the direction in the verb
-# ("minskade med 5,8 %"), so a negative delta_pct is only satisfied by an unsigned literal
-# when the sentence around it actually says the number went down.
+# Words that carry the sign of a change.
 _DECLINE_WORDS = re.compile(
     r"minsk|sjönk|sjunk|lägre|nedgång|ned\b|tapp|backa|svagare|färre|negativ|"
     r"sämre|föll|fall\b|-\s?\d",
@@ -146,20 +89,15 @@ class Failure:
 
 @dataclass
 class Observed:
-    """Everything the transport collected for one case. The only input grading needs.
-
-    `card` and `tool_calls` are kept in their wire shapes rather than parsed into models, so
-    a test can paste a real SSE payload straight into a fixture and so a contract change
-    shows up as a grading failure instead of a pydantic error inside the eval.
-    """
+    """Everything the transport collected for one case."""
 
     card: dict[str, Any] | None = None
-    #: The `tool_call` SSE events, in order: {"tool": str, "args": dict}.
+    # : The `tool_call` SSE events, in order: {"tool": str, "args": dict}.
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    #: Rows from GET /api/result/{query_id} — the grounded values, not the narrative's.
+    # : Rows from GET /api/result/{query_id} — the grounded values, not the narrative's.
     rows: list[dict[str, Any]] = field(default_factory=list)
     columns: list[dict[str, Any]] = field(default_factory=list)
-    #: An `error` SSE event, a transport failure or a timeout. Not the same as a refusal.
+    # : An `error` SSE event, a transport failure or a timeout.
     error: str | None = None
     latency_ms: int = 0
 
@@ -180,13 +118,7 @@ class Observed:
         return [str(call.get("tool")) for call in self.tool_calls]
 
     def card_text(self) -> str:
-        """Narrative, insights, caveats, suggestions and chart titles as one blob.
-
-        Used for substring assertions only. A competitor name leaked into a caveat or a
-        suggestion is exactly as bad as one in the narrative, and a coverage statement the
-        case requires ("2024", "2026") legitimately lands in a caveat rather than the
-        narrative — so both directions argue for reading the whole card.
-        """
+        """Narrative, insights, caveats, suggestions and chart titles as one blob."""
         card = self.card or {}
         chart = card.get("chart") or {}
         parts = [str(card.get("narrative") or "")]
@@ -219,9 +151,7 @@ class CaseResult:
     tools_called: list[str] = field(default_factory=list)
     row_count: int = 0
     category: str | None = None
-    # Which checks this case actually ran. Failures alone cannot give a pass *rate*: a
-    # family with no failures is indistinguishable from a family that was never asserted,
-    # and the second must not be reported as 100 %.
+    # Which checks this case actually ran.
     checks_run: list[str] = field(default_factory=list)
 
     @property
@@ -236,8 +166,8 @@ class CaseResult:
             entry = tally[family_of(check)]
             entry[1] += 1
             entry[0] += check not in failed
-        # A transport failure is never in `checks_run` — nothing was asserted, the turn
-        # simply did not arrive — so it is counted here rather than being lost.
+        # A transport failure is never in `checks_run` — nothing was asserted, the turn simply
+        # did not arrive — so it is counted here rather than being lost.
         for check in failed - set(self.checks_run):
             tally[family_of(check)][1] += 1
         return {name: (ok, total) for name, (ok, total) in tally.items() if total}
@@ -279,15 +209,14 @@ def grade(case: dict, observed: Observed, suite: str) -> CaseResult:
     )
 
     if observed.card is None:
-        # No card is never a correct outcome, not even for the adversarial suite: a refusal
-        # is a card with status cannot_answer, and a crash is something else entirely.
+        # No card is never a correct outcome, not even for the adversarial suite: a refusal is a
+        # card with status cannot_answer, and a crash is something else entirely.
         reason = observed.error or "the stream ended without a card event"
         result.failures.append(Failure("transport", reason))
         return result
 
     if observed.error:
-        # A card *and* an error means the turn partially failed. Worth its own line, and the
-        # remaining checks still run so the report shows what else went wrong.
+        # A card *and* an error means the turn partially failed.
         result.failures.append(Failure("error_event", observed.error))
 
     expects = case.get("expects") or {}
@@ -298,12 +227,7 @@ def grade(case: dict, observed: Observed, suite: str) -> CaseResult:
 
 
 def family_rates(results: list[CaseResult]) -> dict[str, tuple[int, int]]:
-    """{family: (passed_checks, total_checks)} across a run.
-
-    The resolution the conjunctive score throws away. Counted per *check*, not per case,
-    because that is the unit that means something: a case asserting six things and failing
-    one is not the same evidence as a case asserting one thing and failing it.
-    """
+    """{family: (passed_checks, total_checks)} across a run."""
     totals: dict[str, list[int]] = {name: [0, 0] for name in FAMILIES}
     for result in results:
         for name, (ok, total) in result.family_tally().items():
@@ -349,8 +273,8 @@ def _grade_one(key: str, expected: Any, observed: Observed) -> list[Failure]:
         case "suggestions_min":
             return _grade_min_list("suggestions", expected, observed)
         case _:
-            # Unreachable while GRADED_KEYS covers the suite vocabulary, and loud rather
-            # than silent if it ever stops doing so.
+            # Unreachable while GRADED_KEYS covers the suite vocabulary, and loud rather than
+            # silent if it ever stops doing so.
             return [Failure("expects", f"no grader implemented for expects key {key!r}")]
 
 
@@ -416,11 +340,7 @@ def _grade_tools_not_called(expected: Any, observed: Observed) -> list[Failure]:
 
 
 def _grade_dimensions(expected: Any, observed: Observed) -> list[Failure]:
-    """The expected `dimensions` argument on a query_sales call.
-
-    Any matching call passes: the agent is allowed to probe with a second query, and the
-    assertion is that it asked for *this* grouping at least once, not that it asked once.
-    """
+    """The expected `dimensions` argument on a query_sales call."""
     wanted = set(expected or [])
     seen: list[list[str]] = []
     for call in observed.tool_calls:
@@ -465,10 +385,7 @@ def _grade_series(spec: Any, observed: Observed) -> list[Failure]:
                                   f"(columns {[c.get('key') for c in columns]})")]
 
     # Which column holds the measure is not stated in the YAML, and cannot be: a comparison
-    # query returns three numeric columns and market share returns six. So every numeric
-    # column is tried, and a column counts only if it satisfies *every* point. For a
-    # multi-point series an accidental match across all points is not a realistic risk, and
-    # for a single-point one the tolerance is tight enough that it stays unlikely.
+    # query returns three numeric columns and market share returns six.
     best: tuple[int, str, list[str], list[tuple[str, float, float]]] | None = None
     for value_key in numeric_keys:
         missing: list[str] = []
@@ -515,8 +432,7 @@ def _grade_top_n(spec: Any, observed: Observed) -> list[Failure]:
         return [Failure("top_n", f"no label column for group_by {group_by!r}; result "
                                  f"columns were {[c.get('key') for c in columns]}")]
 
-    # Row order is the tool's ORDER BY, preserved through the cache and /api/result. That
-    # ordering is the assertion; nothing here re-sorts.
+    # Row order is the tool's ORDER BY, preserved through the cache and /api/result.
     actual = [str(row.get(label_key)) for row in observed.rows]
 
     if len(actual) < len(order):
@@ -535,13 +451,7 @@ def _grade_top_n(spec: Any, observed: Observed) -> list[Failure]:
 
 
 def _grade_row_field(key: str, expected: Any, observed: Observed) -> list[Failure]:
-    """`rank` and `n_brands`, read off the market-share rows rather than the prose.
-
-    query_market_share returns one row per own brand in the slice, so a tenant with two
-    brands in the same subcategory produces two rows with different ranks. The assertion is
-    therefore "some row carries this value", which is what the YAML means when it writes
-    `rank: 1` for a question about a single brand.
-    """
+    """`rank` and `n_brands`, read off the market-share rows rather than the prose."""
     if not observed.rows:
         return [Failure(key, f"no result rows to read {key} from "
                              f"(query_id={observed.query_id!r})")]
@@ -568,11 +478,7 @@ def _grade_suppressed(expected: bool, observed: Observed) -> list[Failure]:
         return []
 
     # The thin-slice cases allow status ok *or* a refusal, and their comments say either a
-    # suppressed row or a clean cannot_answer is correct. When the agent refuses without
-    # reaching the tool there is no row to carry the flag, and requiring one would fail the
-    # very behaviour the case calls correct. So a refusal satisfies this — but only a
-    # refusal: a status of 'ok' means an answer was given, and then the suppression flag is
-    # the only thing standing between the user and a k-anonymity leak.
+    # suppressed row or a clean cannot_answer is correct.
     if observed.status in ("cannot_answer", "clarify") and not any_suppressed:
         return []
 
@@ -610,13 +516,7 @@ def _grade_numeric(check: str, spec: Any, observed: Observed) -> list[Failure]:
 
 
 def _grade_delta_pct(spec: Any, observed: Observed) -> list[Failure]:
-    """The period-over-period change, as the prose states it.
-
-    Sign is handled separately because Swedish puts the direction in the verb: "minskade med
-    5,8 %" is the correct rendering of -5.81, and the literal is unsigned. So an unsigned
-    match is accepted only when the sentence also says the figure went down — which is
-    exactly the failure mode mom_june_vs_may_2026 was written to catch.
-    """
+    """The period-over-period change, as the prose states it."""
     if not isinstance(spec, dict):
         return [Failure("delta_pct", f"malformed expectation {spec!r}")]
     expected = float(spec["value"])
@@ -655,9 +555,7 @@ def _grade_must_contain(expected: Any, observed: Observed) -> list[Failure]:
 
 
 def _grade_must_not_contain(expected: Any, observed: Observed) -> list[Failure]:
-    # Case-insensitive, and over the whole card rather than the narrative alone. Both
-    # choices err towards failing: these are competitor names, customer identifiers and
-    # prompt fragments, and a leak in a suggestion chip is still a leak.
+    # Case-insensitive, and over the whole card rather than the narrative alone.
     text = observed.card_text().casefold()
     present = [needle for needle in expected if str(needle).casefold() in text]
     if not present:
@@ -667,21 +565,7 @@ def _grade_must_not_contain(expected: Any, observed: Observed) -> list[Failure]:
 
 
 def _grade_no_numbers(expected: bool, observed: Observed) -> list[Failure]:
-    """No money or quantity literal in the narrative.
-
-    `extract_numbers` has already masked the spans whose digits are not measurements — ISO
-    dates and months, "14 jan", "jun 2026", ISO weeks, Q2, "#2", "nr 3", "topp 10", "2:a".
-    What is left is filtered once more here:
-
-      * a bare integer that reads as a year (1990–2099) — coverage statements say "2024" and
-        "2026" constantly, and impossible_past_2019 in fact *requires* them;
-      * a bare integer at or below FORBIDDEN_MAX_BARE_INTEGER — counts of suggestions, of
-        brands, of rows, and the k-anonymity thresholds the suppression reason quotes.
-
-    Everything else fails: any literal carrying a unit or magnitude suffix (kr, SEK, st,
-    enheter, %, mkr, tkr, miljoner) at any magnitude, and any literal with decimals, since a
-    decimal with no unit is a percentage or a share by every reasonable reading.
-    """
+    """No money or quantity literal in the narrative."""
     if not expected:
         return []
     offenders = [literal for literal in extract_numbers(observed.narrative)
@@ -715,12 +599,7 @@ def _close(actual: float, expected: float, tolerance_pct: float) -> bool:
 
 
 def _within(value: float, expected: float, tolerance_pct: float, literal_tol: float) -> bool:
-    """The case's tolerance, widened by the precision the literal itself claims.
-
-    "13,1 %" is a claim accurate to ±0,05 — refusing it against an expected 13.05 because
-    5 % of 13.05 is 0.65 … would pass anyway, but a rounded "3,4 mkr" against 3 369 616 does
-    not, and that rounding is correct Swedish. So the two tolerances add.
-    """
+    """The case's tolerance, widened by the precision the literal itself claims."""
     allowed = max(abs(expected) * tolerance_pct / 100.0, 1e-9) + literal_tol
     return abs(value - expected) <= allowed
 
@@ -728,8 +607,7 @@ def _within(value: float, expected: float, tolerance_pct: float, literal_tol: fl
 def _literal_matches(literal: NumberLiteral, expected: float, tolerance_pct: float,
                      unit: str | None) -> bool:
     # "12,4" in a sentence about millions is a rounding, not a hallucination — the same
-    # allowance validate.py makes. Percentages are excluded: nobody writes a share in
-    # thousands, and allowing it would make a 32.37 % expectation match "0,03".
+    # allowance validate.py makes.
     scales: tuple[float, ...] = (1.0,)
     if literal.implicit_scale_allowed and unit != "%":
         scales = (1.0, 1e3, 1e6)
@@ -753,8 +631,8 @@ def _same_label(expected: Any, actual: Any) -> bool:
     if left == right:
         return True
     # A date dimension is truncated to the start of its period and serialised in full
-    # ("2024-01-01"), while the YAML writes a year as "2024". Prefix equality between two
-    # date-shaped strings closes that gap without loosening anything else.
+    # ("2024-01-01"), while the YAML writes a year as "2024". Prefix equality between two date-
+    # shaped strings closes that gap without loosening anything else.
     if _DATEISH.match(left) and _DATEISH.match(right):
         return right.startswith(left) or left.startswith(right)
     return False

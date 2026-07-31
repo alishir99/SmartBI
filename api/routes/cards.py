@@ -1,9 +1,4 @@
-"""Saved views ("Mina vyer") and share links.
-
-A saved card persists the **ChartSpec plus the tool arguments**, never a screenshot and never
-the rows. So opening a saved view re-runs the query live against fresh data — which is the
-difference between a saved view and an exported image (§10).
-"""
+"""Saved views ("Mina vyer") and share links."""
 
 from __future__ import annotations
 
@@ -33,17 +28,7 @@ router = APIRouter(prefix="/api", tags=["cards"])
 
 # One GET here used to fan out into one MCP round-trip per saved card, serially and without a
 # ceiling: 200 saved views meant 200 queries on one request, and a client could hold the
-# database busy for minutes with a single authenticated GET. Both halves are bounded now.
-#
-# MAX_REFRESHED caps the work: a "Mina vyer" board past a dozen tiles is not something anyone
-# reads on one screen, so the newest 12 are refreshed and the rest are not fetched at all —
-# the LIMIT lives in the SQL, so the older rows cost nothing.
-#
-# REFRESH_CONCURRENCY caps the burst. Concurrency turns a 12-second wall of serial round-trips
-# into about three seconds, but unbounded `gather` would just move the exhaustion downstream:
-# each call opens its own MCP session and its own database connection (the API pool tops out
-# at 10), so 12 at once is a self-inflicted spike. Four is roughly the point where the wall
-# clock stops improving.
+# database busy for minutes with a single authenticated GET.
 MAX_REFRESHED_CARDS = 12
 REFRESH_CONCURRENCY = 4
 
@@ -68,9 +53,7 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
                         cache: ResultCache) -> AnswerCard:
     if row["tool_name"] not in ALLOWED_CARD_TOOLS:
         # Belt and braces against rows that predate the allowlist on SaveCardRequest, or that
-        # arrived by any path other than POST /api/cards. This is the point where a stored
-        # name turns into a call, so this is where refusing it actually costs an attacker
-        # something.
+        # arrived by any path other than POST /api/cards.
         logger.warning("saved card %s names unknown tool %r", row["card_id"], row["tool_name"])
         return AnswerCard(
             card_id=str(row["card_id"]), status="cannot_answer",
@@ -89,8 +72,8 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
         tool_args=row["tool_args"], payload=payload))
     chart = render.propose_chart(result, title=row["title"])
     if row.get("chart_spec"):
-        # The saved spec is re-validated against today's result: a column that existed
-        # when the card was saved may not exist now.
+        # The saved spec is re-validated against today's result: a column that existed when the
+        # card was saved may not exist now.
         try:
             saved = AnswerCard.model_validate(
                 {"chart": row["chart_spec"], "status": "ok"}).chart
@@ -126,29 +109,17 @@ async def remove_card(card_id: int,
 @router.post("/share", response_model=ShareResponse)
 async def share(body: ShareRequest,
                 tenant: ScopedTenant = Depends(get_supplier_scope)) -> ShareResponse:
-    """Signed, expiring, read-only link.
-
-    Snapshot is the default. A live link re-executes the query later, and it has to do so
-    under the *original* supplier's scope rather than the viewer's — getting that backwards is
-    a cross-tenant data leak, so "live" is an explicit opt-in and the token carries the scope
-    it must run under.
-
-    The **reading end is deferred**: there is no `/delad/{token}` route yet, so this URL does
-    not resolve to a page. The frontend control is hidden accordingly (see SHARE_UI_ENABLED
-    in web/src/components/CardActions.tsx) rather than offering a link that goes nowhere.
-    What remains is the part worth reviewing — the scope-carrying token — and the missing
-    piece is a page that verifies it and renders the card under the scope it names.
-    """
-    # int(): card_id crosses the wire as a string but the column is a bigint, and
-    # asyncpg does not coerce. Nothing caught it because the share UI is hidden.
+    """Signed, expiring, read-only link."""
+    # int(): card_id crosses the wire as a string but the column is a bigint, and asyncpg does
+    # not coerce.
     card = await db.get_card(int(body.card_id), tenant.supplier_id)
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Okänt card_id")
 
     token, expires_at = create_share_token(
         card_id=str(body.card_id), supplier_id=tenant.supplier_id, mode=body.mode)
-    # The contract is {url, expires_at}; `mode` was being passed and silently dropped,
-    # since the model does not declare it.
+    # The contract is {url, expires_at}; `mode` was being passed and silently dropped, since the
+    # model does not declare it.
     return ShareResponse(
         url=f"{settings.public_web_url}/delad/{token}",
         expires_at=expires_at.isoformat(),

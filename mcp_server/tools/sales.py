@@ -1,12 +1,4 @@
-"""query_sales — the workhorse tool.
-
-Compiles a typed spec into SQL, runs it under the caller's tenant scope, and returns rows
-plus the provenance needed to render a source chip (§9.3).
-
-The returned payload holds the *full* result set, capped at MAX_ROWS. Truncating for the
-model's context window happens one layer up, in the API, precisely so that the chart can be
-drawn from data the model never saw. That is the mechanical form of the grounding claim.
-"""
+"""query_sales — the workhorse tool."""
 
 from __future__ import annotations
 
@@ -22,8 +14,7 @@ from ..tenant import TenantContext
 
 def _jsonable(value):
     if isinstance(value, Decimal):
-        # NUMERIC arrives as Decimal. Rounding here, once, means the number the chart draws
-        # and the number the validator checks the prose against are the same number.
+        # NUMERIC arrives as Decimal.
         return float(round(value, 2))
     if isinstance(value, date | datetime):
         return value.isoformat()

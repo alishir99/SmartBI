@@ -1,15 +1,4 @@
-/**
- * The period windows the dashboard offers.
- *
- * This list mirrors `PERIODS` in `api/routes/dashboard.py`, and the keys must match: the
- * backend resolves them against the semantic layer's relative ranges, and an unknown key
- * silently falls back to the default rather than erroring. Keeping the labels here rather
- * than shipping them in the response keeps the contract in `docs/API_CONTRACT.md` frozen —
- * the API gained one querystring parameter, not a new payload shape.
- *
- * The default is deliberately still 12 months. "BI utan BI-avdelning" means the first screen
- * asks nothing; the control exists for the second question, not the first.
- */
+/** The period windows the dashboard offers. */
 
 export const DEFAULT_PERIOD = 'last_12_months'
 

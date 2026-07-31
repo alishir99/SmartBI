@@ -1,8 +1,7 @@
 /**
- * The one renderer for every `ChartSpec`. It receives the spec from the model and the
- * rows from `/api/result/{query_id}` — the model's output never carries a value, so a
- * hallucinated number cannot reach this component. Everything visual is decided by
- * `prepareChart`; this file only draws.
+ * The one renderer for every `ChartSpec`. It receives the spec from the model and the rows from
+ * `/api/result/{query_id}` — the model's output never carries a value, so a hallucinated number
+ * cannot reach this component.
  */
 
 import {
@@ -51,19 +50,15 @@ export function Chart({ spec, columns, rows, height = 280 }: Props) {
     return <KpiPlot prepared={prepared} />
   }
 
-  // A sideways chart grows with its rows instead of squeezing them: the caller's height
-  // is a floor, not a ceiling.
+  // A sideways chart grows with its rows instead of squeezing them: the caller's height is a
+  // floor, not a ceiling.
   const sideways = isSideways(spec, prepared)
   const plotHeight = sideways
     ? Math.max(height, sidewaysHeight(prepared.rows.length))
     : height
 
-  // Recharts emits a bare <svg> with no accessible name, so a screen reader reaching this
-  // point previously found nothing at all — the chart was simply absent. `DataTable` is the
-  // real fallback and it is good, but it lives behind a mouse click, which is no help to
-  // the person who needs it most. `role="img"` plus a name that states what the chart shows
-  // makes the plot itself announceable, and the caption gives the same sentence visually
-  // adjacent for anyone reading the page rather than hearing it.
+  // Recharts emits a bare <svg> with no accessible name, so a screen reader reaching this point
+  // previously found nothing at all — the chart was simply absent.
   const description = describeChart(spec, prepared)
 
   return (
@@ -98,14 +93,7 @@ const CHART_KIND: Record<string, string> = {
   pie: 'Cirkeldiagram',
 }
 
-/**
- * The sentence a screen reader announces in place of the plot.
- *
- * Deliberately built from `prepared` rather than from the raw rows: it must describe what
- * was actually drawn, including the fold into "Övrigt", or it becomes a second, quieter
- * source of truth that can disagree with the picture. It carries no values beyond the
- * count and the series names — the numbers live in the table fallback, which is exact.
- */
+/** The sentence a screen reader announces in place of the plot. */
 export function describeChart(spec: ChartSpec, prepared: PreparedChart): string {
   const kind = CHART_KIND[spec.type] ?? 'Diagram'
   const parts = [`${kind}: ${spec.title || 'utan titel'}`]
@@ -126,8 +114,8 @@ export function describeChart(spec: ChartSpec, prepared: PreparedChart): string 
   if (prepared.folded) {
     parts.push('mindre poster är summerade till Övrigt')
   }
-  // Points at the actual control, not at a vaguely gestured "table below": the table
-  // *replaces* the chart via the Diagram/Tabell toggle in the card's actions.
+  // Points at the actual control, not at a vaguely gestured "table below": the table *replaces*
+  // the chart via the Diagram/Tabell toggle in the card's actions.
   return `${parts.join(', ')}. Välj Tabell för att läsa samma siffror som text.`
 }
 
@@ -175,11 +163,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
             name={descriptor.label}
             stroke={descriptor.color}
             strokeWidth={MARK.lineWidth}
-            // `fill` is explicit on both dots. Recharts defaults a dot's fill to white
-            // rather than to the line's stroke, which on a light surface renders the marker
-            // as a hole — the line reads as broken at exactly the points it is labelling.
-            // The dot carries the series colour; the ring around the active one stays
-            // surface-coloured, so it separates the marker from the line beneath it.
+            // `fill` is explicit on both dots.
             dot={rows.length <= 12
               ? { r: MARK.dotRadius, strokeWidth: 0, fill: descriptor.color }
               : false}
@@ -238,12 +222,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
   )
 }
 
-/**
- * Ranked categories go sideways. Ten product names on a vertical axis collapse into
- * "Nordström TV N1…" five times over — Recharts drops every tick that will not fit, and
- * the reader is left with bars they cannot name. Turning the chart puts each label on
- * its own line with room to breathe. Time never turns: a date axis reads left to right.
- */
+/** Ranked categories go sideways. */
 function isSideways(spec: ChartSpec, prepared: PreparedChart): boolean {
   if (spec.type !== 'bar' || !prepared.xColumn || prepared.xColumn.type === 'date') return false
   const longest = Math.max(
@@ -259,9 +238,8 @@ function sidewaysHeight(rowCount: number): number {
 }
 
 /**
- * An array, not a fragment: Recharts scans its *direct* children for axes, grid and
- * tooltip, and a fragment hides them from that scan — the chart then silently renders
- * with no axes at all. Arrays are flattened by Children.toArray, so they are seen.
+ * An array, not a fragment: Recharts scans its *direct* children for axes, grid and tooltip, and
+ * a fragment hides them from that scan — the chart then silently renders with no axes at all.
  */
 function buildAxes(prepared: PreparedChart, sideways: boolean) {
   const categoryKey = prepared.xColumn?.key
@@ -332,8 +310,6 @@ function categoryAxisWidth(prepared: PreparedChart): number {
 /**
  * A pie's colour follows the slice, not the measure, so it reads from `slices` — which
  * prepare.ts builds from the dimension values, in the same row order Recharts draws.
- * Matching against `series` here looked right and never matched: those are the measures,
- * and a pie has one, so every wedge came out `--series-1`.
  */
 function sliceColor(prepared: PreparedChart, index: number): string {
   return prepared.slices[index]?.color ?? 'var(--series-1)'
@@ -361,10 +337,7 @@ function xLabel(prepared: PreparedChart, value: string): string {
   return prepared.xColumn ? formatCell(value, prepared.xColumn) : value
 }
 
-/**
- * Axis label. A sideways chart gives each category its own line, so it can carry a
- * much longer name than a crowded vertical axis can.
- */
+/** Axis label. */
 function tickLabel(prepared: PreparedChart, value: string, sideways: boolean): string {
   const formatted = xLabel(prepared, value)
   if (prepared.xColumn?.type === 'date') return formatted
@@ -378,14 +351,12 @@ function yLabel(prepared: PreparedChart, value: number): string {
 }
 
 /**
- * Our own legend rather than Recharts': it is the relief for the light-mode hues that
- * sit below 3:1 on white, so it ships with every multi-series chart and is never
- * dropped for space.
+ * Our own legend rather than Recharts': it is the relief for the light-mode hues that sit below
+ * 3:1 on white, so it ships with every multi-series chart and is never dropped for space.
  */
 function Legend({ prepared }: { prepared: PreparedChart }) {
   // A pie legends its slices, and it needs one at any count: the wedges carry no axis, so
-  // without it the colours name nothing. Every other chart labels its categories on the
-  // axis already, which is why a single-series legend is noise there.
+  // without it the colours name nothing.
   const isPie = prepared.slices.length > 0
   const entries = isPie ? prepared.slices : prepared.series
   if (entries.length === 0 || (!isPie && entries.length < 2)) return null

@@ -11,9 +11,8 @@ type Props = TooltipProps<number, string> & {
 const byKey = (columns: Column[], key: string) => columns.find((column) => column.key === key)
 
 /**
- * Values are exact here (no magnitude switching): the axis carries the rounded
- * scale, the tooltip carries the number. Text wears text tokens; identity comes
- * from the coloured dot beside it, never from colouring the text.
+ * Values are exact here (no magnitude switching): the axis carries the rounded scale, the
+ * tooltip carries the number.
  */
 export function ChartTooltip({ active, payload, label, columns, labelFormatter }: Props) {
   if (!active || !payload || payload.length === 0) return null

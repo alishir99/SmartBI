@@ -1,15 +1,8 @@
-"""MCP server settings.
-
-Note the database user: the MCP server connects as `app_readonly`, which holds SELECT and
-nothing else and is subject to every RLS policy in db/sql/04_rls.sql. The seeder and the
-rollup refresh run as the owner on a different connection entirely.
-"""
+"""MCP server settings."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# See the matching block in api/config.py. Secrets that ship in the repo so the demo runs
-# with no setup, and the value each has to move off before the process serves anything
-# outside `dev`.
+# See the matching block in api/config.py.
 IN_REPO_DEFAULTS = {
     "internal_token": "dev-internal-token",
     "app_db_password": "app_readonly",
@@ -19,8 +12,7 @@ IN_REPO_DEFAULTS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # The demo posture — published internal port, in-repo secrets. Asked for explicitly, so
-    # that an unconfigured environment fails closed instead of inheriting laptop defaults.
+    # The demo posture — published internal port, in-repo secrets.
     solvigo_env: str = "prod"
 
     postgres_host: str = "localhost"
@@ -33,10 +25,7 @@ class Settings(BaseSettings):
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8081
 
-    # Shared secret between the API and the MCP server. The MCP server is not exposed to
-    # the internet (§11.4), but "not routable" is a deployment property and this is a
-    # property of the code — cheap defence in depth against the day someone changes the
-    # ingress setting.
+    # Shared secret between the API and the MCP server.
     internal_token: str = "dev-internal-token"
 
     # Hard ceiling on rows a single tool call may return, independent of the caller's limit.
@@ -55,17 +44,7 @@ class Settings(BaseSettings):
                       if getattr(self, name) == default)
 
     def assert_secrets_rotated(self) -> None:
-        """Fail closed at boot on secrets anyone can read out of the repository.
-
-        This one matters more than the API's. `internal_token` is the *only* thing between
-        the tool surface and anyone who can reach the MCP port — with the in-repo value a
-        caller sets the supplier header to whatever they like and reads any tenant's rows.
-
-        A startup check rather than a field validator, for the reason spelled out in
-        api/config.py: `settings` is a module-level singleton, and validating on
-        construction would make importing this package raise in CI and in every clean
-        clone. Field names are reported; values are not.
-        """
+        """Fail closed at boot on secrets anyone can read out of the repository."""
         if unchanged := self.unrotated_secrets():
             raise RuntimeError(
                 f"mcp_server: refusing to start with the in-repo default for "

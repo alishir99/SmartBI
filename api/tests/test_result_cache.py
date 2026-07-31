@@ -1,9 +1,4 @@
-"""Tests for the result cache — the store the charts read from.
-
-Two properties matter here. One is a security property: an entry is reachable only by the
-tenant it was created for, so a guessed or leaked query_id cannot become a cross-tenant read.
-The other is the grounding property: the preview handed to the model is bounded and says so.
-"""
+"""Tests for the result cache — the store the charts read from."""
 
 from __future__ import annotations
 
@@ -110,10 +105,10 @@ def test_numeric_columns_are_identified():
 
 # ------------------------------------------------------- aggregates over the full result
 
-# The B2 fixture, built to reproduce the defect rather than to be convenient: the largest
-# value sits *outside* the 25 rows the model is shown, so any answer inferred from the sample
-# names the wrong winner while quoting a number that really is in the result set — which is
-# exactly why the validator used to accept it.
+# The B2 fixture, built to reproduce the defect rather than to be convenient: the largest value
+# sits *outside* the 25 rows the model is shown, so any answer inferred from the sample names
+# the wrong winner while quoting a number that really is in the result set — which is exactly
+# why the validator used to accept it.
 B2_ROWS = (
     [{"product": f"P{i}", "net_sales_sek": 8_507_984.0 - i} for i in range(PREVIEW_ROWS)]
     + [{"product": "P40", "net_sales_sek": 8_932_965.0}]
@@ -135,8 +130,7 @@ def b2_cached() -> CachedResult:
 
 
 def test_the_real_maximum_is_outside_the_preview():
-    """Guard on the fixture itself. If the largest row ever drifts into the visible sample,
-    every assertion below would pass without testing anything."""
+    """Guard on the fixture itself."""
     result = b2_cached()
     visible = result.preview()["rows"]
     assert len(visible) == PREVIEW_ROWS
@@ -144,9 +138,8 @@ def test_the_real_maximum_is_outside_the_preview():
 
 
 def test_the_model_is_told_the_argmax_it_cannot_see():
-    """B2: the model saw 25 of 76 rows while propose_chart sorted all 76, so prose and chart
-    could name different winners and both look verified. The superlative is now computed
-    server-side and handed over, rather than left as an inference over invisible rows."""
+    """B2: the model saw 25 of 76 rows while propose_chart sorted all 76, so prose and chart could
+    name different winners and both look verified."""
     aggregates = b2_cached().preview()["aggregates"]
 
     assert aggregates["net_sales_sek"]["max"]["value"] == 8_932_965.0
@@ -168,8 +161,8 @@ def test_the_minimum_carries_its_row_too():
 
 
 def test_the_note_warns_that_the_biggest_row_is_probably_not_shown():
-    """A sampled preview has to say so in the same breath as the aggregates, or the model has
-    to work out which mode it is in."""
+    """A sampled preview has to say so in the same breath as the aggregates, or the model has to
+    work out which mode it is in."""
     note = b2_cached().preview()["note"]
     assert "aggregates" in note
     assert "stickprov" in note
@@ -190,9 +183,7 @@ def test_aggregates_are_present_even_when_nothing_was_truncated():
 
 
 def test_a_suppressed_row_is_skipped_rather_than_counted_as_zero():
-    """`query_market_share` genuinely omits `share_pct` on a suppressed row. Counting the
-    absence as zero would drag the mean down and make the suppressed slice look like the
-    minimum — a disclosure by arithmetic, from the one tool that must not make any."""
+    """`query_market_share` genuinely omits `share_pct` on a suppressed row."""
     payload = {
         "rows": [
             {"subcategory": "Hörlurar", "share_pct": 30.0, "suppressed": False},
@@ -213,8 +204,7 @@ def test_a_suppressed_row_is_skipped_rather_than_counted_as_zero():
 
 
 def test_the_suppression_flag_never_becomes_an_entity_label():
-    """`suppressed` and `reason` describe a row's status, not the thing it is about. Naming a
-    k-anonymity suppression as if it were an entity would be wrong and alarming at once."""
+    """`suppressed` and `reason` describe a row's status, not the thing it is about."""
     payload = {
         "rows": [{"subcategory": "Hörlurar", "share_pct": 30.0,
                   "suppressed": False, "reason": None}],
@@ -229,8 +219,8 @@ def test_the_suppression_flag_never_becomes_an_entity_label():
 
 
 def test_a_boolean_column_is_not_aggregated_as_a_number():
-    """bool is a subclass of int in Python, so a careless sum would report that 1.0 of the
-    rows were suppressed."""
+    """bool is a subclass of int in Python, so a careless sum would report that 1.0 of the rows
+    were suppressed."""
     payload = {
         "rows": [{"subcategory": "A", "suppressed": True},
                  {"subcategory": "B", "suppressed": False}],

@@ -1,10 +1,4 @@
-"""Where tenant scope comes from — and, more importantly, where it does not.
-
-`supplier_id` is not a parameter of any tool (§6.3). It arrives as an HTTP header on the
-MCP request, set by the API from a verified JWT. The model composes tool *arguments*; it
-has no way to compose transport headers, so "show me supplier 7's numbers" is not a request
-it can express, however it is phrased.
-"""
+"""Where tenant scope comes from — and, more importantly, where it does not."""
 
 from __future__ import annotations
 
@@ -28,8 +22,7 @@ def tenant_from(ctx: Context) -> TenantContext:
     """Read and verify the scope headers, or refuse to run the tool."""
     request = getattr(ctx.request_context, "request", None)
     if request is None:
-        # stdio transport, or a call that arrived without transport metadata. Failing here
-        # is deliberate: there is no safe default supplier.
+        # stdio transport, or a call that arrived without transport metadata.
         raise ToolError("saknar tenant-kontext: anropet måste gå via HTTP-transporten")
 
     headers = request.headers

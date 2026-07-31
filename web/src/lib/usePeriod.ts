@@ -1,11 +1,4 @@
-/**
- * The selected period, shared by every page that reads the dashboard.
- *
- * Held in one module-level store rather than per page, so switching to Produkter after
- * choosing "Hittills i år" does not silently drop back to twelve months. It is also
- * persisted: coming back to a dashboard and finding a different window than you left it on
- * is the kind of small dishonesty that makes people stop trusting the numbers.
- */
+/** The selected period, shared by every page that reads the dashboard. */
 
 import { useSyncExternalStore } from 'react'
 import { DEFAULT_PERIOD, PERIOD_OPTIONS } from './periods'

@@ -1,15 +1,4 @@
-"""The system prompt — the six-point contract from §6.5, plus the answer envelope.
-
-Kept as one stable string, assembled once at import time. Two reasons: the DeepSeek endpoint
-ignores `cache_control`, so there is nothing to gain from splitting it today, but against
-real Claude this exact block is what a `cache_control: ephemeral` marker would be attached to
-(§6.4). Structuring for a saving we cannot yet claim costs nothing and makes the claim true
-the day the provider changes.
-
-Note where the enforcement actually lives. Every rule below is also checked in code:
-rule 1 by agent/validate.py, rule 6 by the Pydantic models, the tool-call budget by the loop.
-The prompt states the contract; it is not what keeps it.
-"""
+"""The system prompt — the six-point contract from §6.5, plus the answer envelope."""
 
 from __future__ import annotations
 
@@ -152,12 +141,7 @@ gränssnittet, så ett avböjande märkt "ok" presenteras för användaren som e
 
 
 def regeneration_prompt(violations: list[str]) -> str:
-    """The one bounded retry (§9.2).
-
-    The offending values are quoted back verbatim rather than paraphrased, because the point
-    is for the model to find them in its own text and remove them. A vague "check your
-    numbers" reliably produces the same numbers again.
-    """
+    """The one bounded retry (§9.2)."""
     listed = "\n".join(f"- {violation}" for violation in violations)
     return (
         "Din text innehåller tal som inte går att hitta i verktygsresultatet:\n"

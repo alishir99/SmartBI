@@ -1,16 +1,4 @@
-/**
- * The period switcher.
- *
- * A segmented control rather than a dropdown: the options are few, mutually exclusive, and
- * the current one should be readable without opening anything. Which window you are looking
- * at is the single most load-bearing piece of context on the page — a net-sales figure is
- * meaningless without it, and the absence of this control was letting people compare a
- * 12-month total against an all-time one and conclude the numbers were wrong.
- *
- * Implemented as a radiogroup so arrow keys move between options, which is what the role
- * promises. The full label is shown from `sm` up; below that the short form keeps all seven
- * options reachable without a horizontal scroll trap.
- */
+/** The period switcher. */
 
 import { PERIOD_OPTIONS } from '../lib/periods'
 

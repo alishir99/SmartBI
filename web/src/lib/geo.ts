@@ -1,19 +1,4 @@
-/**
- * Where the 21 län sit, and how to get them onto an SVG.
- *
- * These are not hand-placed. Each coordinate is the mean position of that county's stores
- * in `data/generated/dim_store.csv`, so the layout is derived from the same data the map
- * plots rather than from an eyeballed sketch of Sweden. That matters for a demo: the shape
- * a viewer recognises is evidence the positions are real, and a county sitting slightly off
- * where a wall map would put it is honest — it is where this supplier's shops actually are.
- *
- * The coastline they sit on is equally real: `swedenOutline.ts` is generated from Natural
- * Earth's public-domain 1:10m boundaries, not traced. Nothing on this map is drawn by hand —
- * which is the only reason it is allowed to sit next to measured figures.
- *
- * County *borders* are still absent. Natural Earth's admin-1 set would supply them and turn
- * this into a choropleth; the outline is the useful 90% and costs 10 kB.
- */
+/** Where the 21 län sit, and how to get them onto an SVG. */
 
 import { OUTLINE_BOUNDS } from './swedenOutline'
 
@@ -46,11 +31,7 @@ export const REGION_POINTS: RegionPoint[] = [
 
 const BY_NAME = new Map(REGION_POINTS.map((point) => [point.region, point]))
 
-/**
- * Look a county up by the label the API returns. Falls back to a loose match so that
- * "Skåne" finds "Skåne län" — the tools return canonical names, but a saved view or a chat
- * answer may carry the short form.
- */
+/** Look a county up by the label the API returns. */
 export function findRegion(name: string): RegionPoint | undefined {
   const exact = BY_NAME.get(name)
   if (exact) return exact
@@ -60,27 +41,13 @@ export function findRegion(name: string): RegionPoint | undefined {
   )
 }
 
-/**
- * Equirectangular projection with a cosine correction on longitude.
- *
- * Sweden spans roughly 55.5°N to 69°N, where a degree of longitude is about half the
- * ground distance of a degree of latitude. Plotting raw lon/lat would stretch the country
- * sideways into something nobody recognises; scaling x by cos(mean latitude) keeps the
- * proportions close enough to read as Sweden without pulling in a projection library.
- */
+/** Equirectangular projection with a cosine correction on longitude. */
 const MEAN_LAT_RAD = ((55.8 + 65.5) / 2) * (Math.PI / 180)
 const LON_SCALE = Math.cos(MEAN_LAT_RAD)
 
 export type Projection = { x: (point: RegionPoint) => number; y: (point: RegionPoint) => number }
 
-/**
- * Project a lon/lat onto the map's viewBox.
- *
- * The bounds come from `OUTLINE_BOUNDS` — the extent of the *coastline*, not of the store
- * centroids. That is the whole point: fitting to the centroids would scale the bubbles to
- * their own bounding box and float them off the country beneath. Both layers now derive
- * from one set of numbers, so a county's circle sits where the county is.
- */
+/** Project a lon/lat onto the map's viewBox. */
 export function project(): Projection {
   const { minX, maxX, minY, maxY, width, height, padding } = OUTLINE_BOUNDS
 
@@ -100,13 +67,7 @@ export function project(): Projection {
   }
 }
 
-/**
- * Radius for a value, area-proportional rather than radius-proportional.
- *
- * A circle whose *radius* tracks the value exaggerates the top of the range enormously —
- * Stockholm outsells Gotland roughly fortyfold here, which would be a 40x radius and a
- * 1600x blob. Area is what the eye actually compares, so the radius follows the square root.
- */
+/** Radius for a value, area-proportional rather than radius-proportional. */
 export function radiusFor(value: number, max: number, minRadius: number, maxRadius: number): number {
   if (max <= 0 || value <= 0) return minRadius
   return minRadius + (maxRadius - minRadius) * Math.sqrt(value / max)

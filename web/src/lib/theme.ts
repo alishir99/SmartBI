@@ -1,8 +1,4 @@
-/**
- * Theme. The stamp on <html data-theme> is applied before first paint by the inline
- * script in index.html; this store only keeps it in sync afterwards. "system" means
- * no stamp at all, so the CSS media query decides.
- */
+/** Theme. */
 
 import { create } from 'zustand'
 

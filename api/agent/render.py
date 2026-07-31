@@ -1,14 +1,4 @@
-"""Turn a tool result plus the model's envelope into an AnswerCard.
-
-Two jobs, and the order matters: the chart type is proposed **deterministically from the
-shape of the result** first, and the model may only override it. That keeps every chart in
-the product consistent even when the model is careless — which matters more for how the
-product feels than model freedom does (§8).
-
-The second job is validating the override. A ChartSpec that references a column which does
-not exist in the result, or puts a text column on a numeric axis, is rejected and replaced by
-the deterministic proposal rather than shipped to the frontend to fail there.
-"""
+"""Turn a tool result plus the model's envelope into an AnswerCard."""
 
 from __future__ import annotations
 
@@ -30,20 +20,14 @@ from ..models import (
 from ..result_cache import CachedResult
 from .validate import Attribution
 
-# The model is told to end with exactly one ```json block. Match the LAST one: if it wrote an
-# illustrative block earlier in its prose, the final one is the real answer.
+# The model is told to end with exactly one ```json block.
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
 _FALLBACK_TITLE = "Resultat"
 
 
 def split_answer(text: str) -> tuple[str, dict[str, Any]]:
-    """Separate the Swedish prose from the JSON envelope.
-
-    A missing or malformed block is not fatal — the prose is still the answer and the server
-    can pick the chart itself. Failing the whole turn because a code fence was mangled would
-    trade a good answer for no answer.
-    """
+    """Separate the Swedish prose from the JSON envelope."""
     blocks = list(_JSON_BLOCK.finditer(text))
     if not blocks:
         return text.strip(), {}
@@ -58,20 +42,11 @@ def split_answer(text: str) -> tuple[str, dict[str, Any]]:
 
 
 # Columns the tools carry for policy and joining, which are not part of the answer.
-# `suppressed` is a boolean the k-anonymity guard sets — `_infer_columns` types it as text,
-# which made it look like a third dimension and pushed every market-share result onto the
-# `table` branch. An `_id` is an identifier, never a quantity.
 _INTERNAL_COLUMNS = frozenset({"suppressed", "truncated"})
 
 
 def _presentable(column: dict) -> bool:
-    """Belongs in anything a user reads: the table view, the CSV, the card's columns.
-
-    The distinction from `_plottable` is `_compare`: a comparison figure is real data and a
-    reader may well want it in a spreadsheet, it just cannot share an axis with the current
-    period. Everything excluded here is internal bookkeeping in English, and shipping it
-    turned an export into something a supplier could not hand to a colleague.
-    """
+    """Belongs in anything a user reads: the table view, the CSV, the card's columns."""
     key = column.get("key", "")
     return key not in _INTERNAL_COLUMNS and not key.endswith("_id")
 
@@ -82,37 +57,25 @@ def presentable_columns(result: CachedResult) -> list[dict]:
 
 
 def presentable_row(row: dict) -> dict:
-    """A row carrying only the keys `presentable_columns` describes.
-
-    An endpoint should not ship what it does not describe: leaving `product_id` in the JSON
-    while omitting it from `columns` would keep the identifier on the wire and merely hide
-    it from the table.
-    """
+    """A row carrying only the keys `presentable_columns` describes."""
     return {key: value for key, value in row.items() if _presentable({"key": key})}
 
 
 def _plottable(column: dict) -> bool:
     # `_compare` covers the comparison period's own date column as well as its measures.
-    # It labels the prior period rather than splitting the current one, so treating it as
-    # a dimension would turn a 12-month year-on-year line into twelve one-point series.
     return _presentable(column) and not column.get("key", "").endswith("_compare")
 
 
 def _dimensions(result: CachedResult) -> list[dict]:
     # A column holding one distinct value is not something to split by — it is a filter the
-    # caller already applied, echoed back on every row. query_market_share returns exactly
-    # that shape: `subcategory` is constant ("TV" on every row) while `brand` varies, and
-    # treating both as dimensions routed a plain share comparison to `stacked_bar` with a
-    # single stack. Judging by the data rather than the schema also collapses a one-row
-    # result to `kpi`, which is what a single number should look like.
+    # caller already applied, echoed back on every row.
     return [c for c in result.columns
             if c.get("type") in ("date", "text") and _plottable(c) and _varies(c, result)]
 
 
 def _varies(column: dict, result: CachedResult) -> bool:
     # Needs at least two rows to mean anything: in a one-row result every column is constant,
-    # and that says nothing about whether it is a dimension. A single-row grouped query is a
-    # legitimate one-bar chart, so the schema decides there.
+    # and that says nothing about whether it is a dimension.
     if len(result.rows) < 2:
         return True
     key = column["key"]
@@ -157,10 +120,7 @@ def propose_chart(result: CachedResult, title: str | None = None,
                          title=title, subtitle=subtitle)
 
     if rest and len(result.rows) > 1:
-        # Categorical split by categorical is part-of-whole. Stacked bar rather than pie:
-        # a pie with more than a handful of slices is unreadable, and these routinely have
-        # twenty-one (one per län). A single row cannot be stacked against anything, so it
-        # falls through to the plain bar below — query_market_share for one brand lands here.
+        # Categorical split by categorical is part-of-whole.
         return ChartSpec(type="stacked_bar", x=first["key"], y=[measures[0]["key"]],
                          series=rest[0]["key"], sort="desc", title=title, subtitle=subtitle)
 
@@ -192,11 +152,7 @@ def validate_chart(spec: ChartSpec, result: CachedResult) -> tuple[ChartSpec, li
     if spec.type != "kpi" and spec.x is None and _dimensions(result):
         problems.append("chart.x saknas trots att resultatet har en dimension")
 
-    # A result with no dimension column is a single number. `kpi` shows it and `table` prints
-    # it; every other type needs a category or a time axis to lay values out along, and asking
-    # for one anyway yields a chart with a single bar floating on an empty axis. Models pick
-    # `bar` here fairly often — it is the default shape of "show me a chart" — so the server
-    # declines rather than rendering something that looks broken.
+    # A result with no dimension column is a single number.
     if not _dimensions(result) and spec.type not in ("kpi", "table"):
         problems.append(f"chart.type '{spec.type}' kräver en dimension att fördela värdena "
                         f"över; resultatet är ett enda tal")
@@ -248,12 +204,7 @@ def build_provenance(result: CachedResult) -> Provenance | None:
 
 def build_sources(results: Sequence[CachedResult],
                   primary: CachedResult | None) -> list[ToolCallRecord]:
-    """Provenance for every result the turn produced, the chart's first.
-
-    Order matters for the UI, not for correctness: the source chip opens on the query behind
-    the picture, and the rest are there for a reader following a figure in the prose.
-    Duplicate ids are collapsed because the same result can be both primary and produced.
-    """
+    """Provenance for every result the turn produced, the chart's first."""
     ordered: list[CachedResult] = []
     for result in ([primary] if primary is not None else []) + list(results):
         if result is not None and all(seen.query_id != result.query_id for seen in ordered):
@@ -271,26 +222,13 @@ def build_sources(results: Sequence[CachedResult],
 def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[str, Any],
                status: str = "ok", produced: Sequence[CachedResult] = (),
                attributions: Sequence[Attribution] = ()) -> AnswerCard:
-    """Assemble the card. `caveats` accumulates anything we had to correct.
-
-    `produced` is every result the turn ran, and `attributions` says which of them licensed
-    each figure in the prose. Both default to empty so the dashboard — which produces exactly
-    one result and no narrative — is unaffected.
-    """
+    """Assemble the card."""
     caveats = [str(c) for c in (envelope.get("caveats") or [])]
     claims = [Claim(literal=a.literal, query_id=a.query_id) for a in attributions]
 
     if result is None:
-        # clarify / cannot_answer paths: no data was returned, so there is nothing to chart
-        # and nothing to prove — only the explanation and what to try instead.
-        #
-        # `ok` means "besvarad från verktygsdata" (prompts.py). With no result there is no
-        # tool data, so `ok` here is a contradiction rather than a judgement call, and it is
-        # one models reach for whenever they decline politely — a refusal phrased helpfully
-        # still reads to them as a job done. Left alone it reaches the client as an ordinary
-        # answer, because status is what the UI styles the card on. Correcting it in code
-        # rather than in the prompt is the same choice made for rule 1 and rule 6: the prompt
-        # states the contract, the server keeps it.
+        # clarify / cannot_answer paths: no data was returned, so there is nothing to chart and
+        # nothing to prove — only the explanation and what to try instead.
         if status == "ok":
             status = "cannot_answer"
         return AnswerCard(

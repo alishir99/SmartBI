@@ -1,15 +1,4 @@
-/**
- * Geografi — the regional cut, in two views.
- *
- * The bar chart stays the default, and the original reason still holds: a ranking is what a
- * supplier actually reads off this page, and sorted bars answer "who is biggest" faster than
- * any map can. The map is a second tab rather than a replacement because it answers the
- * question a ranking cannot — where the demand physically sits, and how tightly it clusters
- * in the south.
- *
- * Both tabs read the same card. The map takes its values from the cached rows behind that
- * card's `query_id`, so the two cannot disagree: one query, drawn twice.
- */
+/** Geografi — the regional cut, in two views. */
 
 import { useState } from 'react'
 import type { AnswerCard } from '../types'
@@ -93,11 +82,7 @@ function RankingTab({ card }: { card: AnswerCard }) {
   return <AnswerCardView card={card} onAsk={(question) => void ask(question)} height={380} />
 }
 
-/**
- * The map reads the same frozen result the bar chart draws from. Note what is *not*
- * happening: no second query, and no value passing through a model — the rows come from
- * `/api/result/{query_id}`, the same path the chart uses.
- */
+/** The map reads the same frozen result the bar chart draws from. */
 function MapTab({ card }: { card: AnswerCard }) {
   const result = useResult(card.query_id ?? null)
 

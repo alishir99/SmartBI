@@ -1,11 +1,4 @@
-/**
- * Turns (ChartSpec + columns + rows) into exactly what Recharts needs.
- *
- * Every decision here is deterministic and lives outside the component, because the
- * model is allowed to choose the *spec* and nothing else: sorting, limiting, series
- * ordering, colour assignment and the axis scale are all computed from the data. Two
- * identical specs over identical rows always draw the identical chart.
- */
+/** Turns (ChartSpec + columns + rows) into exactly what Recharts needs. */
 
 import type { ChartSpec, Column, ColumnUnit, ResultRow } from '../types'
 import { MAX_SERIES, SERIES_MUTED, seriesColor } from './palette'
@@ -30,16 +23,7 @@ export type PreparedChart = {
   columns: Column[]
   /** True when a tail of small categories was folded into "Övrigt". */
   folded: boolean
-  /**
-   * One descriptor per pie slice, in row order; empty for every other chart type.
-   *
-   * A pie is the one chart whose colour varies along the *dimension* rather than along
-   * the measures. `series` describes the measures, and a pie has exactly one — so
-   * colouring slices from it painted every slice `--series-1` and hid the legend behind
-   * a "two or more series" rule. Computed here rather than in the component so the wedge
-   * and its legend swatch read from one array and cannot drift apart, and so it is
-   * testable without rendering.
-   */
+  /** One descriptor per pie slice, in row order; empty for every other chart type. */
   slices: SeriesDescriptor[]
 }
 
@@ -74,11 +58,7 @@ export function prepareChart(
   }
 }
 
-/**
- * Colour and label per slice, following the dimension value. The folded tail keeps the
- * muted slot it has everywhere else — "Övrigt" is a remainder, not a category, and giving
- * it a palette hue makes it read as one.
- */
+/** Colour and label per slice, following the dimension value. */
 function sliceDescriptors(
   rows: ResultRow[],
   xColumn: Column | null,
@@ -119,11 +99,7 @@ function direct(
   }
 }
 
-/**
- * Long input: one measure column, one column whose distinct values are the series.
- * Series are ranked by total (not by first appearance) so the legend reads
- * largest-first, and colour follows the entity for the life of the chart.
- */
+/** Long input: one measure column, one column whose distinct values are the series. */
 function pivot(
   spec: ChartSpec,
   columns: Column[],
@@ -185,8 +161,8 @@ function pivot(
 }
 
 /**
- * A time axis is always chronological — a `sort` on a date x would scramble the
- * reading order, so the spec's sort only applies to categorical axes.
+ * A time axis is always chronological — a `sort` on a date x would scramble the reading order,
+ * so the spec's sort only applies to categorical axes.
  */
 function order(
   rows: ResultRow[],
@@ -204,11 +180,7 @@ function order(
   return copy.sort((a, b) => direction * (numeric(a[measureKey]) - numeric(b[measureKey])))
 }
 
-/**
- * `limit` truncates a ranked categorical axis. For part-of-whole charts the tail is
- * folded into "Övrigt" instead of dropped, because a pie that does not sum to the
- * whole is a lie.
- */
+/** `limit` truncates a ranked categorical axis. */
 function applyLimit(
   rows: ResultRow[],
   spec: ChartSpec,

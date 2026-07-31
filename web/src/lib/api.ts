@@ -1,7 +1,4 @@
-/**
- * The single place that talks to the backend. Every call attaches the bearer
- * token from the auth store.
- */
+/** The single place that talks to the backend. */
 
 import type {
   AnswerCard,
@@ -93,8 +90,8 @@ export async function fetchCards(): Promise<AnswerCard[]> {
 }
 
 /**
- * Saving persists the spec plus the tool arguments, not a screenshot, so the card
- * re-runs live against fresh data.
+ * Saving persists the spec plus the tool arguments, not a screenshot, so the card re-runs live
+ * against fresh data.
  */
 export async function saveCard(body: SaveCardRequest): Promise<AnswerCard> {
   return request<AnswerCard>('/api/cards', { method: 'POST', body })
@@ -113,10 +110,7 @@ export async function shareCard(
 
 // --- export -----------------------------------------------------------------
 
-/**
- * CSV download. The backend owns the sv-SE dialect (semicolon separated, comma
- * decimal).
- */
+/** CSV download. */
 export async function downloadCsv(queryId: string, filename: string): Promise<void> {
   const token = getToken()
   const response = await fetch(apiUrl(`/api/export/${encodeURIComponent(queryId)}.csv`), {

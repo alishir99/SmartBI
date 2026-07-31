@@ -1,16 +1,4 @@
-"""The generator is reproducible — the assumption the whole oracle rests on.
-
-`ground_truth.json` is trustworthy only if the CSVs shipped alongside it are the ones that
-produced it. That holds if and only if every random draw in the generator flows from `--seed`
-and nothing else: one stray `random.random()`, one dict iterated in insertion order that
-happens to vary, one timestamp written into an output file, and the facit silently stops
-describing the data. The README states the property; this is what checks it.
-
-Run at a few thousand order lines rather than the shipped ~811 000. What is being tested is
-that no unseeded entropy reaches the output, and an unseeded source shows up at any scale —
-whereas regenerating the full set twice would put a minute into every test run for no extra
-evidence.
-"""
+"""The generator is reproducible — the assumption the whole oracle rests on."""
 
 from __future__ import annotations
 

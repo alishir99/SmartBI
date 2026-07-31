@@ -1,8 +1,4 @@
-/**
- * Turns a streamed tool_call into the short Swedish line shown on a progress chip.
- * Watching the system hit the database is a trust feature, so the chip has to say
- * something specific — not just the tool name.
- */
+/** Turns a streamed tool_call into the short Swedish line shown on a progress chip. */
 
 const TOOL_LABELS: Record<string, string> = {
   get_capabilities: 'get_capabilities',

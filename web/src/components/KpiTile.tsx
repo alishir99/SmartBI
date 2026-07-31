@@ -1,8 +1,4 @@
-/**
- * A KPI tile. The delta never appears without the period it is measured against —
- * a bare "▲ 8,2 %" is the classic dashboard lie, so `formatDelta` always returns the
- * label and this component always renders it.
- */
+/** A KPI tile. */
 
 import type { Kpi } from '../types'
 import { formatDelta, formatKpiValue } from '../lib/format'

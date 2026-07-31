@@ -1,21 +1,4 @@
-"""Tests for the agent turn: the validation gate, the loop's bounds, and its bookkeeping.
-
-The validator is the second line of the grounding defence, and what these tests pin is *when*
-it runs. It used to be gated on `status == "ok"`, a field the model writes itself in its own
-JSON envelope — which made the whole numeric guarantee opt-out from inside the generated text.
-`clarify` is precisely the status a model reaches for when it is unsure what was asked, i.e.
-when its prose is most likely to be improvised, so that gate leaked exactly the wrong answers.
-
-Around that sit three more things the loop has to get right and had no coverage of. The tool
-budget bounds the work but not the conversation, so a model that keeps asking for tools drove
-`while True` forever. The retry that protects the grounding guarantee dropped its `tools`
-declaration and would 400 on a real endpoint, losing the chart to save the prose. And
-`_result_for` decides which cached result a card points at from an id that arrives inside
-generated text — the one place where believing the model would cross a tenant boundary.
-
-Driving the loop needs a stand-in for the LLM and for MCP. Both are small: the loop only ever
-calls `messages.create`, and the MCP surface it touches is three methods.
-"""
+"""Tests for the agent turn: the validation gate, the loop's bounds, and its bookkeeping."""
 
 from __future__ import annotations
 
@@ -71,7 +54,7 @@ class FakeMessages:
         self.script = list(script)
         self.calls = 0
         # `repeat_last` models the case the iteration cap exists for: a model that will keep
-        # asking for tools no matter what it is told. Without a cap the loop never leaves.
+        # asking for tools no matter what it is told.
         self.repeat_last = repeat_last
         self.kwargs: list[dict] = []
 
@@ -149,11 +132,7 @@ def query_turn() -> Response:
 @pytest.mark.parametrize("status", ["ok", "clarify", "cannot_answer", "partial"])
 @pytest.mark.asyncio
 async def test_a_fabricated_figure_is_caught_under_every_status(monkeypatch, status):
-    """The B1 regression: `clarify` must not be a way around the numeric check.
-
-    Both scripted answers quote 9 900 000 kr, which appears nowhere in PAYLOAD. The loop
-    retries once, the retry is just as wrong, and the prose must be dropped.
-    """
+    """The B1 regression: `clarify` must not be a way around the numeric check."""
     lie = f"Försäljningen i mars var 9 900 000,00 kr.\n{envelope(status)}"
     card, client = await run(monkeypatch, [query_turn(), Response(lie), Response(lie)])
 
@@ -188,12 +167,7 @@ async def test_the_retry_is_accepted_when_it_corrects_itself(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_the_retry_still_declares_the_tools(monkeypatch):
-    """B7. By the time the retry fires, `messages` holds the tool_use blocks from the
-    planning phase, and a request carrying tool_use without a `tools` declaration is a 400 on
-    api.anthropic.com. The loop's broad `except` would turn that into a turn-level error —
-    losing a fully grounded chart because the *prose* failed validation, which is the exact
-    inverse of what the retry is for. So the retry has to declare tools like every other call.
-    """
+    """B7."""
     lie = f"Mars gav 9 900 000 kr.\n{envelope('ok')}"
     fixed = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
     card, client = await run(monkeypatch, [query_turn(), Response(lie), Response(fixed)])
@@ -201,8 +175,7 @@ async def test_the_retry_still_declares_the_tools(monkeypatch):
     assert card.status == "ok"
     retry = client.messages.kwargs[-1]
     assert retry["tools"], "the regeneration request dropped the tool declarations"
-    # And the history it carries is exactly why that matters. Blocks arrive as SDK objects
-    # here and as dicts once the loop has appended its own, so read either shape.
+    # And the history it carries is exactly why that matters.
     def block_type(block):
         return block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
 
@@ -214,12 +187,7 @@ async def test_the_retry_still_declares_the_tools(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_model_that_never_stops_asking_for_tools_is_cut_off(monkeypatch):
-    """B6. The tool budget bounds the *work*, not the conversation. Once `calls` reaches
-    MAX_TOOL_CALLS the budget branch reports the exhaustion and moves on without
-    incrementing anything, so a model that keeps emitting tool_use — entirely plausible
-    after eight "budget is spent" errors — drove `while True` forever at one full LLM round
-    trip per pass. MAX_ROUNDS is what actually ends the turn.
-    """
+    """B6."""
     card, client = await run(monkeypatch, [query_turn()], repeat_last=True)
 
     assert client.messages.calls == agent_loop.MAX_ROUNDS
@@ -252,11 +220,8 @@ def test_a_query_id_we_minted_is_honoured():
 
 
 def test_a_query_id_we_never_minted_falls_back_to_our_own():
-    """The security reason this function has a docstring: `query_id` arrives inside the
-    model's JSON envelope, which is generated text. Honouring an id we did not mint is how
-    a card could end up pointing at a cache entry belonging to someone else — so an
-    unrecognised id is not looked up anywhere, it is simply not believed.
-    """
+    """The security reason this function has a docstring: `query_id` arrives inside the model's
+    JSON envelope, which is generated text."""
     ours = FakeResult("q_ours")
     assert agent_loop._result_for({"query_id": "q_someone_elses"}, [ours]) is ours
 
@@ -281,9 +246,8 @@ def test_no_results_means_no_card_source():
 
 @pytest.mark.asyncio
 async def test_usage_is_summed_across_every_call_in_the_turn(monkeypatch):
-    """`audit_turn` has had input_tokens/output_tokens since the first schema and wrote NULL
-    into both, because nothing collected what the SDK returns on every call. A turn costs
-    the sum of its calls, not the last one."""
+    """`audit_turn` has had input_tokens/output_tokens since the first schema and wrote NULL into
+    both, because nothing collected what the SDK returns on every call."""
     truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
     usage, _ = await usage_of(monkeypatch, [
         Response(uses=[Block(type="tool_use", id="tu_1", name="query_sales", input={})],
@@ -305,8 +269,7 @@ async def test_usage_is_summed_across_every_call_in_the_turn(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_is_reported_even_when_the_turn_fails(monkeypatch):
-    """A turn that dies partway still spent real money. A cost cap fed only by successful
-    turns is a cap with a hole in it."""
+    """A turn that dies partway still spent real money."""
     usage, events = await usage_of(monkeypatch, [])   # empty script → the fake raises
 
     assert any(type(e).__name__ == "ErrorEvent" for e in events)
@@ -315,8 +278,8 @@ async def test_usage_is_reported_even_when_the_turn_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_survives_a_provider_that_reports_none(monkeypatch):
-    """Not every Anthropic-compatible endpoint returns a usage block, and a missing one must
-    not take the turn down with it."""
+    """Not every Anthropic-compatible endpoint returns a usage block, and a missing one must not
+    take the turn down with it."""
     truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
     usage, _ = await usage_of(monkeypatch, [query_turn(), Response(truth)])
 
@@ -326,9 +289,7 @@ async def test_usage_survives_a_provider_that_reports_none(monkeypatch):
 
 def test_the_cached_prefix_is_only_sent_to_anthropic(monkeypatch):
     """`cache_control` attaches to content blocks, so `system=SYSTEM` as a bare string was
-    structurally ready for caching and never requested it. Turning it on is provider-
-    specific: DeepSeek's compatible endpoint does its own automatic caching and has no use
-    for the hint, and sending an untested field to a third party buys nothing."""
+    structurally ready for caching and never requested it."""
     monkeypatch.setattr(agent_loop.settings, "llm_base_url", "https://api.deepseek.com/anthropic")
     assert isinstance(agent_loop._system(), str)
 
@@ -341,11 +302,7 @@ def test_the_cached_prefix_is_only_sent_to_anthropic(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_tool_data_means_nothing_to_validate_against(monkeypatch):
-    """With no rows the validator has no reference set, so the turn must not be blocked.
-
-    build_card downgrades a resultless `ok` to `cannot_answer` on its own; that is the
-    behaviour being pinned here, not a validation outcome.
-    """
+    """With no rows the validator has no reference set, so the turn must not be blocked."""
     card, client = await run(monkeypatch, [
         Response(f"Jag kan inte svara på det utan att veta vilket år du menar.\n"
                  f"{envelope('clarify')}")])

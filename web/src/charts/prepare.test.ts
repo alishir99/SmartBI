@@ -1,8 +1,4 @@
-/**
- * The chart contract (§8) in test form. The model is allowed to emit a spec and nothing
- * else, so these tests pin down what the *frontend* decides regardless of what it is
- * handed: order, limit, series ranking, colour assignment and axis scale.
- */
+/** The chart contract (§8) in test form. */
 
 import { describe, expect, it } from 'vitest'
 import type { ChartSpec, Column, ResultRow } from '../types'
@@ -201,8 +197,8 @@ describe('pie slices', () => {
   const shares = (pairs: Array<[string, number]>) => rows(pairs, 'subcategory')
 
   it('gives every slice its own colour', () => {
-    // The bug this pins: colour was matched against `series`, which for a pie holds the
-    // single measure and never a dimension value — so every wedge came out --series-1.
+    // The bug this pins: colour was matched against `series`, which for a pie holds the single
+    // measure and never a dimension value — so every wedge came out --series-1.
     const prepared = prepareChart(
       pie(),
       [SUBCATEGORY, NET],

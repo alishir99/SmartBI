@@ -1,15 +1,4 @@
-"""The MCP server — the only path to the data.
-
-Both consumers call these four tools: the LLM agent, and the deterministic dashboard
-endpoint. Nothing in the system reads the warehouse any other way, which is what makes MCP
-this application's actual data API rather than a side-car bolted on for the model's benefit
-(D10). It also means the chat and the dashboard cannot disagree about a number.
-
-Transport is streamable HTTP rather than stdio (D4) so this runs as its own container with
-`ingress: internal`, scales independently, and can be exercised with curl during a demo.
-
-Run: python -m mcp_server.server
-"""
+"""The MCP server — the only path to the data."""
 
 from __future__ import annotations
 
@@ -60,20 +49,15 @@ mcp = FastMCP(
     instructions=INSTRUCTIONS,
     host=settings.mcp_host,
     port=settings.mcp_port,
-    # Stateless: every call carries its own tenant headers, so no session affinity is needed
-    # and the service scales horizontally without sticky routing.
+    # Stateless: every call carries its own tenant headers, so no session affinity is needed and
+    # the service scales horizontally without sticky routing.
     stateless_http=True,
     json_response=True,
 )
 
 
 def _spec_error(exc: SpecError) -> ToolError:
-    """Turn a validation failure into a message the model can act on.
-
-    Echoing the allowed values back matters: a model told only "invalid dimension" retries
-    with another guess, while one told the actual enum picks a legal value or gives up
-    honestly. Most `cannot_answer` responses that land well start here.
-    """
+    """Turn a validation failure into a message the model can act on."""
     return ToolError(f"Ogiltig förfrågan: {exc}")
 
 
@@ -165,8 +149,8 @@ def _time_range(time_range: TimeRange | None) -> dict:
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(_request: Request) -> JSONResponse:
-    """Liveness plus a real readiness signal: can we reach the warehouse and does it hold
-    data? A health check that only proves the process is running is worth very little."""
+    """Liveness plus a real readiness signal: can we reach the warehouse and does it hold data? A
+    health check that only proves the process is running is worth very little."""
     try:
         coverage_from, coverage_to = await db.coverage()
     except Exception as exc:  # noqa: BLE001 — the endpoint's job is to report, not to raise
@@ -182,8 +166,7 @@ async def health(_request: Request) -> JSONResponse:
 def main() -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    # Before the pool, before the port. `internal_token` is the whole access control on
-    # this surface, so serving with the published default is worse than not serving.
+    # Before the pool, before the port.
     settings.assert_secrets_rotated()
 
     async def run() -> None:

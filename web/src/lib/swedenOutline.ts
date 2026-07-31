@@ -1,18 +1,4 @@
-/**
- * The coastline of Sweden, as one SVG path.
- *
- * Generated from Natural Earth 1:10m admin-0 boundaries, which are public domain — no
- * permission required and no attribution obligation. The geometry is real, simplified with
- * Douglas–Peucker to the resolution this map actually renders at, and baked in as path data
- * so the app fetches nothing at runtime and works offline.
- *
- * The projection here is identical to `project()` in `geo.ts` — the same cosine correction
- * on longitude, fitted to the same box. That is what lets the county bubbles land in the
- * right place on the coastline instead of merely near it. Changing one without the other
- * will silently pull them apart, so both derive their bounds from {@link OUTLINE_BOUNDS}.
- *
- * Regenerate with scratchpad/gen_outline.py if the viewBox changes.
- */
+/** The coastline of Sweden, as one SVG path. */
 
 /** Projected bounds the path was fitted to; `geo.ts` projects points with these. */
 export const OUTLINE_BOUNDS = {

@@ -1,19 +1,4 @@
-/**
- * Sales per county as a proportional-symbol map.
- *
- * The bar chart next to this one is still the better instrument for reading a ranking, and
- * the Geografi page says so. What the map adds is the thing a ranked list cannot show:
- * *where* the demand sits. Three counties carrying most of the revenue in a narrow southern
- * band is a distribution fact, and it is invisible in a sorted list of names.
- *
- * Positions come from `lib/geo.ts` — mean store coordinates out of the seeded data, not a
- * traced outline. There are no county borders here because the repo has no boundary
- * geometry, and inventing one would put a drawn approximation of a real country beside
- * measured figures.
- *
- * Values are read straight from the result rows the card already carries, so this renders
- * from the same numbers as the bar chart and cannot drift from them.
- */
+/** Sales per county as a proportional-symbol map. */
 
 import { useId, useMemo, useState } from 'react'
 import { findRegion, project, radiusFor, REGION_POINTS } from '../lib/geo'
@@ -23,10 +8,7 @@ import { formatMoneyWithUnit, moneyScale, formatPercent } from '../lib/format'
 const VIEW_W = 460
 const VIEW_H = 620
 const MIN_R = 5
-// Capped lower than it could be. Stockholm carries roughly a third of the revenue, and at a
-// larger maximum its circle simply covers Uppsala, Västmanland and Södermanland — the
-// neighbours whose position is the interesting part. Overlap is inherent to a bubble map;
-// this keeps it to translucent overlap rather than occlusion.
+// Capped lower than it could be.
 const MAX_R = 36
 /** Labels are placed for the biggest counties only, and never within this of another. */
 const LABEL_MIN_GAP = 30
@@ -64,9 +46,8 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
 
   const projection = useMemo(() => project(), [])
 
-  // Greedy label placement: walk the counties largest-value first and keep a label only if
-  // it clears every label already placed. Deterministic, and it favours the counties a
-  // reader is most likely to be looking for.
+  // Greedy label placement: walk the counties largest-value first and keep a label only if it
+  // clears every label already placed.
   const labelled = useMemo(() => {
     const placed: { labelX: number; labelY: number }[] = []
     return [...points]
@@ -87,8 +68,8 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
   const scale = useMemo(() => moneyScale(Math.max(...data.map((d) => d.value), 0)), [data])
   const activeEntry = points.find((entry) => entry.region === active) ?? null
 
-  // Counties with no rows at all still get a faint marker: "we sell nothing here" is a
-  // finding, and an absent dot reads as missing data rather than as a zero.
+  // Counties with no rows at all still get a faint marker: "we sell nothing here" is a finding,
+  // and an absent dot reads as missing data rather than as a zero.
   const covered = new Set(points.map((entry) => entry.point.region))
   const empties = REGION_POINTS.filter((point) => !covered.has(point.region))
 
@@ -149,11 +130,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
               onFocus={() => setActive(entry.region)}
               onBlur={() => setActive(null)}
               tabIndex={0}
-              // Not a button: there is no activation here and never was. Focusing a county
-              // reveals its readout, which is the whole interaction — `role="button"`
-              // promised an Enter/Space action that nothing implements, and a promise the
-              // keyboard cannot keep is worse than no role at all. `img` matches what this
-              // actually is: a labelled mark carrying its own value.
+              // Not a button: there is no activation here and never was.
               role="img"
               aria-label={`${entry.region}: ${formatMoneyWithUnit(entry.value, scale)}`}
               className="cursor-default outline-none"

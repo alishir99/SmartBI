@@ -1,7 +1,4 @@
-/**
- * One icon family: 20×20 viewBox, 1.5px stroke, round caps and joins, currentColor.
- * Inline SVG rather than emoji or a raster set, so icons theme and scale cleanly.
- */
+/** One icon family: 20×20 viewBox, 1.5px stroke, round caps and joins, currentColor. */
 
 type IconProps = {
   className?: string

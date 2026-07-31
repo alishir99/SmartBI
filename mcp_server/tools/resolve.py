@@ -1,20 +1,4 @@
-"""resolve_entities — free text to canonical IDs.
-
-This closes one of the two main hallucination entry points (§5.4). A user types "hörlurar",
-"sthlm", "trådlösa lurar", "vårt bästa märke" — none of which are column values. Without a
-resolution step the model must either guess an ID or invent a filter, and both produce
-confident nonsense.
-
-The contract that matters: this tool returns *candidates with scores*, never a single silent
-guess. When nothing clears the threshold it returns an empty list and a hint, and the agent
-is instructed to ask a clarifying question rather than proceed.
-
-Retrieval is lexical (pg_trgm over names and curated synonyms) fused with semantic (pgvector
-cosine) when embeddings have been generated. Lexical alone handles Swedish compounds and the
-common abbreviations because the seeder writes synonyms like "sthlm" for Stockholms län; the
-vector half earns its place on paraphrases such as "trådlösa lurar" that share no trigrams
-with "Hörlurar". `meta.retrieval` says which ran, so a demo never overclaims.
-"""
+"""resolve_entities — free text to canonical IDs."""
 
 from __future__ import annotations
 
@@ -23,12 +7,10 @@ from ..tenant import TenantContext
 
 ALL_KINDS = ("product", "category", "store", "brand", "region")
 
-# Trigram similarity floor. Postgres' default of 0.3 is too strict for Swedish compound
-# words — "lurar" against "Hörlurar" scores below it — and too loose a floor returns noise.
+# Trigram similarity floor.
 LEXICAL_THRESHOLD = 0.18
 
-# Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper and is not
-# worth tuning on a dataset this size.
+# Reciprocal Rank Fusion constant.
 RRF_K = 60
 
 LEXICAL_SQL = """
@@ -103,11 +85,7 @@ async def resolve_entities(tenant: TenantContext, text: str, kinds: list[str] | 
 
 
 def _fuse(lexical, semantic) -> list[dict]:
-    """Reciprocal Rank Fusion over the two ranked lists.
-
-    RRF rather than score averaging because trigram similarity and cosine similarity are not
-    on a comparable scale; only their orderings are meaningful.
-    """
+    """Reciprocal Rank Fusion over the two ranked lists."""
     fused: dict[tuple[str, int], dict] = {}
 
     for source, records in (("lexical", lexical), ("semantic", semantic)):
@@ -131,13 +109,7 @@ def _fuse(lexical, semantic) -> list[dict]:
 
 
 async def _embed(text: str):
-    """Embed the query, or return None so retrieval degrades to lexical only.
-
-    The embedding model is an optional dependency: it adds roughly 2 GB to the image, so the
-    default compose profile ships without it and resolution runs on trigrams and synonyms.
-    Returning None here rather than raising is what makes that a graceful degradation instead
-    of a broken tool.
-    """
+    """Embed the query, or return None so retrieval degrades to lexical only."""
     try:
         from ..embeddings import embed_query
     except ImportError:

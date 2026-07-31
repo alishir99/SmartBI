@@ -1,7 +1,4 @@
-/**
- * Page heading. Period, scope and "exkl. moms" belong on every page, not buried in a
- * card — a supplier reading a number has to know what it covers without asking.
- */
+/** Page heading. */
 
 import type { ReactNode } from 'react'
 import type { Provenance } from '../types'

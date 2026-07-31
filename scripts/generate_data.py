@@ -1,18 +1,4 @@
-"""Seeded synthetic Swedish retail data generator (IMPLEMENTATION_PLAN.md §5.1).
-
-The point of generating rather than borrowing is that this script *knows the truth*. It
-emits both the CSVs that get COPYed into Postgres and a ground_truth.json computed
-independently with pandas over the same frames — which is what turns "does the LLM
-hallucinate?" into an automated pass/fail rather than an opinion (§13.2).
-
-Deterministic: the same --seed always produces byte-identical output.
-
-    python scripts/generate_data.py --seed 42
-
-Realistic mess is deliberate, not accidental — returns, cash purchases with no customer,
-a discontinued product, a store that opens mid-period, drifting prices, and one
-subcategory thin enough that the k-anonymity guard actually fires in the demo.
-"""
+"""Seeded synthetic Swedish retail data generator (IMPLEMENTATION_PLAN.md §5.1)."""
 
 from __future__ import annotations
 
@@ -41,7 +27,7 @@ from reference_data import (
     THIN_SUBCATEGORY,
 )
 
-# Proportions of the generated world. Chosen to be non-trivial but to COPY in seconds.
+# Proportions of the generated world.
 N_PHYSICAL_STORES = 60
 N_CUSTOMERS = 40_000
 DEFAULT_LINES = 800_000
@@ -83,8 +69,8 @@ def build_suppliers_and_brands() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def build_categories() -> pd.DataFrame:
     rows = []
-    # Level-1 rows first, so the single COPY in seed.py satisfies dim_category's
-    # self-referencing foreign key as it goes.
+    # Level-1 rows first, so the single COPY in seed.py satisfies dim_category's self-
+    # referencing foreign key as it goes.
     for top_name in CATEGORIES:
         rows.append({"category_id": len(rows) + 1, "parent_id": None,
                      "name": top_name, "level": 1})
@@ -112,8 +98,8 @@ def build_products(rng: np.random.Generator, brands: pd.DataFrame,
             brand_name = competing[i % len(competing)]
             suffix = MODEL_SUFFIXES[(i * 5 + len(sub_name)) % len(MODEL_SUFFIXES)]
             model = f"{brand_name[0]}{100 + (i * 13) % 900}"
-            # Log-uniform across the band so cheap products dominate, then round to a
-            # Swedish retail price ending in 9.
+            # Log-uniform across the band so cheap products dominate, then round to a Swedish
+            # retail price ending in 9.
             price = float(np.exp(rng.uniform(np.log(price_min), np.log(price_max))))
             price = max(price_min, round(price / 10) * 10 - 1)
 
@@ -136,9 +122,9 @@ def build_products(rng: np.random.Generator, brands: pd.DataFrame,
 
     products = pd.DataFrame(rows)
 
-    # Exactly the mess §5.1 promises: a handful of products stop being sold partway
-    # through, one of them belonging to the demo supplier so the truncated series is
-    # visible on the dashboard we actually show.
+    # Exactly the mess §5.1 promises: a handful of products stop being sold partway through, one
+    # of them belonging to the demo supplier so the truncated series is visible on the dashboard
+    # we actually show.
     demo_brands = SUPPLIERS[DEMO_SUPPLIER]
     demo_brand_ids = [brand_id_by_name[b] for b in demo_brands]
     demo_candidates = products.index[products["brand_id"].isin(demo_brand_ids)].to_numpy()
@@ -181,9 +167,7 @@ def build_stores(rng: np.random.Generator, start: date) -> pd.DataFrame:
                 "opened_date": start - pd.Timedelta(days=int(rng.integers(400, 4000))),
             })
 
-    # One online pseudo-store per län. Online orders are attributed to the ship-to
-    # region, which is what keeps "sales per region" answerable across both channels
-    # instead of parking all e-commerce in a region called "Online".
+    # One online pseudo-store per län.
     for region in region_names:
         rows.append({
             "store_id": len(rows) + 1,
@@ -200,8 +184,8 @@ def build_stores(rng: np.random.Generator, start: date) -> pd.DataFrame:
     stores = pd.DataFrame(rows)
     stores["opened_date"] = pd.to_datetime(stores["opened_date"]).dt.date
 
-    # One physical store opens mid-period, so at least one series legitimately starts
-    # late and a naive year-over-year comparison on it would be wrong.
+    # One physical store opens mid-period, so at least one series legitimately starts late and a
+    # naive year-over-year comparison on it would be wrong.
     physical = stores.index[stores["channel"] == "fysisk"].to_numpy()
     late = int(rng.choice(physical))
     stores.loc[late, "opened_date"] = start + pd.Timedelta(days=400)
@@ -290,9 +274,9 @@ def _brand_region_affinity(rng: np.random.Generator, brands: pd.DataFrame) -> np
     n_regions = len(REGIONS)
     affinity = rng.lognormal(mean=0.0, sigma=0.22, size=(len(brands) + 1, n_regions))
 
-    # A deliberate, checkable fact for the demo: the supplier we log in as is
-    # over-indexed in Stockholm, so "vilka produkter säljer bäst i Stockholm?" has a
-    # real answer rather than just mirroring the national ranking.
+    # A deliberate, checkable fact for the demo: the supplier we log in as is over-indexed in
+    # Stockholm, so "vilka produkter säljer bäst i Stockholm?" has a real answer rather than
+    # just mirroring the national ranking.
     region_names = list(REGIONS)
     sthlm = region_names.index("Stockholms län")
     gbg = region_names.index("Västra Götalands län")
@@ -333,19 +317,16 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
         pull = rng.lognormal(0.0, 0.3, size=len(ids))
         store_pick[(region_index[region], channel)] = (ids, pull / pull.sum())
 
-    # Per-product share of total volume. Lognormal gives the long tail real ranges have:
-    # a few hero products, many slow movers.
+    # Per-product share of total volume.
     popularity = rng.lognormal(mean=0.0, sigma=1.0, size=len(products))
 
-    # Price elasticity. Without this, a 25 000 kr TV sells as many units as a 99 kr cable
-    # and the average order value comes out several times what Swedish retail actually
-    # looks like. Cheap goods have to dominate unit volume for the numbers to be credible.
+    # Price elasticity.
     price = products["list_price_sek"].to_numpy(dtype=float)
     popularity *= (price / np.median(price)) ** PRICE_ELASTICITY
 
-    # The supplier the demo logs in as is a real contender in its own home category, so
-    # the market-share tile reads "#2 av 6" rather than "#5 av 6". A dashboard where the
-    # logged-in brand is an also-ran makes for a poor five-minute demo.
+    # The supplier the demo logs in as is a real contender in its own home category, so the
+    # market-share tile reads "#2 av 6" rather than "#5 av 6". A dashboard where the logged-in
+    # brand is an also-ran makes for a poor five-minute demo.
     demo_brand_ids = set(brands.loc[brands["name"].isin(SUPPLIERS[DEMO_SUPPLIER]), "brand_id"])
     is_demo_home = np.array([
         p.brand_id in demo_brand_ids and top_name_of_sub[p.category_id] == DEMO_HOME_CATEGORY
@@ -393,8 +374,8 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
                     ids, pull = store_pick[(int(r), channel)]
                     store_ids[sel] = rng.choice(ids, size=k, p=pull)
 
-        # A store cannot sell before it opened; move those lines to a sibling store in
-        # the same region rather than dropping them, so regional totals stay intact.
+        # A store cannot sell before it opened; move those lines to a sibling store in the same
+        # region rather than dropping them, so regional totals stay intact.
         for store_id in np.unique(store_ids):
             opened = store_opened[store_id]
             too_early = (store_ids == store_id) & (day_dates[day_pos] < np.datetime64(opened))
@@ -418,14 +399,6 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
         unit_price = product.list_price_sek * price_factor
 
         # Discounts: heavy during campaigns, sporadic otherwise.
-        #
-        # `campaign_id` is a nullable Int64, and `.to_numpy()` on that gives float64 with NaN
-        # for the missing days. `nan != None` is True, so the campaign branch fired on every
-        # single row: 100 % of order lines carried a discount at a flat 22.5 %, on campaign
-        # days and ordinary days alike, and "how did Black Week compare?" had no answer in the
-        # data. Ask pandas about missingness instead of comparing an array to None — and note
-        # that the E711 suppression that used to sit on this line silenced the one check that
-        # would have caught it.
         campaign_day = dates["campaign_id"].notna().to_numpy()[day_pos]
         discount_pct = np.where(
             campaign_day,
@@ -450,8 +423,7 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
 
     facts = pd.concat(frames, ignore_index=True)
 
-    # Order matters: baskets are formed first, then a customer is attached to the whole
-    # basket. Attaching customers per line instead would make every line its own order.
+    # Order matters: baskets are formed first, then a customer is attached to the whole basket.
     facts = _append_returns(rng, facts, dates)
     facts = _assign_orders(rng, facts)
     facts = _attach_customers(rng, facts, stores, customers)
@@ -462,17 +434,12 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
 
 def _attach_customers(rng: np.random.Generator, facts: pd.DataFrame, stores: pd.DataFrame,
                       customers: pd.DataFrame) -> pd.DataFrame:
-    """One customer per order, shopping in the store's own region.
-
-    A small share of orders are anonymous cash purchases and carry no customer at all —
-    those NULLs are the reason every downstream count has to be explicit about whether it
-    counts customers or transactions.
-    """
+    """One customer per order, shopping in the store's own region."""
     region_of_store = dict(zip(stores["store_id"], stores["region"], strict=True))
     order_id = facts["order_id"].to_numpy()
 
-    # order_id is non-decreasing here (factorised over rows already sorted into baskets),
-    # so the first row of each order is where the value changes.
+    # order_id is non-decreasing here (factorised over rows already sorted into baskets), so the
+    # first row of each order is where the value changes.
     first = np.flatnonzero(np.diff(order_id, prepend=order_id[0] - 1) != 0)
     lines_per_order = np.diff(np.append(first, len(order_id)))
     order_region = pd.Series(facts["store_id"].to_numpy()[first]).map(region_of_store)
@@ -504,11 +471,7 @@ def _append_returns(rng: np.random.Generator, facts: pd.DataFrame,
     shifted = position.loc[mirror["date_id"]].to_numpy() + rng.integers(3, 21, size=len(mirror))
 
     # A return whose lag falls past the end of coverage has not happened yet, so it is dropped
-    # rather than clamped onto the final day. Clamping piled 252 returns onto 2026-06-30
-    # against a median of 14 — an 18x spike that gave every `last_7_days` answer and every
-    # `previous_period` comparison anchored at coverage-end a fabricated ~15 % decline. The
-    # sale still stands; only its as-yet-unmade return is left out, which is what a warehouse
-    # loaded up to today would actually contain.
+    # rather than clamped onto the final day.
     within_coverage = shifted < len(date_ids)
     mirror = mirror[within_coverage]
     if mirror.empty:
@@ -524,8 +487,8 @@ def _append_returns(rng: np.random.Generator, facts: pd.DataFrame,
 
 def _assign_orders(rng: np.random.Generator, facts: pd.DataFrame) -> pd.DataFrame:
     """Chunk the lines sold at one store on one day into baskets of 1–3 lines."""
-    # Lines arrive grouped by product (one frame per product), so shuffle before chunking
-    # or every basket would contain the same product repeatedly.
+    # Lines arrive grouped by product (one frame per product), so shuffle before chunking or
+    # every basket would contain the same product repeatedly.
     facts = facts.iloc[rng.permutation(len(facts))].reset_index(drop=True)
     facts = facts.sort_values(["date_id", "store_id"], kind="stable").reset_index(drop=True)
 
@@ -545,12 +508,7 @@ def _assign_orders(rng: np.random.Generator, facts: pd.DataFrame) -> pd.DataFram
 def build_ground_truth(facts: pd.DataFrame, products: pd.DataFrame, brands: pd.DataFrame,
                        suppliers: pd.DataFrame, categories: pd.DataFrame,
                        stores: pd.DataFrame, dates: pd.DataFrame) -> dict:
-    """Independently recompute the answers the eval suite will hold the system to.
-
-    This deliberately does not reuse anything the MCP server does. It joins the emitted
-    frames with pandas and aggregates — a second implementation, which is the only kind
-    of oracle worth having.
-    """
+    """Independently recompute the answers the eval suite will hold the system to."""
     df = (facts
           .merge(dates[["date_id", "date", "month", "year"]], on="date_id")
           .merge(products[["product_id", "brand_id", "category_id", "name"]], on="product_id")
@@ -597,8 +555,8 @@ def build_ground_truth(facts: pd.DataFrame, products: pd.DataFrame, brands: pd.D
             ],
         }
 
-    # Market share per brand × subcategory × month, plus the peer count the k-anonymity
-    # guard tests against.
+    # Market share per brand × subcategory × month, plus the peer count the k-anonymity guard
+    # tests against.
     by_brand = (df.groupby(["month_start", "category_id", "name_brand"])["net_amount_sek"]
                 .sum().round(2).reset_index())
     totals = (by_brand.groupby(["month_start", "category_id"])

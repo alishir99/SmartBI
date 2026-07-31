@@ -1,12 +1,4 @@
-"""Tests for the numeric validator — §9.2, the second line of the grounding defence.
-
-The first line is structural: the model never sees the values the chart draws. But the
-narrative *is* generated text, so it can still contain a number that came from nowhere. This
-is the component that catches that, and these tests are the evidence that it does.
-
-Each test states the failure it prevents, because "the validator has tests" is worth much less
-than "the validator provably rejects a plausible fabricated total".
-"""
+"""Tests for the numeric validator — §9.2, the second line of the grounding defence."""
 
 from __future__ import annotations
 
@@ -53,8 +45,8 @@ def test_sum_of_the_rows_is_an_allowed_derivation():
 
 
 def test_magnitude_rounding_is_accepted():
-    """"3,45 Mkr" is a rounding of 3 450 900,50 — a human would write it that way, and
-    rejecting it would make the validator unusable in practice."""
+    """"3,45 Mkr" is a rounding of 3 450 900,50 — a human would write it that way, and rejecting it
+    would make the validator unusable in practice."""
     check = validate_narrative("Mars landade på 3,45 Mkr.", [MONTHLY])
     assert check.ok, check.violations
 
@@ -135,8 +127,8 @@ def test_a_number_from_any_result_in_the_turn_is_accepted():
 # ---------------------------------------------------------------- preview discipline
 
 def test_summing_a_preview_as_if_it_were_everything_is_rejected():
-    """The subtle failure mode: the model gets 25 of 1 200 rows and adds them up, presenting
-    the partial sum as a total. The sum of the preview is not a value in the full result."""
+    """The subtle failure mode: the model gets 25 of 1 200 rows and adds them up, presenting the
+    partial sum as a total."""
     preview = result(
         [{"month": "2026-01-01", "net_sales_sek": 1_000.00},
          {"month": "2026-02-01", "net_sales_sek": 2_000.00}],
@@ -181,13 +173,7 @@ TOP_LIST = [
 
 
 def test_model_numbers_in_product_names_are_not_numeric_claims():
-    """The regression that suppressed every top-list answer.
-
-    Swedish SKUs carry model numbers, so a top-N answer is mostly digits that are part of
-    names. The validator read them as figures and demanded they appear in the result — "191
-    St" was the worst, parsing the "St" of "Studio" as the unit `st`. The prose was hidden on
-    exactly the question suppliers ask most.
-    """
+    """The regression that suppressed every top-list answer."""
     check = validate_narrative(
         "Nordström TV N100 Pro sålde för 8 824 779,51 kr, följd av Vidar Hörlurar V191 "
         "Studio på 4 251 150,76 kr.",
@@ -219,10 +205,7 @@ REGION_COLUMNS = [
 
 
 def test_each_accepted_figure_names_the_query_that_licensed_it():
-    """The B8 fix. `validate_narrative` has always checked the prose against every result the
-    turn produced, while the card carried one `query_id` — so a number grounded in result A
-    shipped beside a chart of result B and a source chip describing B. The mapping existed
-    inside the check and was thrown away at the last step."""
+    """The B8 fix."""
     months = named("q_months", [
         {"month": "2026-03-01", "net_sales_sek": 3_450_900.50}])
     regions = named("q_regions", [
@@ -240,11 +223,10 @@ def test_each_accepted_figure_names_the_query_that_licensed_it():
     ]
 
 
-
 def test_a_figure_several_queries_could_explain_is_attributed_to_the_first():
-    """Ambiguity is resolved by order rather than left unattributed: the turn ran the queries
-    in sequence, and the first one that accounts for the figure is the one the model was
-    looking at when it wrote the sentence."""
+    """Ambiguity is resolved by order rather than left unattributed: the turn ran the queries in
+    sequence, and the first one that accounts for the figure is the one the model was looking at
+    when it wrote the sentence."""
     first = named("q_first", [{"month": "2026-01-01", "net_sales_sek": 1_000.00}])
     second = named("q_second", [{"month": "2026-02-01", "net_sales_sek": 1_000.00}])
 
@@ -255,10 +237,7 @@ def test_a_figure_several_queries_could_explain_is_attributed_to_the_first():
 
 
 def test_two_results_sharing_a_query_id_do_not_erase_each_other():
-    """Ids are unique in production, and this must not *depend* on it. Keying the candidate
-    sets by id would make one result silently overwrite the other, and a perfectly grounded
-    number would be reported as a fabrication — a validator failing closed on a bookkeeping
-    detail is worse than one that never looked."""
+    """Ids are unique in production, and this must not *depend* on it."""
     a = named("q_same", [{"month": "2026-01-01", "net_sales_sek": 1_111.00}])
     b = named("q_same", [{"month": "2026-02-01", "net_sales_sek": 2_222.00}],
               row_count=1)
@@ -297,13 +276,7 @@ WITH_DELTA = result(
     "Försäljningen steg 8,2 % mot i fjol.",
 ])
 def test_prose_may_not_reverse_the_direction_of_a_real_change(prose):
-    """B3, and the most consequential claim in any sales answer.
-
-    Candidates used to be stored mirrored across zero — the comment said "the sign lives in
-    the verb", which was true and was exactly the problem: nothing read the verb. A delta of
-    -8.2 licensed the literal "8,2", so a report of an 8 % *rise* against data showing an 8 %
-    *fall* passed as grounded. The number was right and the sentence was the opposite of true.
-    """
+    """B3, and the most consequential claim in any sales answer."""
     check = validate_narrative(prose, [WITH_DELTA])
     assert not check.ok
     assert "andra hållet" in check.violations[0]
@@ -319,16 +292,14 @@ def test_prose_may_not_reverse_the_direction_of_a_real_change(prose):
     "Försäljningen var -8,2 % mot i fjol.",
 ])
 def test_prose_that_states_the_direction_correctly_still_passes(prose):
-    """The half that matters more: a tightened validator which rejects true statements is
-    worse than the loose one it replaced."""
+    """The half that matters more: a tightened validator which rejects true statements is worse
+    than the loose one it replaced."""
     check = validate_narrative(prose, [WITH_DELTA])
     assert check.ok, check.violations
 
 
 def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
-    """B4's compounding factor. `implicit_scale_allowed` exists so an unsuffixed money figure
-    can be read as millions — applied to a `%` literal it let "Marknadsandelen var 2,89 %"
-    match a revenue of 2 890 100. A percentage is written at the scale it means."""
+    """B4's compounding factor."""
     revenue = result(
         [{"region": "Stockholms län", "net_sales_sek": 2_890_100.00}],
         columns=[{"key": "region", "type": "text", "label": "Län"},
@@ -340,8 +311,7 @@ def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
 
 
 def test_a_share_of_the_total_is_still_a_legitimate_percentage():
-    """The gate is on the *class*, not on percentages as such. A share is the derivation that
-    legitimately turns kronor into a proportion, and it has to survive."""
+    """The gate is on the *class*, not on percentages as such."""
     two = result(
         [{"region": "A", "net_sales_sek": 750.0},
          {"region": "B", "net_sales_sek": 250.0}],
@@ -360,9 +330,8 @@ TOP_THREE = result(
 
 
 def test_naming_the_wrong_winner_is_caught():
-    """The claim that carries no digits at all, and was therefore invisible to every check in
-    this file. "Den bäst säljande produkten är X" is among the most common questions a
-    supplier asks, and the model answers it from a 25-row sample of up to 500."""
+    """The claim that carries no digits at all, and was therefore invisible to every check in this
+    file."""
     check = validate_narrative(
         "Den bäst säljande produkten är Vidar Hörlurar V191 Studio.", [TOP_THREE])
     assert not check.ok
@@ -377,9 +346,7 @@ def test_naming_the_right_winner_passes():
 
 
 def test_a_superlative_about_an_entity_not_in_the_result_stays_silent():
-    """Conservative on purpose: a false rejection here suppresses a correct answer. If the
-    name is not one the result carries, there is nothing to check it against and the guard
-    says nothing rather than guessing."""
+    """Conservative on purpose: a false rejection here suppresses a correct answer."""
     assert validate_narrative(
         "Den bäst säljande produkten är Okänd Produkt.", [TOP_THREE]).ok
 

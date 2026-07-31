@@ -1,12 +1,4 @@
-"""Tests for the deterministic dashboard KPI assembly (§2, requirement 1).
-
-No LLM is involved on this path, so the tiles are pure arithmetic over tool output and can
-be pinned exactly. The load-bearing case is the category-share denominator: query_market_share
-returns one row per *brand × subcategory*, so a supplier with several brands in the same
-subcategory gets that subcategory's total back once per brand. Summing the column naively
-counts the denominator twice while own sales are counted once, which silently understates the
-headline share — the failure mode this file exists to prevent regressing.
-"""
+"""Tests for the deterministic dashboard KPI assembly (§2, requirement 1)."""
 
 from __future__ import annotations
 

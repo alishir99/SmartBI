@@ -1,19 +1,4 @@
-"""The semantic layer: what may be measured, sliced and filtered.
-
-This registry is the whole reason the design is not text-to-SQL (§6.1). Every identifier
-that reaches the database originates here, in code, and every *value* reaches it as a bound
-parameter. There is no path by which model-authored text becomes SQL.
-
-Two physical sources answer the same logical questions:
-
-  rollup — v_sales_daily, a security-barrier view over mv_sales_daily. Fast, and already
-           scoped to the caller's supplier.
-  fact   — fact_sales_line, protected by RLS. Slower, but carries store, customer and
-           order grain that the rollup has aggregated away.
-
-The compiler picks the rollup whenever the request is expressible there, and says which it
-used in meta.source. Callers never choose.
-"""
+"""The semantic layer: what may be measured, sliced and filtered."""
 
 from __future__ import annotations
 
@@ -25,8 +10,7 @@ FACT = "fact"
 # The date column each source exposes; dimension expressions interpolate it as {date}.
 DATE_EXPR = {ROLLUP: "s.date", FACT: "d.date"}
 
-# Join fragments, keyed by a short name. A query emits only the joins its selected
-# dimensions, measures and filters actually ask for.
+# Join fragments, keyed by a short name.
 JOINS: dict[str, dict[str, str]] = {
     ROLLUP: {
         "product": "JOIN dim_product p ON p.product_id = s.product_id",
@@ -72,9 +56,7 @@ class Measure:
     expr: dict[str, str]
     joins: dict[str, tuple[str, ...]] = field(default_factory=dict)
     description: str = ""
-    # Whether the rows of this measure sum to a meaningful whole. Ratios do not: the shares
-    # of a total average price add up to 100 % and mean nothing. percent_of_total refuses to
-    # emit a column for a non-additive measure rather than emit a plausible wrong one.
+    # Whether the rows of this measure sum to a meaningful whole.
     additive: bool = True
 
     def requires(self, source: str) -> tuple[str, ...]:
@@ -120,27 +102,20 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
               expr={ROLLUP: "s.channel", FACT: "st.channel"},
               joins={FACT: ("store",)}),
 
-    # Calendar attributes, not periods. A period dimension cuts the window into consecutive
-    # slices; these fold it — every July in the window lands in the same group. That is what
-    # "vilken månad säljer bäst?" and "hur ser en normalvecka ut?" actually ask, and it is
-    # why they are separate keys rather than a mode on `month`.
+    # Calendar attributes, not periods.
     Dimension("month_of_year", "Månad på året", "number",
               expr={ROLLUP: "EXTRACT(MONTH FROM {date})::int",
                     FACT: "EXTRACT(MONTH FROM {date})::int"}),
-    # ISODOW, so 1 = måndag and the natural numeric sort is the order a Swedish reader
-    # expects. dim_date.weekday is 0-based; deriving from the date instead keeps one
-    # definition for both sources rather than two that silently differ by one.
+    # ISODOW, so 1 = måndag and the natural numeric sort is the order a Swedish reader expects.
     Dimension("weekday", "Veckodag", "number",
               expr={ROLLUP: "EXTRACT(ISODOW FROM {date})::int",
                     FACT: "EXTRACT(ISODOW FROM {date})::int"}),
-    # Fact-only: the rollup carries the date but not the calendar's judgement of it, and
-    # hard-coding the red days into SQL here would be a second source of truth for them.
-    # Returned as words rather than a boolean because the answer is prose, not a flag.
+    # Fact-only: the rollup carries the date but not the calendar's judgement of it, and hard-
+    # coding the red days into SQL here would be a second source of truth for them.
     Dimension("is_holiday", "Dagtyp", "text",
               expr={FACT: "CASE WHEN d.is_holiday THEN 'Röd dag' ELSE 'Vardag' END"}),
-    # NULL means "no campaign ran that day", which makes the ordinary days a group of their
-    # own — the comparison the question is usually after. There is no dim_campaign, so the
-    # id is all there is to return.
+    # NULL means "no campaign ran that day", which makes the ordinary days a group of their own
+    # — the comparison the question is usually after.
     Dimension("campaign_id", "Kampanj", "number",
               expr={FACT: "d.campaign_id"}),
 
@@ -178,9 +153,7 @@ MEASURES: dict[str, Measure] = {m.key: m for m in [
                   FACT: "100 * SUM(f.discount_amount_sek) / NULLIF(SUM(f.gross_amount_sek), 0)"},
             description="Rabatt som andel av bruttoförsäljning.", additive=False),
 
-    # Deliberately fact-only. The rollup stores n_orders per (date, product, region,
-    # channel); summing that across products would count a two-product basket twice.
-    # A measure that is only correct at one grain does not belong in the rollup path.
+    # Deliberately fact-only.
     Measure("orders", "Antal köp", "st",
             expr={FACT: "COUNT(DISTINCT f.order_id)"},
             description="Antal unika köp (ordrar). Räknas alltid på radnivå för att "
@@ -188,8 +161,7 @@ MEASURES: dict[str, Measure] = {m.key: m for m in [
 ]}
 
 
-# Filters the caller may express. Values are always bound parameters; the column each one
-# targets is fixed here and can never come from the request.
+# Filters the caller may express.
 FILTER_FIELDS: dict[str, dict[str, str]] = {
     "product_ids": {"label": "Produkter", "type": "int[]"},
     "brand_ids": {"label": "Varumärken", "type": "int[]"},
@@ -203,16 +175,13 @@ FILTER_FIELDS: dict[str, dict[str, str]] = {
 
 CHANNELS = ["fysisk", "online"]
 
-# Relative windows the caller may name instead of giving explicit dates. Resolved against
-# the last date present in the data, not against today — the demo dataset ends before the
-# current date and silently returning an empty period would be worse than useless.
+# Relative windows the caller may name instead of giving explicit dates.
 RELATIVE_RANGES = [
     "last_7_days", "last_30_days", "last_90_days", "last_6_months", "last_12_months",
     "last_month", "this_month", "this_year", "ytd", "all_time",
 ]
 
-# A tool result never returns more than this many rows regardless of `limit`; the chart
-# path pages through the API instead. Keeps one careless request from pulling the fact
-# table into memory.
+# A tool result never returns more than this many rows regardless of `limit`; the chart path
+# pages through the API instead.
 MAX_ROWS = 20_000
 DEFAULT_LIMIT = 500

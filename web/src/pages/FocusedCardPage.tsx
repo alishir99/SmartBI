@@ -1,10 +1,7 @@
 /**
- * Produkter and Geografi are the same page with a different lens: take the dashboard
- * card that is already grouped by that dimension, give it the whole width, and offer
- * follow-up questions that hand off to the chat.
- *
- * They deliberately do not call a second endpoint. Anything beyond the default cut is
- * a question, and questions belong in the chat rail — that is the product argument.
+ * Produkter and Geografi are the same page with a different lens: take the dashboard card that
+ * is already grouped by that dimension, give it the whole width, and offer follow-up questions
+ * that hand off to the chat.
  */
 
 import type { ReactNode } from 'react'

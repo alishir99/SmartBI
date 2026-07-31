@@ -1,9 +1,4 @@
-/**
- * Login. Two demo accounts are listed on purpose: tenant isolation is a claim best
- * *shown*, and switching from Anna to Erik makes the same question return a different
- * company's numbers. The list is seeded data, not a credential store — it appears only
- * when the app runs against the demo seed.
- */
+/** Login. */
 
 import { useState, type FormEvent } from 'react'
 import { login } from '../lib/api'

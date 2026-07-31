@@ -1,10 +1,4 @@
-"""Database access for the MCP server.
-
-Every query runs inside `tenant_connection`, which opens a transaction and sets
-`app.supplier_id` on it. That setting is what the RLS policies and the barrier views
-compare against, so a query issued outside this helper sees nothing at all — the failure
-mode of forgetting to scope is an empty result, not a leak.
-"""
+"""Database access for the MCP server."""
 
 from __future__ import annotations
 
@@ -44,12 +38,7 @@ def pool() -> asyncpg.Pool:
 
 @asynccontextmanager
 async def tenant_connection(supplier_id: int) -> AsyncIterator[asyncpg.Connection]:
-    """A transaction scoped to one supplier.
-
-    `set_config(..., is_local => true)` rather than `SET LOCAL` because SET does not accept
-    bind parameters — and building that statement by string concatenation would put a
-    caller-supplied value into SQL, which is the one thing this codebase does not do.
-    """
+    """A transaction scoped to one supplier."""
     async with pool().acquire() as connection:
         async with connection.transaction():
             await connection.execute(
@@ -60,16 +49,7 @@ async def tenant_connection(supplier_id: int) -> AsyncIterator[asyncpg.Connectio
 
 
 async def coverage() -> tuple[date, date]:
-    """First and last date the warehouse covers, cached for the process lifetime.
-
-    Relative periods resolve against this rather than against today's date (§compiler),
-    so it has to be known before any query is compiled.
-
-    Read from dim_date, not from the fact table: the calendar dimension carries no tenant
-    data and no RLS policy, whereas an unscoped MIN/MAX over fact_sales_line would be
-    filtered to zero rows by RLS and report an empty warehouse. The generator emits
-    dim_date for exactly the period it generates facts for, so the two agree.
-    """
+    """First and last date the warehouse covers, cached for the process lifetime."""
     global _coverage
     if _coverage is None:
         async with pool().acquire() as connection:

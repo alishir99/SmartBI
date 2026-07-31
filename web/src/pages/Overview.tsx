@@ -1,8 +1,4 @@
-/**
- * Översikt — the deterministic dashboard. No model is involved in producing it: the
- * backend runs the same MCP tools server-side, so the numbers here and the numbers the
- * chat returns are the same numbers, with the same provenance.
- */
+/** Översikt — the deterministic dashboard. */
 
 import { useDashboard } from '../lib/queries'
 import { usePeriod } from '../lib/usePeriod'

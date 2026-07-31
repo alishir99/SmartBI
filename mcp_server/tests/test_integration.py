@@ -1,20 +1,4 @@
-"""Integration tests — the assertions that need a real, seeded Postgres.
-
-Everything else in this suite runs on a laptop with no database: the compiler is tested by
-parsing the SQL it emits, the validator by feeding it rows. That leaves two claims the whole
-design rests on untested, because neither is provable without the server actually running them:
-
-1. **RLS stops a cross-tenant read.** `db/sql/tests/isolation.sql` proves it at the SQL level.
-   These tests prove it one layer up, through the tools the model actually calls — which is
-   where a leak would have to happen, and where a barrier view that compiles but does not
-   filter would still look fine.
-2. **The tools reproduce `ground_truth.json`.** The generator writes the totals it intended;
-   the star schema, the materialised rollups and the semantic layer are four transformations
-   away from it. Agreement between the two ends is what says none of them lost a krona.
-
-They skip themselves when nothing answers on the configured DSN, so `pytest -q` stays a
-clean-clone command. CI runs them explicitly against its Postgres service with `-m integration`.
-"""
+"""Integration tests — the assertions that need a real, seeded Postgres."""
 
 from __future__ import annotations
 
@@ -40,13 +24,13 @@ GROUND_TRUTH = Path(__file__).resolve().parents[2] / "data" / "generated" / "gro
 TOLERANCE_SEK = 1.0
 
 
-# How far to probe for seeded suppliers. Comfortably above the eight the generator writes.
+# How far to probe for seeded suppliers.
 _MAX_SUPPLIER_ID = 32
 
 
 def _reachable() -> bool:
-    """A one-second socket probe, so a clean clone skips promptly instead of waiting out a
-    connect timeout once per test."""
+    """A one-second socket probe, so a clean clone skips promptly instead of waiting out a connect
+    timeout once per test."""
     try:
         with socket.create_connection(
                 (db.settings.postgres_host, db.settings.postgres_port), timeout=1.0):
@@ -57,11 +41,7 @@ def _reachable() -> bool:
 
 @pytest.fixture
 async def pool():
-    """A pool against the configured DSN, or a skip if the database is not there.
-
-    Function-scoped on purpose: pytest-asyncio gives each test its own event loop, and an
-    asyncpg pool cannot be shared across loops. Opening one per test costs milliseconds.
-    """
+    """A pool against the configured DSN, or a skip if the database is not there."""
     if not _reachable():
         pytest.skip(f"ingen databas på {db.settings.postgres_host}:{db.settings.postgres_port}")
     try:
@@ -84,14 +64,7 @@ def truth() -> dict:
 
 @pytest.fixture
 async def suppliers(pool) -> dict[str, int]:
-    """Supplier name → id.
-
-    Discovered by probing scoped connections rather than by reading `dim_supplier` in one
-    query, because `dim_supplier` is itself RLS-protected: an unscoped SELECT returns zero
-    rows. That constraint is the point — the map has to be built the way the application
-    reads, and each probe doubles as an assertion that a scoped read returns exactly the
-    caller's own row.
-    """
+    """Supplier name → id."""
     found: dict[str, int] = {}
     for supplier_id in range(1, _MAX_SUPPLIER_ID + 1):
         async with db.tenant_connection(supplier_id) as connection:
@@ -221,22 +194,12 @@ async def test_a_thin_slice_is_suppressed_rather_than_answered(pool, truth, supp
 
 # Compared with an absolute floor rather than a relative one: these are sums over hundreds of
 # thousands of NUMERIC(12,2) rows aggregated in a different order, so the last öre can differ.
-# A genuinely half-refreshed rollup is off by whole days, not by rounding.
 RECONCILE_TOLERANCE_SEK = 1.0
 
 
 @pytest.fixture
 async def owner():
-    """A connection as the *owner* role, which the rest of this module deliberately never uses.
-
-    Reconciliation is an operator concern, not an application one, and the first attempt at
-    these tests proved it by failing with `permission denied for materialized view
-    mv_category_daily`. That error is the design working: `app_readonly` may reach the category
-    rollup only through a barrier view, and `fact_sales_line` only under an RLS predicate. So
-    the application role structurally *cannot* compare the two objects — it can never see both
-    sides of the comparison at once, which is exactly the property the privacy model is built
-    on and exactly why this check needs a different connection.
-    """
+    """A connection as the *owner* role, which the rest of this module deliberately never uses."""
     if not _reachable():
         pytest.skip(f"ingen databas på {db.settings.postgres_host}:{db.settings.postgres_port}")
     dsn = (f"postgresql://{os.getenv('POSTGRES_USER', 'solvigo')}:"
@@ -252,10 +215,7 @@ async def owner():
     finally:
         await connection.close()
 
-# The rollup's grouping keys. Checked one at a time rather than as one grand total, because a
-# grand total that matches can still hide two errors that cancel — and the fact-table side has
-# to re-join dim_date and dim_store to reach these keys, which is precisely the work the
-# rollup exists to avoid and precisely where it could have gone wrong.
+# The rollup's grouping keys.
 _ROLLUP_KEYS = [
     ("supplier_id", "f.supplier_id"),
     ("date", "d.date"),
@@ -266,15 +226,8 @@ _ROLLUP_KEYS = [
 
 
 async def test_the_rollup_reproduces_the_fact_table_at_every_grain(owner):
-    """Nothing anywhere asserted that `mv_sales_daily` agrees with `fact_sales_line`.
-
-    That is the load-bearing gap under the project's central product claim. `choose_source` is
-    free to answer the same question from either object — the rollup normally, the fact table
-    when a dimension or measure is not available in it — so "chat and the dashboard cannot
-    disagree" holds only if the two objects hold the same numbers. A half-refreshed
-    materialised view breaks that silently: every query still succeeds, and the answers are
-    merely wrong by however much the refresh missed.
-    """
+    """Nothing anywhere asserted that `mv_sales_daily` agrees with `fact_sales_line`. That is the
+    load-bearing gap under the project's central product claim."""
     for rollup_key, fact_key in _ROLLUP_KEYS:
             rows = await owner.fetch(f"""
                 WITH rollup AS (
@@ -310,10 +263,8 @@ async def test_the_rollup_reproduces_the_fact_table_at_every_grain(owner):
 
 
 async def test_the_category_rollup_reproduces_the_fact_table(owner):
-    """`mv_category_daily` is the privacy boundary rather than a convenience:
-    `query_market_share` may read nothing else. A drift here moves every share and every rank
-    the product reports about a market the caller cannot otherwise see, and there is no second
-    source to notice it."""
+    """`mv_category_daily` is the privacy boundary rather than a convenience: `query_market_share`
+    may read nothing else."""
     rows = await owner.fetch("""
         WITH rollup AS (
             SELECT category_id AS k, SUM(total_net_sek) AS net, SUM(total_qty) AS qty
@@ -341,10 +292,7 @@ async def test_the_category_rollup_reproduces_the_fact_table(owner):
 
 async def test_the_brand_rollup_agrees_with_its_own_rows(owner):
     """`mv_brand_monthly` computes category_net_sek, share_pct, rank and n_brands in window
-    functions at refresh time. Those are the only numbers in the schema that are *derived*
-    rather than summed, and n_brands is what the k-anonymity threshold is tested against — so
-    a wrong count is a wrong suppression decision, which is a privacy outcome rather than an
-    accuracy one. The window has to still agree with the rows it was computed over."""
+    functions at refresh time."""
     rows = await owner.fetch("""
         SELECT month, category_id, region,
                MAX(category_net_sek) AS carried,
@@ -368,27 +316,15 @@ async def test_the_brand_rollup_agrees_with_its_own_rows(owner):
 
 async def test_the_two_sources_answer_the_same_question_identically(
         monkeypatch, pool, truth, suppliers):
-    """The "chat and the dashboard cannot disagree" claim, tested where it could break.
-
-    The three tests above compare the *objects*. This one compares the *answers*, through the
-    compiler, with every join, filter and GROUP BY the tool actually emits — which is the
-    layer a divergence would have to cross to reach a user. Forcing the source is the only way
-    to ask the question at all: `choose_source` is deterministic, so in normal operation one
-    of these two paths is simply never exercised for a given spec.
-    """
+    """The "chat and the dashboard cannot disagree" claim, tested where it could break."""
     from mcp_server.semantic import compiler
 
     spec = {
         "measures": ["net_sales_sek", "units", "gross_sales_sek", "discount_sek"],
         "dimensions": ["month", "region"],
         "time_range": {"from": truth["coverage"]["from"], "to": truth["coverage"]["to"]},
-        # Deliberately left at DEFAULT_LIMIT, which this spec exceeds: 24 months x 22 regions
-        # is 528 groups against a limit of 500. That combination is what caught B2 — with the
-        # compiler ordering by the leading date dimension alone, the LIMIT cut an arbitrary
-        # slice of the trailing month, and "arbitrary" differed between the two physical
-        # sources, so the two returned *different regions* for June 2026. The ordering is now
-        # total, so a biting LIMIT keeps the same rows in the same order whichever object
-        # answered. Raising the limit here would make the test pass without asking that.
+        # Deliberately left at DEFAULT_LIMIT, which this spec exceeds: 24 months x 22 regions is
+        # 528 groups against a limit of 500.
     }
 
     answers = {}
@@ -422,15 +358,7 @@ async def test_the_two_sources_answer_the_same_question_identically(
 # ------------------------------------------------- the post-aggregate stage really runs
 
 async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers):
-    """The gap that let a broken feature stay green for a whole remediation pass.
-
-    `compare_to` over a product dimension compiled to valid-looking SQL and failed in
-    Postgres every time: the join used `IS NOT DISTINCT FROM`, which cannot be hash- or
-    merge-joined, and FULL OUTER JOIN has no other strategy — so the planner rejected the
-    query with FeatureNotSupportedError. test_compiler.py parses the SQL with sqlglot and
-    never executes it, and no integration test paired compare_to with anything but a date.
-    Between them, two green suites and a feature that could not run.
-    """
+    """The gap that let a broken feature stay green for a whole remediation pass."""
     payload = await query_sales(tenant(suppliers[truth["demo_supplier"]]), {
         "measures": ["net_sales_sek"],
         "dimensions": ["product"],
@@ -441,8 +369,8 @@ async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers
     })
 
     assert payload["rows"], "no rows came back at all"
-    # Sorting on the derived column is the whole point: the biggest decliner is typically
-    # mid-sized, so sorting by current value never surfaces it.
+    # Sorting on the derived column is the whole point: the biggest decliner is typically mid-
+    # sized, so sorting by current value never surfaces it.
     deltas = [row["net_sales_sek_delta_pct"] for row in payload["rows"]
               if row.get("net_sales_sek_delta_pct") is not None]
     assert deltas, "every delta came back NULL — the comparison join matched nothing"
@@ -450,12 +378,7 @@ async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers
 
 
 async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
-    """percent_of_total, HAVING and partitioned top-N against the real planner.
-
-    Each closes a question the coverage-gap table lists as unanswerable, and each is a shape
-    the compiler had never emitted before — which is exactly when "it parses" and "it runs"
-    are most likely to diverge.
-    """
+    """percent_of_total, HAVING and partitioned top-N against the real planner."""
     scope = tenant(suppliers[truth["demo_supplier"]])
     window = {"relative": "last_12_months"}
 
@@ -465,7 +388,7 @@ async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
     percentages = [row["net_sales_sek_pct_of_total"] for row in share["rows"]]
     assert percentages, "percent_of_total produced no column"
     # The reason this measure exists: the model was being asked to divide, which the prompt
-    # forbids. A total that does not reach 100 means it is still being asked to.
+    # forbids.
     assert abs(sum(percentages) - 100.0) < 0.5, percentages
 
     filtered = await query_sales(scope, {
@@ -482,14 +405,13 @@ async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
         counts[row["region"]] = counts.get(row["region"], 0) + 1
     assert counts, "partitioned top-N produced no rows"
     assert max(counts.values()) <= 2, counts
-    # And more than one region survives, which is the actual complaint: a flat GROUP BY with
-    # a global LIMIT returned ten Stockholm rows and nothing else.
+    # And more than one region survives, which is the actual complaint: a flat GROUP BY with a
+    # global LIMIT returned ten Stockholm rows and nothing else.
     assert len(counts) > 1, "only one region came back — the partition did not apply"
 
 
 async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers):
-    """`dim_date` already carried all four; they were simply never exposed. Registry-only
-    changes are the easiest kind to get subtly wrong, because nothing fails to compile."""
+    """`dim_date` already carried all four; they were simply never exposed."""
     scope = tenant(suppliers[truth["demo_supplier"]])
     window = {"relative": "last_12_months"}
 
@@ -504,9 +426,9 @@ async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers
         "measures": ["net_sales_sek"], "dimensions": ["is_holiday"], "time_range": window})
     assert {str(row["is_holiday"]) for row in holidays["rows"]} == {"Vardag", "Röd dag"}
 
-    # campaign_id is only worth exposing because the generator bug that discounted every
-    # single line is fixed: campaign days now discount far harder than ordinary ones, so
-    # "how did Black Week compare?" has an answer in the data for the first time.
+    # campaign_id is only worth exposing because the generator bug that discounted every single
+    # line is fixed: campaign days now discount far harder than ordinary ones, so "how did Black
+    # Week compare?" has an answer in the data for the first time.
     campaigns = await query_sales(scope, {
         "measures": ["discount_rate"], "dimensions": ["campaign_id"],
         "time_range": window})

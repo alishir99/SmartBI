@@ -1,9 +1,4 @@
-"""POST /api/chat — one agent turn, streamed as SSE.
-
-SSE rather than WebSocket (D12): the traffic is one-directional, it proxies through anything,
-and streaming the *tool calls* is a trust feature — the user watches the system go to the
-database instead of waiting on a spinner and hoping.
-"""
+"""POST /api/chat — one agent turn, streamed as SSE."""
 
 from __future__ import annotations
 
@@ -32,12 +27,8 @@ async def chat(body: ChatRequest,
                mcp: McpClient = Depends(get_mcp),
                cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     # Both refusals happen before the response starts, so they are a plain 429 with a Swedish
-    # `detail` — which the frontend renders verbatim (web/src/lib/api.ts) — rather than an
-    # error frame inside a 200 stream that a client has to know to look for.
-    #
-    # Two limits, because they bound different things. The turn cap bounds *requests* per
-    # user, which is what stops a loop; the budget bounds *money* per tenant, which the turn
-    # cap cannot, since one question can read 200 k tokens of context and the next one 3 k.
+    # `detail` — which the frontend renders verbatim (web/src/lib/api.ts) — rather than an error
+    # frame inside a 200 stream that a client has to know to look for.
     ratelimit.enforce_chat_turn(tenant.user_id)
     await ratelimit.enforce_tenant_budget(tenant.supplier_id)
 
@@ -71,9 +62,7 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
             cache=cache,
         ):
             if isinstance(event, UsageEvent):
-                # Server-side bookkeeping only. The browser has no use for token counts, and
-                # putting them on the wire would make cost a client-visible detail of every
-                # answer — so this one event is consumed rather than forwarded.
+                # Server-side bookkeeping only.
                 usage = event
                 continue
 
@@ -99,8 +88,8 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                 row_counts={"queries": len(tool_calls),
                             "query_id": card.query_id if card else None,
                             # Cache hits are the difference between ~$0.17 and ~$0.04 a
-                            # question, so the split is worth keeping next to the totals
-                            # rather than folding into input_tokens and losing it.
+                            # question, so the split is worth keeping next to the totals rather
+                            # than folding into input_tokens and losing it.
                             **({"llm_calls": usage.llm_calls,
                                 "cache_read_tokens": usage.cache_read_tokens,
                                 "cache_write_tokens": usage.cache_write_tokens}

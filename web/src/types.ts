@@ -1,7 +1,4 @@
-/**
- * Types transcribed from docs/API_CONTRACT.md. This file is the frozen interface —
- * do not add fields the backend does not send.
- */
+/** Types transcribed from docs/API_CONTRACT.md. */
 
 export type Role = 'supplier_viewer' | 'supplier_admin' | 'retail_analyst' | 'system_admin'
 

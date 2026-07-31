@@ -1,10 +1,4 @@
-"""Compile a typed QuerySpec into parameterised SQL.
-
-The contract this file exists to keep: **no string from the request ever becomes SQL.**
-Identifiers are looked up in the registry (model.py) and fail closed if unknown; values are
-appended to a parameter list and referenced as $1, $2, … So the blast radius of a malicious
-or confused caller is a validation error, not a query.
-"""
+"""Compile a typed QuerySpec into parameterised SQL."""
 
 from __future__ import annotations
 
@@ -32,9 +26,7 @@ class SpecError(ValueError):
     """The request cannot be expressed. Always the caller's fault, never a 500."""
 
 
-# What `having.op` may say, and what that becomes in SQL. The operator that reaches the
-# query is this dict's *value* — a constant from this file — never the caller's string,
-# even where the two happen to spell the same thing.
+# What `having.op` may say, and what that becomes in SQL.
 HAVING_OPS = {">": ">", ">=": ">=", "<": "<", "<=": "<=", "=": "=", "!=": "<>"}
 
 
@@ -60,12 +52,7 @@ class CompiledQuery:
 
 
 def resolve_time_range(spec: dict, coverage: tuple[date, date]) -> tuple[date, date]:
-    """Turn either explicit dates or a named window into a concrete [from, to].
-
-    Relative windows anchor on the last date in the data rather than on today. The
-    alternative — anchoring on today — makes "senaste 30 dagarna" return nothing at all
-    once the dataset stops being fresh, which is a confusing way to fail.
-    """
+    """Turn either explicit dates or a named window into a concrete [from, to]."""
     coverage_from, coverage_to = coverage
     time_range = spec.get("time_range") or {}
 
@@ -102,8 +89,8 @@ def resolve_time_range(spec: dict, coverage: tuple[date, date]) -> tuple[date, d
     start = time_range.get("from")
     end = time_range.get("to")
     if not start or not end:
-        # No period given at all: the last full 12 months is the least surprising default,
-        # and meta.time_range reports it so the answer can never be silently undated.
+        # No period given at all: the last full 12 months is the least surprising default, and
+        # meta.time_range reports it so the answer can never be silently undated.
         return (max(coverage_from, _months_back(coverage_to, 12) + timedelta(days=1)),
                 coverage_to)
 
@@ -141,11 +128,7 @@ def _same_day_last_year(value: date) -> date:
 
 
 def choose_source(dimensions: list[str], measures: list[str], filters: dict) -> str:
-    """Rollup unless something genuinely needs the fact table.
-
-    Deciding this in code rather than letting the caller pick is what keeps the two
-    consumers — dashboard and agent — from disagreeing about a number.
-    """
+    """Rollup unless something genuinely needs the fact table."""
     for key in dimensions:
         if key not in DIMENSIONS:
             raise SpecError(f"okänd dimension '{key}'; tillåtna: {sorted(DIMENSIONS)}")
@@ -205,9 +188,8 @@ def _where(source: str, filters: dict, window: tuple[date, date],
 
     if ids := filters.get("category_ids"):
         joins.update(("product",))
-        # Two-level hierarchy: a level-1 id matches every product in its children, a
-        # level-2 id matches directly. Expressed as a subquery so the caller never has to
-        # know which level they named.
+        # Two-level hierarchy: a level-1 id matches every product in its children, a level-2 id
+        # matches directly.
         placeholder = params.add(list(ids))
         clauses.append(
             f"p.category_id IN (SELECT category_id FROM dim_category "
@@ -231,23 +213,14 @@ def _where(source: str, filters: dict, window: tuple[date, date],
             joins.add("store")
         clauses.append(f"{column} = ANY({params.add(list(channels))}::text[])")
 
-    # Note what is *absent*: any supplier predicate. Scope is not applied here because it
-    # is not this layer's job — v_sales_daily is a barrier view and fact_sales_line has an
-    # RLS policy, both keyed on the connection's app.supplier_id. A bug in this function
-    # therefore cannot widen the tenant scope; the worst it can do is return nothing.
+    # Note what is *absent*: any supplier predicate.
     return clauses
 
 
 def _select_block(source: str, measures: list[str], dimensions: list[str],
                   window: tuple[date, date], filters: dict, params: Params,
                   date_ordinals: bool = False) -> str:
-    """One aggregated SELECT over the chosen source.
-
-    `date_ordinals` adds a hidden position-within-the-window column for every date
-    dimension. Comparing two periods cannot join on the date value itself — this
-    July and last July are different dates — so the compare branch joins on this
-    ordinal instead. The column never reaches the caller; only the join uses it.
-    """
+    """One aggregated SELECT over the chosen source."""
     joins: set[str] = set(BASE_JOINS[source])
     date_expr = DATE_EXPR[source]
 
@@ -260,8 +233,6 @@ def _select_block(source: str, measures: list[str], dimensions: list[str],
         group_parts.append(expr)
         if date_ordinals and dimension.type == "date":
             # Window functions run after GROUP BY, so this ranks the grouped periods.
-            # DENSE_RANK rather than ROW_NUMBER: with a second dimension present the
-            # same period repeats across rows and must keep one shared position.
             select_parts.append(f"DENSE_RANK() OVER (ORDER BY {expr}) AS {key}__ord")
 
     for key in measures:
@@ -286,21 +257,15 @@ def _select_block(source: str, measures: list[str], dimensions: list[str],
 
 
 def _positive_int(value, name: str) -> int:
-    # bool is an int in Python, so `limit=True` would otherwise pass as "one row". A caller
-    # who sends a boolean has made a mistake and should hear about it.
+    # bool is an int in Python, so `limit=True` would otherwise pass as "one row". A caller who
+    # sends a boolean has made a mistake and should hear about it.
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise SpecError(f"{name} måste vara ett positivt heltal")
     return value
 
 
 def _order_key(order_by: dict, available: list[str]) -> tuple[str, str]:
-    """Resolve one sort key against the columns the query actually returns.
-
-    `field` is what lets a caller sort by a column that no registry entry names — the
-    derived `_delta_pct`, `_compare` and `_pct_of_total` columns. Validating against the
-    emitted column list rather than against MEASURES/DIMENSIONS covers those *and* keeps the
-    old rejections: a measure that was not selected is not in the list either.
-    """
+    """Resolve one sort key against the columns the query actually returns."""
     key = order_by.get("field") or order_by.get("measure") or order_by.get("dimension")
     if key not in available:
         raise SpecError(f"kan inte sortera på '{key}'; tillgängliga kolumner: {available}")
@@ -311,23 +276,7 @@ def _order_key(order_by: dict, available: list[str]) -> tuple[str, str]:
 def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[str],
                     columns: list[dict], params: Params,
                     compare: bool) -> tuple[str, list[dict], list[str] | None]:
-    """Share-of-total, aggregate filtering and per-partition top-N, applied after grouping.
-
-    All three need the grouped result to already exist — a share needs the total, a rank
-    within a county needs that county's other rows, and filtering on SUM(...) cannot happen
-    before the SUM. Wrapping the finished query rather than extending the aggregate SELECT is
-    what makes this compose with the compare branch for free: a delta column is just another
-    column to sort, filter or rank on.
-
-    Order inside the wrapper is deliberate and visible in the SQL: WHERE runs before window
-    functions in the same SELECT, so `having` prunes rows *before* the share denominator and
-    the ranking see them — "andelen av det jag frågade efter", not of some larger set. LIMIT
-    runs after both, so a truncating limit never distorts a percentage.
-
-    Returns the wrapped SQL, the extended column list, and — when top-N is in play — the
-    presentation order the caller must use, since any other order interleaves the partitions
-    and makes a per-county top list unreadable.
-    """
+    """Share-of-total, aggregate filtering and per-partition top-N, applied after grouping."""
     percent_of_total = spec.get("percent_of_total")
     having = spec.get("having")
     top_n_per = spec.get("top_n_per")
@@ -346,8 +295,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
                 "kvoter vars andelar inte betyder något")
         for key in share_of:
             measure = MEASURES[key]
-            # 100.0, not 100: SUM(qty) is a bigint and integer division would silently
-            # truncate every share to a whole percent.
+            # 100.0, not 100: SUM(qty) is a bigint and integer division would silently truncate
+            # every share to a whole percent.
             select_parts.append(
                 f"ROUND((100.0 * {key} / NULLIF(SUM({key}) OVER (), 0))::numeric, 1) "
                 f"AS {key}_pct_of_total")
@@ -359,8 +308,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
     where = ""
     if having:
         # Only aggregates: filtering a dimension is what `filters` is for, and doing it here
-        # would run after the grouping instead of before it — same rows, more work, and a
-        # second way to express one thing.
+        # would run after the grouping instead of before it — same rows, more work, and a second
+        # way to express one thing.
         aggregate_keys = set(measures)
         if compare:
             aggregate_keys |= {f"{key}_compare" for key in measures}
@@ -377,8 +326,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
         value = having.get("value")
         if isinstance(value, bool) or not isinstance(value, int | float | Decimal):
             raise SpecError("having.value måste vara ett tal")
-        # Both sides cast to numeric: the measures are a mix of numeric and bigint, and
-        # Decimal is the only Python type asyncpg encodes as numeric without complaint.
+        # Both sides cast to numeric: the measures are a mix of numeric and bigint, and Decimal
+        # is the only Python type asyncpg encodes as numeric without complaint.
         where = (f"\n WHERE {key}::numeric {operator} "
                  f"{params.add(Decimal(str(value)))}::numeric")
 
@@ -394,8 +343,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
             rank_key, direction = _order_key(order_by, output_keys)
             if rank_key not in base_keys:
                 # A window function cannot see another window function's alias at the same
-                # level, and ranking by a share is in any case the same order as ranking by
-                # the measure it divides.
+                # level, and ranking by a share is in any case the same order as ranking by the
+                # measure it divides.
                 raise SpecError(f"kan inte rangordna top_n_per på '{rank_key}'; "
                                 "använd måttet självt")
         else:
@@ -406,9 +355,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
 
     sql = f"SELECT {', '.join(select_parts)}\n  FROM (\n{sql}\n) q{where}"
     if top_n_per:
-        # A second level, because a window function is not available to the WHERE of the
-        # SELECT that computes it. Projecting the keys explicitly is also what keeps __rank
-        # out of the table view and the CSV export.
+        # A second level, because a window function is not available to the WHERE of the SELECT
+        # that computes it.
         sql = (f"SELECT {', '.join(output_keys)}\n  FROM (\n{sql}\n) w"
                f"\n WHERE __rank <= {params.add(rows)}")
     return sql, columns, order
@@ -440,17 +388,13 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                                  filters, params, date_ordinals=bool(date_dimensions))
 
         if dimensions:
-            # FULL OUTER so a group present in only one period still appears. Dates join
-            # on position, not value: cur.month and prev.month are disjoint by construction.
-            # Everything else joins on plain `=` — Postgres cannot hash- or merge-join
-            # `IS NOT DISTINCT FROM`, and FULL OUTER has no other strategy, so it fails at
-            # run time (integration-tested; the compiler tests only parse).
+            # FULL OUTER so a group present in only one period still appears.
             conditions, select_parts = [], []
             for key in dimensions:
                 if key in date_dimensions:
                     conditions.append(f"c.{key}__ord = pv.{key}__ord")
-                    # Both real dates are returned: the caller needs to label the
-                    # comparison series with the period it actually came from.
+                    # Both real dates are returned: the caller needs to label the comparison
+                    # series with the period it actually came from.
                     select_parts.append(f"c.{key}")
                     select_parts.append(f"pv.{key} AS {key}_compare")
                 else:
@@ -465,11 +409,7 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             select_parts += [
                 f"c.{key}",
                 f"pv.{key} AS {key}_compare",
-                # The delta is computed here rather than by the model. Arithmetic the
-                # database can do is arithmetic the model cannot get wrong.
-                # 100.0 rather than 100: units and orders are bigints, and integer
-                # division truncated every one of their deltas to a whole percent
-                # before ROUND ever saw a decimal.
+                # The delta is computed here rather than by the model.
                 f"ROUND((100.0 * (c.{key} - pv.{key}) / "
                 f"NULLIF(ABS(pv.{key}), 0))::numeric, 1) AS {key}_delta_pct",
             ]
@@ -490,22 +430,11 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         keys = [f"{key} {direction} NULLS LAST"]
     elif dimensions:
         # Every grouped query gets a total order, and it has to be *total* rather than merely
-        # present. With no ORDER BY at all the LIMIT below cut an arbitrary slice, so the model
-        # saw an arbitrary 25 rows while propose_chart sorted the full set — prose and chart
-        # could name different winners and both pass validation. A partial order is the same
-        # bug wearing a fix: ordering by the leading date alone still leaves the trailing
-        # period's rows in whatever sequence the plan produced, and "whatever the plan
-        # produced" differs between the rollup and the fact table for the same question.
-        #
-        # A leading date dimension still sorts ascending, because a time series reads forward
-        # and the chart expects it. Everything else sorts by the first measure descending,
-        # which is what "top N" means and what a LIMIT should therefore keep. The remaining
-        # dimensions are appended as tie-breakers so the order is deterministic even when the
-        # measure ties — otherwise two runs of the same query can still disagree.
+        # present.
         leading = dimensions[0]
         if DIMENSIONS[leading].type == "date":
-            # NULLS LAST matters under compare: a period present only in the comparison
-            # window has no current date, and should trail rather than lead the series.
+            # NULLS LAST matters under compare: a period present only in the comparison window
+            # has no current date, and should trail rather than lead the series.
             keys = [f"{leading} ASC NULLS LAST"]
         else:
             keys = [f"{measures[0]} DESC NULLS LAST"]
@@ -516,8 +445,7 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
     if keys:
         sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {', '.join(keys)}"
 
-    # `or DEFAULT_LIMIT` would quietly turn limit=0 into 500. A caller asking for zero rows
-    # has made a mistake and should hear about it.
+    # `or DEFAULT_LIMIT` would quietly turn limit=0 into 500.
     limit = spec.get("limit")
     limit = DEFAULT_LIMIT if limit is None else _positive_int(limit, "limit")
     sql += f"\n LIMIT {min(limit, MAX_ROWS)}"

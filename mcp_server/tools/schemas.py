@@ -1,14 +1,4 @@
-"""Tool input schemas.
-
-Written as explicit `Literal`s rather than generated from the registry, because these are
-what the model sees and a reader of this file should be able to see them too. A drift test
-(tests/test_schemas.py) fails the build if they stop matching model.py, so the duplication
-cannot rot.
-
-Every model sets `extra="forbid"`, which becomes `additionalProperties: false` in the JSON
-schema — so an invented parameter is a validation error rather than a silently ignored
-field. Notably absent from all of them: `supplier_id`.
-"""
+"""Tool input schemas."""
 
 from __future__ import annotations
 
@@ -80,11 +70,8 @@ class OrderBy(BaseModel):
     measure: MeasureKey | None = None
     dimension: DimensionKey | None = None
     # The one free-text field on the whole tool surface, and the reason it is safe: it is
-    # matched against the column list the compiler is about to emit and rejected if absent,
-    # so it can only ever name a column this query already has. It exists because the
-    # interesting sort keys are derived and therefore have no registry entry — sorting by
-    # net_sales_sek_delta_pct is the difference between finding the biggest decliner and
-    # finding the biggest seller that happens to have declined.
+    # matched against the column list the compiler is about to emit and rejected if absent, so
+    # it can only ever name a column this query already has.
     field: str | None = Field(
         None, description="Kolumnnyckel ur resultatet, för härledda kolumner: "
                           "'<mått>_delta_pct' och '<mått>_compare' (kräver compare_to), "
@@ -107,11 +94,7 @@ class Having(BaseModel):
 
 
 class TopNPer(BaseModel):
-    """Top N *within* each value of a dimension, rather than N rows overall.
-
-    Without this, "topplista per län" is a global LIMIT and returns the ten best rows in the
-    country — which in practice is ten Stockholm rows and no list per county at all.
-    """
+    """Top N *within* each value of a dimension, rather than N rows overall."""
 
     model_config = ConfigDict(extra="forbid")
 

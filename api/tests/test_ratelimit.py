@@ -1,14 +1,4 @@
-"""The limits, and the two properties that are easy to get subtly wrong.
-
-The login throttle has to refuse **before** anything expensive runs — before the user lookup
-and before Argon2id allocates its 19 MiB — and it has to refuse *identically* whether or not
-the account exists, or the 429 becomes the account oracle the 401 was carefully written not to
-be. Both are asserted here rather than assumed from reading the route, because both survive a
-plausible refactor that moves the check three lines down and breaks them.
-
-Every clock is injected. Nothing in this file sleeps, so the window behaviour is tested at the
-speed of arithmetic rather than at the speed of the window.
-"""
+"""The limits, and the two properties that are easy to get subtly wrong."""
 
 from __future__ import annotations
 
@@ -66,8 +56,8 @@ def test_the_wait_is_how_long_until_a_slot_actually_frees():
 
 
 def test_hammering_never_extends_a_lockout():
-    """A refused attempt must not be counted, or a client that keeps retrying locks itself
-    out forever — and, on the identifier key, so could a third party."""
+    """A refused attempt must not be counted, or a client that keeps retrying locks itself out
+    forever — and, on the identifier key, so could a third party."""
     clock = FakeClock()
     window = SlidingWindow(2, 60, clock=clock)
 
@@ -151,8 +141,7 @@ async def status_of(email: str, **kwargs) -> tuple[int, str]:
 
 
 async def test_the_throttle_refuses_before_the_lookup_and_before_argon2(login_probe):
-    """The whole point. Argon2id at 19 MiB allocates on *every* verification, so a check that
-    ran after the hash would still let an attacker spend the memory."""
+    """The whole point."""
     for _ in range(2):
         assert (await status_of("known@example.se"))[0] == 401
 
@@ -309,8 +298,8 @@ async def test_an_unset_budget_is_unlimited(budget, monkeypatch):
 
 
 async def test_the_budget_check_fails_open(budget):
-    """A database hiccup must not turn into "nobody can ask anything". The audit row is
-    written either way, so an unenforced turn is visible afterwards."""
+    """A database hiccup must not turn into "nobody can ask anything". The audit row is written
+    either way, so an unenforced turn is visible afterwards."""
     budget.used = RuntimeError("connection pool not initialised")
     await ask()
 
@@ -335,8 +324,7 @@ def test_history_is_capped_by_total_characters():
 
 
 def test_a_realistic_conversation_is_well_under_both_caps():
-    """The frontend sends the last 8 entries with narrative-length content. If this ever
-    fails, the caps are wrong rather than the client."""
+    """The frontend sends the last 8 entries with narrative-length content."""
     ChatRequest(question="q", history=turns(8, "x" * 1200))
 
 

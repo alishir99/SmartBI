@@ -1,18 +1,4 @@
-"""The agent turn: plan+execute → validate → render.
-
-An explicit `while stop_reason == "tool_use"` loop rather than the SDK's Tool Runner, because
-the Tool Runner rides on `anthropic-beta` headers that the DeepSeek endpoint rejects (D2).
-The loop is short enough that writing it out costs little and makes the tool-call budget and
-the validation stage obvious.
-
-**One deliberate deviation from API_CONTRACT.md, and it is a correctness decision:** `token`
-events are emitted only *after* numeric validation has passed. Streaming the prose while it is
-being generated would put unverified numbers on screen — and since the validator's whole job
-is to suppress prose containing numbers that are not in the data, showing it first and
-retracting it later would defeat the guarantee. Tool-call events stream live, which is the
-part that actually communicates progress; the narrative is replayed in chunks once it is
-known to be true.
-"""
+"""The agent turn: plan+execute → validate → render."""
 
 from __future__ import annotations
 
@@ -41,19 +27,11 @@ from .validate import validate_narrative
 
 logger = logging.getLogger(__name__)
 
-# Hard ceiling on tool calls per turn. Bounds cost and latency, and stops a confused model
-# looping on resolve_entities forever. Eight is comfortably above what any golden question
-# needs (the deepest is capabilities → resolve → query).
+# Hard ceiling on tool calls per turn.
 MAX_TOOL_CALLS = 8
 
-# Hard ceiling on trips round the loop, which is a different thing from the tool budget and
-# the reason the comment above was not true on its own. Once `calls` hits MAX_TOOL_CALLS the
-# budget branch reports the exhaustion to the model and moves on *without* incrementing
-# anything — so a model that keeps emitting tool_use (entirely plausible after eight
-# "budget is spent" errors) drove the loop forever, at one full LLM round trip per pass. The
-# tool budget bounds the work; this bounds the conversation. Comfortably above the deepest
-# legitimate turn, which is three passes, plus room for the model to recover from a spec
-# error or two.
+# Hard ceiling on trips round the loop, which is a different thing from the tool budget and the
+# reason the comment above was not true on its own.
 MAX_ROUNDS = 12
 
 # Tools whose results hold rows worth caching and charting.
@@ -71,29 +49,14 @@ _FRIENDLY_STATUS = {
 
 
 def _system() -> list[dict[str, Any]] | str:
-    """The system prompt as a cacheable content block.
-
-    `system=SYSTEM` as a plain string was structurally *ready* for caching and never
-    actually requested it: `cache_control` attaches to content blocks, and a bare string is
-    not one. So the ~1 900-token prefix was re-read at full price on every call, several
-    times per turn.
-
-    Gated on the provider because it is only meaningful to Anthropic. The demo runs against
-    DeepSeek's Anthropic-compatible endpoint, which does its own automatic context caching
-    and has no use for the hint; sending it there would be an untested field on a
-    third-party API for no gain. Pointing `llm_base_url` at api.anthropic.com — the swap
-    decision D1 already describes — turns it on.
-    """
+    """The system prompt as a cacheable content block."""
     if "api.anthropic.com" not in settings.llm_base_url:
         return SYSTEM
     return [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}]
 
 
 def _add_usage(total: dict[str, int], response: Any) -> None:
-    """Accumulate one response's usage. `audit_turn` has had input_tokens/output_tokens
-    columns since the first schema and they were written NULL, because nothing collected
-    what the SDK hands back on every single call. This is what the per-tenant cost cap
-    needs, and it costs one function."""
+    """Accumulate one response's usage."""
     usage = getattr(response, "usage", None)
     if usage is None:
         return
@@ -125,12 +88,7 @@ def _tool_uses(response: Any) -> list[Any]:
 
 async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id: int,
                    mcp: McpClient, cache: ResultCache) -> AsyncIterator[Any]:
-    """Drive one question to an AnswerCard, yielding SSE event models as it goes.
-
-    The last event to reach the wire is always a CardEvent or an ErrorEvent, so the frontend
-    has exactly one terminal state to handle. A `UsageEvent` follows it for the caller's own
-    bookkeeping; routes/chat.py records it and does not forward it.
-    """
+    """Drive one question to an AnswerCard, yielding SSE event models as it goes."""
     if not settings.llm_api_key:
         yield ErrorEvent(message="LLM_API_KEY är inte satt — agenten kan inte köra.")
         return
@@ -141,15 +99,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
         {"role": "user", "content": question},
     ]
 
-    # Every result this turn produced, in order. The validator checks the prose against all of
-    # them, because a legitimate answer may quote a number from an earlier query in the turn.
+    # Every result this turn produced, in order.
     produced: list[CachedResult] = []
     calls = 0
     rounds = 0
     usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
              "cache_write_tokens": 0, "llm_calls": 0}
-    # Stays None when the turn produced no rows: there is then nothing to attribute, and a
-    # falsy default keeps the card-building call below from needing a second branch.
+    # Stays None when the turn produced no rows: there is then nothing to attribute, and a falsy
+    # default keeps the card-building call below from needing a second branch.
     check = None
 
     try:
@@ -174,9 +131,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
                 if rounds >= MAX_ROUNDS:
                     # Out of rounds mid-plan: keep whatever was produced and fall through to
-                    # validation and rendering rather than raising. The turn still ends in a
-                    # card, and if nothing was produced the model's own text stands — which
-                    # is the same shape as any other answer that reached no tool.
+                    # validation and rendering rather than raising.
                     logger.warning("agent loop hit MAX_ROUNDS=%d after %d tool call(s)",
                                    MAX_ROUNDS, calls)
                     break
@@ -186,8 +141,8 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
                 for use in uses:
                     if calls >= MAX_TOOL_CALLS:
-                        # Report the budget to the model rather than cutting the turn off, so
-                        # it answers from what it already has instead of failing silently.
+                        # Report the budget to the model rather than cutting the turn off, so it
+                        # answers from what it already has instead of failing silently.
                         tool_results.append({
                             "type": "tool_result", "tool_use_id": use.id, "is_error": True,
                             "content": (f"Verktygsbudgeten på {MAX_TOOL_CALLS} anrop är slut. "
@@ -220,8 +175,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                             tool_args=args, payload=payload))
                         produced.append(cached)
                         # THE grounding step: the model receives a 25-row preview, never the
-                        # full set. The chart is drawn later from the cache, so the values on
-                        # screen provably never passed through the model.
+                        # full set.
                         content = cached.preview()
 
                     tool_results.append({
@@ -239,13 +193,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             status = str(envelope.get("status") or "ok")
             result = _result_for(envelope, produced)
 
-            # Validation is gated on tool data existing, not on the model's own status
-            # field. Gating on `status == "ok"` made the check opt-out through a value the
-            # model writes itself: a narrative emitted under `clarify` still reaches the
-            # user with its figures intact (build_card only suppresses prose for
-            # `validation_failed`), and `clarify` is exactly what the model reaches for
-            # when entity resolution is fuzzy — the moment it is most likely improvising.
-            # If there are rows to check the prose against, we check it.
+            # Validation is gated on tool data existing, not on the model's own status field.
             if produced:
                 yield StatusEvent(message="Kontrollerar siffrorna mot datan…")
                 check = validate_narrative(narrative, produced)
@@ -256,13 +204,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     messages.append({"role": "assistant", "content": _text_of(response)})
                     messages.append({"role": "user",
                                      "content": regeneration_prompt(check.violations)})
-                    # `tools=tools` is load-bearing, not copy-paste. `messages` at this point
-                    # still holds the tool_use blocks from the planning phase, and a request
-                    # carrying tool_use without a `tools` declaration is a 400 on
-                    # api.anthropic.com. The broad `except` below would have turned that into
-                    # a turn-level error — so the user would lose a perfectly good, fully
-                    # grounded chart because the *prose* failed validation. That is the exact
-                    # inverse of what this retry exists to guarantee.
+                    # `tools=tools` is load-bearing, not copy-paste.
                     response = await client.messages.create(
                         model=settings.llm_model,
                         max_tokens=settings.llm_max_tokens,
@@ -275,15 +217,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     envelope = {**envelope, **retry_envelope}
                     result = _result_for(envelope, produced)
 
-                    # One retry only. A second failure means the model cannot state this
-                    # answer truthfully, so we keep the chart and drop the prose.
+                    # One retry only.
                     check = validate_narrative(narrative, produced)
                     if not check.ok:
                         status = "validation_failed"
 
-            # `check.attributions` says which query licensed each figure that survived, so
-            # the card can attribute every number in the prose instead of pointing all of
-            # them at the chart's query.
+            # `check.attributions` says which query licensed each figure that survived, so the
+            # card can attribute every number in the prose instead of pointing all of them at
+            # the chart's query.
             card = render.build_card(result=result, narrative=narrative,
                                      envelope=envelope, status=status,
                                      produced=produced,
@@ -299,19 +240,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
         logger.exception("agent turn failed")
         yield ErrorEvent(message=f"Något gick fel i agenten: {exc}")
     finally:
-        # In `finally` because a turn that died partway still spent real money, and a cost
-        # cap fed only by successful turns is a cap with a hole in it.
+        # In `finally` because a turn that died partway still spent real money, and a cost cap
+        # fed only by successful turns is a cap with a hole in it.
         yield UsageEvent(**usage)
 
 
 def _result_for(envelope: dict[str, Any],
                 produced: list[CachedResult]) -> CachedResult | None:
-    """Which cached result this card is about.
-
-    Honour the model's `query_id` when it names one we actually produced; otherwise fall back
-    to the most recent. Never trust an id we did not mint — that is how a card could end up
-    pointing at another tenant's cache entry.
-    """
+    """Which cached result this card is about."""
     query_id = envelope.get("query_id")
     if query_id:
         for result in produced:

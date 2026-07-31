@@ -1,8 +1,4 @@
-/**
- * Failure is a designed state too. The message is the API's `detail` where there is one
- * — a 403 says the tenant scope refused, and that is worth reading rather than hiding
- * behind "något gick fel".
- */
+/** Failure is a designed state too. */
 
 import type { ReactNode } from 'react'
 import { ApiError } from '../lib/api'

@@ -1,11 +1,6 @@
 /**
- * SSE over `fetch` + `ReadableStream`.
- *
- * Deliberately NOT `EventSource`: EventSource cannot set request headers, so it
- * cannot send `Authorization: Bearer <token>`, and it cannot POST a body. This
- * hand-rolled reader does both.
- *
- * Frame format per API_CONTRACT.md: `data: <json>\n\n`.
+ * SSE over `fetch` + `ReadableStream`. Deliberately NOT `EventSource`: EventSource cannot set
+ * request headers, so it cannot send `Authorization: Bearer <token>`, and it cannot POST a body.
  */
 
 export type SseOptions<TEvent> = {

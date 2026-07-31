@@ -1,12 +1,4 @@
-/**
- * The single card renderer. The dashboard and the chat both produce an `AnswerCard`,
- * so both go through this component — one card type, two producers, no second-class
- * chat rendering.
- *
- * The four statuses are four designed states (API_CONTRACT §status semantics), not
- * one happy path plus error text. `validation_failed` in particular is the guarantee
- * working, so it is stated plainly rather than hidden.
- */
+/** The single card renderer. */
 
 import { useState, type ReactNode } from 'react'
 import type { AnswerCard as Card } from '../types'

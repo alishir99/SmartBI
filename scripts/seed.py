@@ -1,13 +1,4 @@
-"""Load the generated CSVs into Postgres, then build everything derived from them.
-
-Runs as the database owner, not as `app_readonly` — RLS policies are declared ENABLE rather
-than FORCE precisely so this script and the rollup refresh can do their work while every
-query path stays scoped.
-
-Idempotent: it skips a database that already holds facts unless given --force.
-
-    python scripts/seed.py [--force]
-"""
+"""Load the generated CSVs into Postgres, then build everything derived from them."""
 
 from __future__ import annotations
 
@@ -23,8 +14,8 @@ from console import use_utf8_stdout
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data" / "generated"
 
-# Load order matters: dim_category has a self-referencing foreign key and the generator
-# emits every level-1 row before any level-2 row, so a single COPY satisfies it.
+# Load order matters: dim_category has a self-referencing foreign key and the generator emits
+# every level-1 row before any level-2 row, so a single COPY satisfies it.
 TABLES = [
     "dim_supplier",
     "dim_brand",
@@ -38,17 +29,15 @@ TABLES = [
 
 DEMO_PASSWORD = "demo1234"
 
-# One user per supplier for the first two suppliers: the second exists so tenant isolation
-# can be *shown* live rather than asserted — log in as Erik and the same question returns a
+# One user per supplier for the first two suppliers: the second exists so tenant isolation can
+# be *shown* live rather than asserted — log in as Erik and the same question returns a
 # different company's numbers.
 DEMO_USERS = [
     ("anna@nordstromaudio.se", "Anna Lindqvist", "Nordström Audio AB", "supplier_admin"),
     ("erik@lagerkvisthem.se", "Erik Sandberg", "Lagerkvist Hem AB", "supplier_viewer"),
 ]
 
-# Curated synonyms so lexical retrieval alone handles how Swedes actually type. Trigram
-# similarity does not connect "sthlm" to "Stockholms län", and no embedding model is required
-# to know that it should.
+# Curated synonyms so lexical retrieval alone handles how Swedes actually type.
 REGION_SYNONYMS = {
     "Stockholms län": "stockholm sthlm sthlms huvudstaden stockholmsområdet",
     "Västra Götalands län": "göteborg gbg goteborg västra götaland vgr borås",
@@ -115,8 +104,7 @@ def dsn() -> str:
 
 
 async def connect(retries: int = 30) -> asyncpg.Connection:
-    """Wait for Postgres. compose declares a healthcheck, but the container being healthy and
-    the database accepting our credentials are not quite the same instant."""
+    """Wait for Postgres."""
     last: Exception | None = None
     for attempt in range(retries):
         try:
@@ -134,29 +122,22 @@ async def load_tables(connection: asyncpg.Connection) -> None:
         path = DATA / f"{table}.csv"
         if not path.exists():
             raise SystemExit(f"missing {path}. Run: python scripts/generate_data.py --seed 42")
-        # null='' because pandas writes an empty field for NULL, and those are meaningful
-        # here: cash purchases have no customer, online stores have no coordinates, current
-        # products have no discontinued date.
+        # null='' because pandas writes an empty field for NULL, and those are meaningful here:
+        # cash purchases have no customer, online stores have no coordinates, current products
+        # have no discontinued date.
         await connection.copy_to_table(
             table, source=str(path), format="csv", header=True, null="")
         count = await connection.fetchval(f"SELECT COUNT(*) FROM {table}")
         print(f"  {table}: {count:,} rows")
 
     # The CSVs carry explicit sale_line_id values, which leaves the BIGSERIAL sequence at 1.
-    # Nothing inserts facts at runtime today, but a sequence that would collide on the first
-    # insert is a trap to leave behind.
     await connection.execute(
         "SELECT setval(pg_get_serial_sequence('fact_sales_line', 'sale_line_id'), "
         "COALESCE((SELECT MAX(sale_line_id) FROM fact_sales_line), 1))")
 
 
 async def build_entity_search(connection: asyncpg.Connection) -> None:
-    """One searchable row per resolvable entity, with curated synonyms.
-
-    supplier_id is set for products and brands and left NULL for the shared entities, which
-    is what the RLS policy on entity_search keys off: everyone can resolve "Stockholm", only
-    the owner can resolve their own product names.
-    """
+    """One searchable row per resolvable entity, with curated synonyms."""
     await connection.execute("TRUNCATE entity_search")
 
     await connection.execute("""
@@ -195,8 +176,8 @@ async def build_entity_search(connection: asyncpg.Connection) -> None:
           FROM dim_store s
     """)
 
-    # Regions are not a table, so they get synthetic ids — dense_rank over the distinct
-    # names, stable for a given dataset.
+    # Regions are not a table, so they get synthetic ids — dense_rank over the distinct names,
+    # stable for a given dataset.
     await connection.execute("""
         INSERT INTO entity_search (kind, entity_id, label, path, synonyms, supplier_id)
         SELECT 'region', dense_rank() OVER (ORDER BY region)::int, region,
@@ -232,8 +213,7 @@ async def create_users(connection: asyncpg.Connection) -> None:
 
 async def refresh_rollups(connection: asyncpg.Connection) -> None:
     # Plain REFRESH, not CONCURRENTLY: this runs once on an empty-but-populated view where
-    # CONCURRENTLY has no advantage and takes an exclusive lock either way. The admin
-    # refresh endpoint uses CONCURRENTLY, where live readers actually matter.
+    # CONCURRENTLY has no advantage and takes an exclusive lock either way.
     for view in ("mv_sales_daily", "mv_category_daily", "mv_brand_monthly"):
         await connection.execute(f"REFRESH MATERIALIZED VIEW {view}")
         count = await connection.fetchval(f"SELECT COUNT(*) FROM {view}")

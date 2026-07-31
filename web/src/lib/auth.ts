@@ -1,7 +1,4 @@
-/**
- * Auth store. The token lives here and in localStorage; api.ts reads it through
- * getToken() so no component ever passes it around.
- */
+/** Auth store. */
 
 import { create } from 'zustand'
 import type { User } from '../types'

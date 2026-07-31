@@ -1,16 +1,4 @@
-/**
- * The provenance chip (§9.3). Every number on screen can be traced from here: which
- * tool ran, under which scope, over which period, against which source, and with
- * exactly which arguments. This is the visible half of the grounding claim — the
- * architecture guarantees it, the chip lets anyone check it.
- *
- * A turn can run more than one query, and the validator has always checked the prose against
- * all of them while the card named a single one. So a figure grounded in the second query sat
- * beside a chip describing the first — the one artefact whose entire purpose is traceability,
- * quietly pointing at the wrong place. When `sources` carries more than one entry the chip
- * lists each, and the figures each licensed are printed against it: not "the numbers are
- * checked" but "this number came from that query".
- */
+/** The provenance chip (§9.3). */
 
 import { useId, useState } from 'react'
 import type { Claim, Provenance, ToolCallRecord } from '../types'
@@ -37,8 +25,7 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
   const [open, setOpen] = useState(false)
   const panelId = useId()
 
-  // One source is the common case and must look exactly as it did before. The multi-source
-  // rendering is additive, never a redesign of the single-source chip.
+  // One source is the common case and must look exactly as it did before.
   const records = sources && sources.length > 0 ? sources : []
   const multiple = records.length > 1
 

@@ -1,16 +1,4 @@
-/**
- * sv-SE formatting. Every number shown to the user goes through this file.
- *
- * Rules (API_CONTRACT.md § Formatting rules the frontend owns):
- *  - space thousands separator, comma decimal
- *  - money magnitude switching with the unit on the axis:
- *      < 100 tkr  -> kr      (i.e. below 100 000)
- *      < 10 Mkr   -> tkr     (i.e. below 10 000 000)
- *      otherwise  -> Mkr
- *  - percentages: one decimal
- *  - deltas always carry the comparison period as a label
- *  - ISO weeks, Swedish month names
- */
+/** sv-SE formatting. */
 
 import type { Column, ColumnUnit, DateRange } from '../types'
 
@@ -50,8 +38,8 @@ export type MoneyScale = {
 }
 
 /**
- * Pick one scale for a whole chart/tile from the largest absolute value in it,
- * so every tick and label on the same axis shares a unit.
+ * Pick one scale for a whole chart/tile from the largest absolute value in it, so every tick and
+ * label on the same axis shares a unit.
  */
 export function moneyScale(maxAbsSek: number): MoneyScale {
   const m = Math.abs(maxAbsSek)
@@ -112,9 +100,8 @@ export type Delta = {
 }
 
 /**
- * A delta is only meaningful next to what it is compared against, so this always
- * returns the label too. `delta_label` comes from the API; we fall back to an
- * explicit phrase rather than showing a bare arrow.
+ * A delta is only meaningful next to what it is compared against, so this always returns the
+ * label too.
  */
 export function formatDelta(
   deltaPct: number | null,

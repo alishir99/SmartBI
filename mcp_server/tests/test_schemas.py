@@ -1,10 +1,4 @@
-"""Tests on the tool surface the model actually sees.
-
-The first test in this file is the most important one in the repository: it asserts that no
-tool exposes a way to name a supplier. Tenant isolation has three layers (§6.3), and this is
-the layer that makes the other two rarely matter — a request the model cannot express is a
-request that cannot go wrong.
-"""
+"""Tests on the tool surface the model actually sees."""
 
 import json
 from typing import get_args
@@ -37,8 +31,7 @@ async def tools():
 
 
 async def test_no_tool_lets_the_caller_name_a_supplier(tools):
-    """If this fails, the whole tenancy argument in the plan collapses. Nothing below it
-    matters as much."""
+    """If this fails, the whole tenancy argument in the plan collapses."""
     for tool in tools:
         schema = json.dumps(tool.inputSchema).lower()
         assert "supplier_id" not in schema, f"{tool.name} exposes supplier_id"
@@ -55,10 +48,8 @@ async def test_every_tool_has_a_description_for_the_model(tools):
         assert tool.description and len(tool.description) > 40, tool.name
 
 
-# ------------------------------------------------------------------- drift guards
-#
-# schemas.py spells the enums out so a reader can see what the model sees. These tests are
-# what stop that copy from silently diverging from the registry.
+# ------------------------------------------------------------------- drift guards schemas.py
+# spells the enums out so a reader can see what the model sees.
 
 
 def test_measure_keys_match_the_registry():
@@ -82,8 +73,8 @@ def test_compare_modes_are_the_two_the_compiler_implements():
 
 @pytest.mark.parametrize("model", [Filters, TimeRange, OrderBy])
 def test_input_models_forbid_unknown_fields(model):
-    """extra=forbid becomes additionalProperties:false, so an invented parameter is a
-    validation error instead of a silently dropped field."""
+    """extra=forbid becomes additionalProperties:false, so an invented parameter is a validation
+    error instead of a silently dropped field."""
     assert model.model_config.get("extra") == "forbid"
     with pytest.raises(ValidationError):
         model(nonsense_field=1)
@@ -106,8 +97,7 @@ def test_channel_filter_is_enum_constrained():
 
 
 def test_time_range_accepts_the_from_alias():
-    """`from` is a Python keyword, so the field is from_date with an alias. If the alias
-    breaks, every explicit date range silently becomes the default period."""
+    """`from` is a Python keyword, so the field is from_date with an alias."""
     parsed = TimeRange.model_validate({"from": "2026-01-01", "to": "2026-03-31"})
     assert parsed.from_date.isoformat() == "2026-01-01"
     assert parsed.to.isoformat() == "2026-03-31"

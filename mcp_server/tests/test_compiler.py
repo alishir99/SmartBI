@@ -1,9 +1,4 @@
-"""Tests for the semantic compiler.
-
-These run without a database: they assert on source selection, parameterisation, the
-generated SQL's shape, and that every rejection path rejects. Numeric correctness against
-real rows is the job of the golden-question eval (§13.2), not of these tests.
-"""
+"""Tests for the semantic compiler."""
 
 from datetime import date
 from decimal import Decimal
@@ -24,8 +19,7 @@ COVERAGE = (date(2024, 7, 1), date(2026, 6, 30))
 
 def compile_ok(spec: dict):
     compiled = compile_query(spec, COVERAGE)
-    # Every query this compiler emits must be valid Postgres. Parsing here means a broken
-    # code path fails in CI rather than in front of the graders.
+    # Every query this compiler emits must be valid Postgres.
     sqlglot.parse_one(compiled.sql, read="postgres")
     return compiled
 
@@ -194,12 +188,9 @@ def test_compare_emits_delta_columns_and_a_full_outer_join():
 
 
 def test_compare_over_a_date_dimension_joins_on_position_not_on_value():
-    """The regression behind "visa månadsförsäljning jämfört med i fjol".
-
-    cur.month lives in 2025-07..2026-06 and prev.month in 2024-07..2025-06, so
-    joining on the value matched zero rows: 24 rows instead of 12, every delta NULL.
-    The join has to be on position within the window.
-    """
+    """The regression behind "visa månadsförsäljning jämfört med i fjol". cur.month lives in
+    2025-07..2026-06 and prev.month in 2024-07..2025-06, so joining on the value matched zero
+    rows: 24 rows instead of 12, every delta NULL."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["month"],
@@ -226,8 +217,7 @@ def test_compare_over_a_date_dimension_returns_both_real_dates():
 
 
 def test_the_internal_ordinal_never_reaches_the_caller():
-    """__ord is a join mechanism. Leaking it would put a meaningless integer
-    column in the table view and the CSV export."""
+    """__ord is a join mechanism."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["month"],
@@ -238,8 +228,8 @@ def test_the_internal_ordinal_never_reaches_the_caller():
 
 
 def test_compare_mixing_a_date_and_a_plain_dimension():
-    """Position for the date, value for the product — and DENSE_RANK rather than
-    ROW_NUMBER so the repeated month keeps one shared position across products."""
+    """Position for the date, value for the product — and DENSE_RANK rather than ROW_NUMBER so the
+    repeated month keeps one shared position across products."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["month", "product"],
@@ -249,12 +239,7 @@ def test_compare_mixing_a_date_and_a_plain_dimension():
     assert "c.month__ord = pv.month__ord" in compiled.sql
     assert "c.product = pv.product" in compiled.sql
     assert "COALESCE(c.product, pv.product) AS product" in compiled.sql
-    # Plain equality, and this assertion is the reason. `IS NOT DISTINCT FROM` reads better
-    # — it makes a NULL group match instead of dropping it — but Postgres can neither hash-
-    # nor merge-join on it, and FULL OUTER JOIN has no third strategy, so the planner
-    # rejected the entire query at run time with FeatureNotSupportedError. Every compare_to
-    # over a product, brand or region dimension was broken in production while this file was
-    # green, because these tests parse the SQL and never execute it.
+    # Plain equality, and this assertion is the reason.
     assert "IS NOT DISTINCT FROM" not in compiled.sql
 
 
@@ -324,15 +309,13 @@ def test_columns_carry_units_and_swedish_labels():
     assert by_key["region"]["label"] == "Län"
 
 
-# ------------------------------------------------------- post-aggregate stage
-#
-# One narrow layer on top of the grouped result. Each test below stands for a Swedish
-# question the compiler could not express before it existed.
+# ------------------------------------------------------- post-aggregate stage One narrow layer
+# on top of the grouped result.
 
 
 def test_order_by_a_derived_compare_column():
-    """"Vilka produkter tappar mest mot förra året?" — the biggest decliner is usually a
-    mid-sized product, so sorting by the current value never surfaces it."""
+    """"Vilka produkter tappar mest mot förra året?" — the biggest decliner is usually a mid-sized
+    product, so sorting by the current value never surfaces it."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["product"],
@@ -354,8 +337,8 @@ def test_order_by_measure_and_dimension_still_work():
 
 
 def test_percent_of_total_is_computed_in_sql():
-    """"Hur stor andel av försäljningen är online?" — two golden cases used to depend on
-    the model dividing, which the system prompt forbids."""
+    """"Hur stor andel av försäljningen är online?" — two golden cases used to depend on the model
+    dividing, which the system prompt forbids."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["channel"],
@@ -367,8 +350,8 @@ def test_percent_of_total_is_computed_in_sql():
 
 
 def test_percent_of_total_avoids_integer_division():
-    """SUM(qty) is a bigint; 100 * bigint / bigint truncates every share to a whole
-    percent, and a share that reads 12 when it is 12.4 is simply wrong."""
+    """SUM(qty) is a bigint; 100 * bigint / bigint truncates every share to a whole percent, and a
+    share that reads 12 when it is 12.4 is simply wrong."""
     compiled = compile_ok({
         "measures": ["units"], "dimensions": ["channel"], "percent_of_total": True})
     assert "100.0 * units" in compiled.sql
@@ -393,8 +376,8 @@ def test_percent_of_total_skips_the_ratio_measures_it_cannot_share():
 
 
 def test_partitioned_top_n_ranks_within_the_partition():
-    """"Topplista per län" — a flat GROUP BY with a global LIMIT returns ten Stockholm
-    rows and no per-county list at all."""
+    """"Topplista per län" — a flat GROUP BY with a global LIMIT returns ten Stockholm rows and no
+    per-county list at all."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["region", "product"],
@@ -451,8 +434,8 @@ def test_having_can_target_a_derived_compare_column():
 
 
 def test_having_runs_before_the_share_denominator():
-    """WHERE is evaluated before window functions in the same SELECT, so the percentages
-    are of the rows the caller asked to keep — not of a set they filtered away."""
+    """WHERE is evaluated before window functions in the same SELECT, so the percentages are of the
+    rows the caller asked to keep — not of a set they filtered away."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["product"],
@@ -501,8 +484,8 @@ def test_calendar_dimensions_fold_the_window_instead_of_cutting_it():
 
 
 def test_weekday_is_monday_first():
-    """ISODOW, not dim_date.weekday: the column is 0-based and deriving it from the date
-    keeps one definition across both sources."""
+    """ISODOW, not dim_date.weekday: the column is 0-based and deriving it from the date keeps one
+    definition across both sources."""
     compiled = compile_ok({"measures": ["units"], "dimensions": ["weekday"]})
     assert "EXTRACT(ISODOW FROM s.date)" in compiled.sql
 
@@ -519,8 +502,8 @@ def test_dim_date_only_calendar_dimensions_force_the_fact_table(key, fragment):
 
 
 def test_campaign_days_can_be_compared_with_ordinary_days():
-    """The generator discounts ~22.5 % on campaign days against ~8 % otherwise, so this
-    is the question the dimension exists for."""
+    """The generator discounts ~22.5 % on campaign days against ~8 % otherwise, so this is the
+    question the dimension exists for."""
     compiled = compile_ok({
         "measures": ["discount_rate", "net_sales_sek"],
         "dimensions": ["campaign_id"],

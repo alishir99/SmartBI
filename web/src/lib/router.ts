@@ -1,7 +1,4 @@
-/**
- * Minimal hash router — 30 lines instead of a dependency. Hash routing keeps every
- * view deep-linkable and shareable without any server rewrite rules.
- */
+/** Minimal hash router — 30 lines instead of a dependency. */
 
 import { useEffect, useState } from 'react'
 

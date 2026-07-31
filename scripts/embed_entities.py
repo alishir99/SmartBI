@@ -1,17 +1,4 @@
-"""Populate entity_search.embedding so resolve_entities can run hybrid retrieval.
-
-Optional. Without it, entity resolution runs on trigrams plus the curated synonyms the
-seeder writes, which already covers typos and the common Swedish abbreviations. This adds
-the semantic half — the one that connects "trådlösa lurar" to "Hörlurar" despite the two
-sharing almost no trigrams.
-
-    pip install "sentence-transformers>=3.0"
-    ENABLE_VECTOR_SEARCH=true python scripts/embed_entities.py
-
-The IVFFlat index is created here rather than in db/sql/02_indexes.sql because an IVFFlat
-index built over an all-NULL column has nothing to cluster and would have to be rebuilt
-anyway.
-"""
+"""Populate entity_search.embedding so resolve_entities can run hybrid retrieval."""
 
 from __future__ import annotations
 
@@ -36,8 +23,7 @@ from mcp_server.embeddings import (  # noqa: E402
 
 BATCH = 256
 
-# IVFFlat list count. The usual heuristic is rows/1000 for small tables; with a few hundred
-# entities a handful of lists is plenty, and too many would leave most nearly empty.
+# IVFFlat list count.
 LISTS = 16
 
 

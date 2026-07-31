@@ -1,9 +1,4 @@
-"""Tests for deterministic chart selection and ChartSpec validation (§8).
-
-The point of choosing the chart from the result's shape *before* consulting the model is that
-every chart in the product looks like it belongs to the same product. These tests pin the
-mapping, and pin that a model override is only honoured when it references real columns.
-"""
+"""Tests for deterministic chart selection and ChartSpec validation (§8)."""
 
 from __future__ import annotations
 
@@ -61,8 +56,8 @@ def test_one_category_plus_one_measure_becomes_a_bar():
 
 
 def test_two_categories_become_a_stacked_bar_not_a_pie():
-    """Part-of-whole is a stacked bar deliberately: these break down by län, and a
-    twenty-one-slice pie is unreadable."""
+    """Part-of-whole is a stacked bar deliberately: these break down by län, and a twenty-one-slice
+    pie is unreadable."""
     # Two rows, not one: stacking is a claim about how several rows compose, and a one-row
     # result now falls through to a plain bar (there is nothing to stack it against).
     spec = propose_chart(make([REGION, PRODUCT, MEASURE], [

@@ -1,9 +1,4 @@
-"""get_capabilities — the model's map of the world.
-
-This is what makes "det kan jag inte svara på" a considered answer rather than a shrug
-(§9.4). A model that knows the measure list can tell a user that margin is not available
-*and* say what is; a model without it can only guess or apologise.
-"""
+"""get_capabilities — the model's map of the world."""
 
 from __future__ import annotations
 
@@ -24,8 +19,8 @@ async def get_capabilities(tenant: TenantContext) -> dict:
     coverage_from, coverage_to = await db.coverage()
 
     async with db.tenant_connection(tenant.supplier_id) as connection:
-        # Scoped by RLS to the caller's own brands, so this doubles as the answer to
-        # "vad räknas som vårt märke?".
+        # Scoped by RLS to the caller's own brands, so this doubles as the answer to "vad räknas
+        # som vårt märke?".
         brands = await connection.fetch(
             "SELECT brand_id, name FROM dim_brand ORDER BY name")
         supplier = await connection.fetchrow(

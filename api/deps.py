@@ -1,10 +1,4 @@
-"""Request-scoped dependencies — above all, where tenant scope enters the process.
-
-`TenantContext` is constructed in exactly one place, from a verified JWT, and nowhere else.
-No route reads `supplier_id` from a body, a query string or a header, and no tool schema
-contains it (§6.3). If you are reviewing this codebase for tenant leaks, this file and
-mcp_client.py are the two you need to read.
-"""
+"""Request-scoped dependencies — above all, where tenant scope enters the process."""
 
 from __future__ import annotations
 
@@ -56,8 +50,8 @@ async def get_current_user(
 
 
 class ScopedTenant(TenantContext):
-    """A `TenantContext` past the None check, so callers stop writing `int(...)` round a
-    value the dependency already guaranteed. Type-only: the instance is the same object."""
+    """A `TenantContext` past the None check, so callers stop writing `int(...)` round a value the
+    dependency already guaranteed."""
 
     supplier_id: int
 
@@ -65,13 +59,7 @@ class ScopedTenant(TenantContext):
 async def get_supplier_scope(
     tenant: TenantContext = Depends(get_current_user),
 ) -> ScopedTenant:
-    """For the data endpoints: refuse rather than guess when there is no supplier scope.
-
-    `retail_analyst` and `system_admin` have `supplier_id IS NULL`. Cross-supplier access is
-    a real product need but it is a *different* scoping model, and defaulting to "any
-    supplier" or "supplier 1" to keep the endpoint working is precisely the bug this whole
-    design exists to make impossible.
-    """
+    """For the data endpoints: refuse rather than guess when there is no supplier scope."""
     if tenant.supplier_id is None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,

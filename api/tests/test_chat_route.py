@@ -1,15 +1,4 @@
-"""What the chat stream does with the usage event.
-
-`UsageEvent` is the one event `run_turn` emits that must not reach the browser. Token counts
-are a server-side concern — they feed `audit_turn` and the per-tenant cost cap — and putting
-them on the wire would make the cost of an answer a client-visible detail of every answer.
-Two things have to hold at once, and they pull in opposite directions: the row gets the
-numbers, and the stream does not. A test that checked only one of them would pass while the
-other silently broke, which is why both assertions live in the same test.
-
-`_stream` is driven directly rather than through TestClient: the SSE frames it yields are
-exactly the thing under test, and a fake `run_turn` keeps the LLM and MCP out of it.
-"""
+"""What the chat stream does with the usage event."""
 
 from __future__ import annotations
 
@@ -69,8 +58,8 @@ async def test_usage_is_recorded_but_never_streamed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tokens_stay_null_when_the_loop_reports_nothing(monkeypatch):
-    """Null rather than zero: a zero reads as "this turn was free" in any cost rollup,
-    which is a worse lie than an honest gap."""
+    """Null rather than zero: a zero reads as "this turn was free" in any cost rollup, which is a
+    worse lie than an honest gap."""
     recorded: dict = {}
 
     async def no_usage(**_kwargs):

@@ -1,24 +1,4 @@
-"""Tests for the oracle.
-
-The oracle is the only reason the golden literals are evidence rather than assertion: it
-re-aggregates the emitted CSVs without touching the API, the MCP server or the database.
-That makes it load-bearing and therefore dangerous — a bug here would not fail loudly, it
-would quietly become the "expected" answer and certify the system as correct against a
-wrong number.
-
-`reconcile()` is the defence, and `test_reconciles_against_ground_truth` is the test that
-licences everything downstream. The rest of this module pins the design decisions that a
-plausible refactor would erase without breaking anything visibly:
-
-* relative windows anchor on the LAST DATE IN THE DATA, not on today. Swap that for
-  `date.today()` and every window silently empties as the fixture ages;
-* `slice()` defaults to the demo tenant, so an expectation written without a scope is
-  tenant-scoped rather than accidentally global;
-* `market_share()` reports `n_brands` and suppresses nothing — the k-anonymity policy
-  lives in the caller, and an oracle that applied it could not be used to test the guard;
-* `Vintersport` really is below the k-threshold, which is the entire premise of the
-  thin-slice cases in adversarial.yaml.
-"""
+"""Tests for the oracle."""
 
 from __future__ import annotations
 
@@ -34,8 +14,7 @@ pytestmark = pytest.mark.skipif(
             "python scripts/generate_data.py --seed 42"),
 )
 
-# Every window `relative_range` claims to resolve. Kept explicit rather than derived from
-# the implementation so that dropping one is a test failure, not a silent narrowing.
+# Every window `relative_range` claims to resolve.
 WINDOWS = (
     "last_30_days", "last_90_days", "last_6_months", "last_12_months",
     "last_month", "this_month", "this_year", "ytd", "all_time",
@@ -44,8 +23,8 @@ WINDOWS = (
 
 @pytest.fixture(scope="module")
 def oracle() -> Oracle:
-    # Module-scoped: `lines` is a cached_property over seven CSVs, and rebuilding it per
-    # test would dominate the runtime of the whole suite.
+    # Module-scoped: `lines` is a cached_property over seven CSVs, and rebuilding it per test
+    # would dominate the runtime of the whole suite.
     return Oracle()
 
 
@@ -77,8 +56,8 @@ def test_measure_accepts_exactly_the_advertised_keys(oracle):
 
 
 def test_unknown_measure_raises(oracle):
-    # The failure mode this forbids is a typo'd measure returning None and comparing
-    # equal to nothing in particular.
+    # The failure mode this forbids is a typo'd measure returning None and comparing equal to
+    # nothing in particular.
     with pytest.raises(KeyError, match="unknown measure"):
         oracle.measure(oracle.slice(), "net_sales")
 
@@ -114,9 +93,7 @@ def test_relative_range_stays_inside_coverage(name, oracle):
 
 @pytest.mark.parametrize("name", [w for w in WINDOWS if w != "last_month"])
 def test_windows_anchor_on_the_last_date_in_the_data(name, oracle):
-    """Not on today. compiler.py resolves relative ranges against the data's coverage so
-    the demo keeps working as the fixture ages; an oracle anchored on `date.today()` would
-    agree with it only for as long as the two happened to coincide."""
+    """Not on today."""
     _, end = oracle.relative_range(name)
     assert end == oracle.coverage.end, f"{name} ended at {end}, not {oracle.coverage.end}"
 
@@ -180,8 +157,7 @@ def test_unknown_filter_key_in_a_derivation_raises(oracle):
 
 
 def test_market_share_reports_peer_count_without_suppressing(oracle):
-    """The oracle mirrors the *policy*, not the SQL. If it applied the k-anonymity guard
-    itself it could not be used to check that the guard fired for the right reason."""
+    """The oracle mirrors the *policy*, not the SQL."""
     window = oracle.window("last_12_months")
     result = oracle.market_share("TV", brand="Nordström", **window)
     assert result["n_brands"] >= 1
@@ -192,8 +168,7 @@ def test_market_share_reports_peer_count_without_suppressing(oracle):
 
 
 def test_market_share_is_scoped_to_the_whole_subcategory(oracle):
-    """Own sales must be a strict part of the field, otherwise `share_pct` is meaningless.
-    This is the one place the oracle looks past the tenant on purpose."""
+    """Own sales must be a strict part of the field, otherwise `share_pct` is meaningless."""
     window = oracle.window("last_12_months")
     result = oracle.market_share("TV", brand="Nordström", **window)
     assert result["own_net_sek"] < result["category_net_sek"]
@@ -206,8 +181,7 @@ def test_market_share_without_a_brand_reports_the_field_only(oracle):
 
 
 def test_vintersport_is_below_the_k_anonymity_threshold(oracle):
-    """The thin-slice cases in adversarial.yaml assert that a real subcategory gets
-    suppressed. That demo is only meaningful while this stays true of the data."""
+    """The thin-slice cases in adversarial.yaml assert that a real subcategory gets suppressed."""
     per_subcategory = oracle.brands_per_subcategory()
     assert "Vintersport" in per_subcategory, (
         f"Vintersport is gone from the data; adversarial.yaml's thin-slice cases now test "
@@ -219,8 +193,8 @@ def test_vintersport_is_below_the_k_anonymity_threshold(oracle):
 
 
 def test_the_tenant_sells_nothing_in_vintersport(oracle):
-    # Two independent reasons the thin-slice question cannot yield a figure; this is the
-    # second one, and it is the reason the case is in adversarial.yaml at all.
+    # Two independent reasons the thin-slice question cannot yield a figure; this is the second
+    # one, and it is the reason the case is in adversarial.yaml at all.
     assert len(oracle.slice(subcategory="Vintersport")) == 0
 
 

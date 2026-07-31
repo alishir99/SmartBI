@@ -1,11 +1,7 @@
 import type { Column, ResultRow } from '../types'
 import { formatCell } from '../lib/format'
 
-/**
- * The table view every chart can fall back to. It is the accessibility channel
- * (a chart alone is not screen-reader friendly) and the relief for light-mode
- * hues that sit below 3:1 against the surface.
- */
+/** The table view every chart can fall back to. */
 export function DataTable({
   columns,
   rows,

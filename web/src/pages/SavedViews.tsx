@@ -1,8 +1,4 @@
-/**
- * Mina vyer. A saved card holds the spec plus the tool arguments — not a screenshot —
- * so every card on this page re-runs live against fresh data when it is opened. That is
- * also why deleting one is cheap: nothing is lost but the pin.
- */
+/** Mina vyer. */
 
 import { useDeleteCard, useSavedCards } from '../lib/queries'
 import { useChatStore } from '../lib/chat'

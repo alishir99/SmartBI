@@ -1,15 +1,4 @@
-"""The MCP client — and the exact point where tenant scope leaves this process.
-
-`supplier_id` travels as an HTTP header on the MCP request (`x-solvigo-supplier-id`, see
-mcp_server/tenant.py), together with a shared internal token. It is *not* a tool argument,
-and it cannot become one: the model composes arguments, and nothing in the model's output
-path reaches these headers.
-
-That is also why the session is opened per request rather than once at startup. In streamable
-HTTP the headers belong to the connection, so one long-lived session would have to carry one
-supplier's scope for every caller. A session per request costs a connection; sharing one
-would cost the tenant boundary.
-"""
+"""The MCP client — and the exact point where tenant scope leaves this process."""
 
 from __future__ import annotations
 
@@ -33,20 +22,12 @@ HEADER_TOKEN = "x-solvigo-internal-token"
 
 
 class McpToolError(RuntimeError):
-    """A tool refused the call — bad spec, unknown measure, missing scope.
-
-    Always the caller's fault rather than a server fault, so routes map it to 4xx and the
-    agent loop hands the text back to the model to correct itself.
-    """
+    """A tool refused the call — bad spec, unknown measure, missing scope."""
 
 
 def to_anthropic_tool(descriptor: dict[str, Any]) -> dict[str, Any]:
-    """MCP `{name, description, inputSchema}` → Anthropic `{name, description, input_schema}`.
-
-    The whole adapter is this rename (§6.4). That near-identity is what makes "the provider
-    is swappable at one file" a fact rather than a claim, so it is kept as one obvious
-    function instead of being spread through the loop.
-    """
+    """MCP `{name, description, inputSchema}` → Anthropic `{name, description, input_schema}`. The
+    whole adapter is this rename (§6.4)."""
     return {
         "name": descriptor["name"],
         "description": descriptor.get("description") or "",
@@ -62,7 +43,7 @@ def parse_tool_result(result: CallToolResult) -> dict[str, Any]:
     structured = result.structuredContent
     if isinstance(structured, dict):
         # FastMCP wraps a non-object return value as {"result": ...}; a dict return comes
-        # through as itself. Accept both so this does not break on an SDK detail.
+        # through as itself.
         if set(structured) == {"result"} and isinstance(structured["result"], dict):
             return structured["result"]
         return structured
@@ -89,8 +70,7 @@ class McpClient:
     def __init__(self, url: str | None = None, internal_token: str | None = None) -> None:
         self.url = url or settings.mcp_url
         self.internal_token = internal_token or settings.internal_token
-        # Tool descriptors are the same for every tenant, so they are fetched once. Nothing
-        # tenant-specific is cached here.
+        # Tool descriptors are the same for every tenant, so they are fetched once.
         self._tools: list[dict[str, Any]] | None = None
 
     def _headers(self, supplier_id: int) -> dict[str, str]:

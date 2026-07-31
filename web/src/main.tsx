@@ -6,11 +6,7 @@ import { ApiError } from './lib/api'
 import { useAuthStore } from './lib/auth'
 import './index.css'
 
-/**
- * An expired token should end the session everywhere at once, not once per component.
- * Both caches funnel 401s through the same handler, so the app falls back to the login
- * screen the moment the first request is refused.
- */
+/** An expired token should end the session everywhere at once, not once per component. */
 function onError(error: unknown): void {
   if (error instanceof ApiError && error.status === 401) {
     useAuthStore.getState().signOut()

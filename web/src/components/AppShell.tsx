@@ -1,11 +1,4 @@
-/**
- * The frame: navigation on the left, content in the middle, chat on the right.
- *
- * The chat rail is permanent from `xl` up rather than a floating bubble, because the
- * product claim is that asking is a normal way to use the dashboard — not a support
- * widget bolted onto it. Below `xl` it becomes a slide-over so the content keeps a
- * readable measure.
- */
+/** The frame: navigation on the left, content in the middle, chat on the right. */
 
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { navigate, type Route } from '../lib/router'
@@ -34,10 +27,7 @@ const NAV: NavItem[] = [
   { route: 'mina-vyer', label: 'Mina vyer', icon: IconPin },
 ]
 
-/**
- * Tailwind's default `xl`, where the chat rail becomes permanent. Kept in one place
- * because the JS below has to agree with the `xl:` classes on the rail and the slide-over.
- */
+/** Tailwind's default `xl`, where the chat rail becomes permanent. */
 const RAIL_BREAKPOINT = '(min-width: 1280px)'
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
@@ -45,10 +35,8 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const turnCount = useChatStore((state) => state.turns.length)
   const seenTurns = useRef(turnCount)
 
-  // A question can start from outside the chat — the suggestion chips under every card
-  // call `ask` directly. Below `xl` the rail is not on screen, so the answer streamed into
-  // a panel nobody could see and the chip read as a dead control. A 1366×768 laptop is
-  // below this boundary, which is to say: most of them.
+  // A question can start from outside the chat — the suggestion chips under every card call
+  // `ask` directly.
   useEffect(() => {
     const started = turnCount > seenTurns.current
     seenTurns.current = turnCount

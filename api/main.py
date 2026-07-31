@@ -1,8 +1,4 @@
-"""FastAPI application.
-
-Holds the MCP client and the result cache on `app.state` for the process lifetime, so a chat
-turn reuses one warm connection pool instead of opening a session per tool call.
-"""
+"""FastAPI application."""
 
 from __future__ import annotations
 
@@ -26,9 +22,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Before anything else, and before the port is listening: an unconfigured deployment
-    # must not reach the point of answering a request. SOLVIGO_ENV=dev opts out for the
-    # local demo, which is the only place the in-repo secrets are acceptable.
+    # Before anything else, and before the port is listening: an unconfigured deployment must
+    # not reach the point of answering a request.
     settings.assert_secrets_rotated()
     await db.init_pool()
     app.state.mcp = McpClient()
@@ -77,8 +72,8 @@ app.include_router(cards.router)
 
 @app.get("/health", tags=["ops"])
 async def health() -> dict:
-    """Reports what is actually wired up, including whether an LLM key is present — the most
-    common reason a fresh checkout appears broken."""
+    """Reports what is actually wired up, including whether an LLM key is present — the most common
+    reason a fresh checkout appears broken."""
     return {
         "status": "ok",
         "mcp_url": settings.mcp_url,

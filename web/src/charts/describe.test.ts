@@ -1,15 +1,4 @@
-/**
- * The sentence a screen reader hears instead of the plot.
- *
- * Recharts emits a bare <svg> with no accessible name, so before this the chart was simply
- * absent from the accessibility tree — not badly described, not there. The DataTable
- * fallback exists and is good, but it sits behind a mouse click on the Diagram/Tabell
- * toggle, which is no help to the person who needs it most.
- *
- * What these tests pin is that the description is built from what was actually *drawn*.
- * Describing the raw rows instead would make it a second, quieter source of truth that can
- * disagree with the picture — the fold into "Övrigt" being the obvious way that happens.
- */
+/** The sentence a screen reader hears instead of the plot. */
 
 import { describe, expect, it } from 'vitest'
 import type { ChartSpec, Column, ResultRow } from '../types'
@@ -55,8 +44,7 @@ describe('describeChart', () => {
   })
 
   it('describes what was drawn, not what was handed in', () => {
-    // A limit means the plot shows fewer bars than the caller supplied. A description
-    // built from the raw rows would announce a chart nobody can see.
+    // A limit means the plot shows fewer bars than the caller supplied.
     const text = describeOf(
       spec({ limit: 2 }),
       [PRODUCT, NET],
@@ -67,23 +55,22 @@ describe('describeChart', () => {
   })
 
   it('states the fold into Övrigt, because the picture does', () => {
-    // Only a limited pie folds — every other chart drops the tail outright, because a pie
-    // that does not sum to the whole is a lie and a bar chart missing its tail is not.
+    // Only a limited pie folds — every other chart drops the tail outright, because a pie that
+    // does not sum to the whole is a lie and a bar chart missing its tail is not.
     const pie = spec({ type: 'pie', limit: 2 })
     const prepared = prepareChart(pie, [PRODUCT, NET], rows([
       ['A', 40], ['B', 30], ['C', 20], ['D', 10],
     ]))
 
-    // Only meaningful if this fixture actually trips the fold; otherwise the assertion
-    // below would pass for the wrong reason.
+    // Only meaningful if this fixture actually trips the fold; otherwise the assertion below
+    // would pass for the wrong reason.
     expect(prepared.folded).toBe(true)
     expect(describeChart(pie, prepared)).toContain('Övrigt')
   })
 
   it('points at the toggle that gives the exact numbers', () => {
-    // The table replaces the chart rather than sitting under it, so the wording has to
-    // name the control. "Table below" would send someone looking for something that is
-    // not there.
+    // The table replaces the chart rather than sitting under it, so the wording has to name the
+    // control.
     expect(describeOf(spec(), [PRODUCT, NET], rows([['A', 1]]))).toContain('Välj Tabell')
   })
 

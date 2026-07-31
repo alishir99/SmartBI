@@ -1,17 +1,4 @@
-"""Tests for the suite validator.
-
-`eval/cases.py` is the only thing standing between a typo in a YAML file and a green eval
-run that proves nothing. A case whose `expects` block names a tool the server does not
-expose, or a golden question with no `derivation` behind its number, or an adversarial case
-that forgot to assert anything at all — each of those passes silently through a naive
-loader and each of them turns the eval set into decoration.
-
-`validate()` is pure, so every problem class below is provoked with a hand-written dict
-rather than a fixture file. The two tests at the bottom are different in kind: they run
-`load()` against the *real* suites, which is the regression guard on the YAML itself. If
-someone edits a suite into a state the validator rejects, the failure surfaces here rather
-than three phases later when the eval driver refuses to start.
-"""
+"""Tests for the suite validator."""
 
 from __future__ import annotations
 
@@ -19,9 +6,7 @@ import pytest
 
 from eval import cases
 
-# A minimal case that must pass clean. Every negative test below starts from one of these
-# two and breaks exactly one thing, so a failure names the rule that broke rather than
-# leaving the reader to diff two large dicts.
+# A minimal case that must pass clean.
 GOLDEN = {
     "id": "example_total",
     "question": "Vad var vår totala försäljning?",
@@ -63,8 +48,8 @@ def adversarial(**overrides) -> dict:
 
 
 def problems(case: dict, suite: str = "golden") -> str:
-    """All problems for a single case, joined — asserting on substrings keeps these tests
-    about the rule being enforced rather than about the exact wording of the message."""
+    """All problems for a single case, joined — asserting on substrings keeps these tests about the
+    rule being enforced rather than about the exact wording of the message."""
     return " | ".join(cases.validate([case], suite))
 
 
@@ -80,8 +65,8 @@ def test_valid_adversarial_case_has_no_problems():
 
 
 def test_status_may_be_a_list_in_adversarial():
-    # A refusal that is equally correct as a clarification is a legitimate expectation;
-    # only golden questions are pinned to a single status.
+    # A refusal that is equally correct as a clarification is a legitimate expectation; only
+    # golden questions are pinned to a single status.
     assert cases.validate([adversarial(expects={"status": ["cannot_answer", "clarify"]})],
                           "adversarial") == []
 
@@ -130,8 +115,8 @@ def test_missing_status_is_required():
 
 
 def test_unknown_status():
-    # `validation_failed` is a real AnswerCard status and still not a legal expectation —
-    # the system failing its own output check is never the answer we wanted.
+    # `validation_failed` is a real AnswerCard status and still not a legal expectation — the
+    # system failing its own output check is never the answer we wanted.
     assert "unknown status 'validation_failed'" in problems(
         golden(expects={"status": "validation_failed"}))
 
@@ -150,8 +135,7 @@ def test_unknown_chart_type():
 
 
 def test_language_must_be_swedish():
-    # The product answers in Swedish. An expectation written in English would pass every
-    # substring check while describing a different product.
+    # The product answers in Swedish.
     assert "must be 'sv'" in problems(golden(expects={"language": "en"}))
 
 
@@ -228,9 +212,7 @@ def test_history_of_earlier_questions_is_accepted():
 
 
 def test_empty_history_is_refused():
-    # `history: []` parses, loads and runs — as an ordinary single-turn case. The label would
-    # then claim multi-turn coverage the run never exercised, which is the whole failure mode
-    # this file exists to prevent.
+    # `history: []` parses, loads and runs — as an ordinary single-turn case.
     assert "single-turn case wearing a multi-turn label" in problems(golden(history=[]))
 
 
@@ -240,9 +222,9 @@ def test_history_turns_must_be_non_empty_strings():
 
 
 def test_history_may_not_carry_the_assistants_half():
-    # The tempting shape, and the wrong one: the assistant's turn is whatever the system
-    # answers at run time, so a hand-written one would be untraceable prose in a file whose
-    # claim is that everything in it is traceable.
+    # The tempting shape, and the wrong one: the assistant's turn is whatever the system answers
+    # at run time, so a hand-written one would be untraceable prose in a file whose claim is
+    # that everything in it is traceable.
     assert "only the user's half belongs here" in problems(
         golden(history=[{"role": "user", "content": "Vad sålde vi i juni 2026?"}]))
 
@@ -254,17 +236,15 @@ def test_history_may_not_be_longer_than_the_frontend_sends():
 
 
 def test_history_is_validated_in_both_suites():
-    """`history` sits beside `question`, not inside `expects`, so nothing else in the
-    validator would notice a malformed one on an adversarial case."""
+    """`history` sits beside `question`, not inside `expects`, so nothing else in the validator
+    would notice a malformed one on an adversarial case."""
     assert "must be a non-empty question string" in problems(
         adversarial(history=[""]), "adversarial")
 
 
 def test_history_needs_no_grader():
-    """The guard run_eval.py runs before any HTTP: a suite key with no grader is an
-    assertion that always passes. `history` is an input rather than an expectation, which is
-    why it is not in the expects vocabulary at all — and if it were moved there, this would
-    fail alongside assert_vocabulary_is_graded()."""
+    """The guard run_eval.py runs before any HTTP: a suite key with no grader is an assertion that
+    always passes."""
     assert "history" not in cases.GOLDEN_EXPECT_KEYS
     assert "history" not in cases.ADVERSARIAL_EXPECT_KEYS
 
@@ -286,8 +266,7 @@ def test_adversarial_case_must_assert_something():
 
 def test_adversarial_case_may_not_allow_a_bare_ok():
     # `ok` is legal here only when the row itself is suppressed or specific content is
-    # forbidden. Otherwise the case passes the moment the system answers normally, which
-    # is precisely the failure it was written to catch.
+    # forbidden.
     reported = problems(
         adversarial(expects={"status": "ok", "must_not_contain_numbers": True}), "adversarial")
     assert "permits a plain answer" in reported
@@ -317,8 +296,7 @@ def test_must_not_contain_must_be_a_list_of_strings():
 
 @pytest.mark.parametrize("suite", ["golden", "adversarial"])
 def test_real_suite_loads_and_validates(suite):
-    """The regression guard on the YAML. Everything above tests the validator; this tests
-    the data the validator exists for."""
+    """The regression guard on the YAML."""
     loaded = cases.load(suite)
     assert len(loaded) > 0
     ids = [case["id"] for case in loaded.cases]
@@ -326,8 +304,7 @@ def test_real_suite_loads_and_validates(suite):
 
 
 def test_suites_are_roughly_the_advertised_size():
-    # A floor, not an exact count — the suites are meant to grow. What this catches is a
-    # YAML edit that truncates a suite to a handful of cases while still parsing.
+    # A floor, not an exact count — the suites are meant to grow.
     golden_suite = cases.load("golden")
     adversarial_suite = cases.load("adversarial")
     assert len(golden_suite) >= 30, f"golden suite shrank to {len(golden_suite)} cases"
@@ -337,9 +314,7 @@ def test_suites_are_roughly_the_advertised_size():
 
 
 def test_the_golden_suite_actually_covers_multi_turn():
-    """A floor on the coverage this schema was added for. The suite had 52 cases and sent an
-    empty history for every one of them, while the README's demo script leads with a
-    follow-up — so the most-demoed interaction in the submission had no case behind it."""
+    """A floor on the coverage this schema was added for."""
     multi_turn = [case for case in cases.load("golden").cases if case.get("history")]
     assert len(multi_turn) >= 4, (
         f"only {len(multi_turn)} golden case(s) carry a `history`; a follow-up is where the "

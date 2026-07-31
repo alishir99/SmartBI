@@ -17,13 +17,27 @@ Den här filen är hur du kör systemet och de val som är värda att förstå f
 ## Kör det
 
 ```bash
-cp .env.example .env          # lägg in LLM_API_KEY
-python scripts/generate_data.py --seed 42
 docker compose up
 ```
 
+Det är hela kommandot, från en färsk klon. Ingen `.env` behövs och ingen data behöver
+genereras först: varje tjänst läser `.env.example` och därefter `.env` om den finns, och
+seed-steget genererar CSV-filerna om `data/generated/` saknas. Båda är `gitignore`:ade, så
+utan det här dog kedjan direkt — compose felade på en saknad `.env`, och `seed.py` avslutade
+på saknade CSV:er, vilket gjorde att `mcp` aldrig startade och `api` aldrig heller.
+
 - Webb: http://localhost:5173
 - API: http://localhost:8000/docs
+
+Det enda som inte kan levereras på det viset är `LLM_API_KEY` — en nyckel går inte att
+committa. Utan den fungerar dashboarden, verktygen och hela den deterministiska vägen;
+chatten svarar *"LLM_API_KEY är inte satt"*. Lägg in den i en egen `.env` för att köra
+agenten:
+
+```bash
+cp .env.example .env          # lägg in LLM_API_KEY
+docker compose up
+```
 
 MCP-servern och Postgres publiceras **inte** på värden i standarduppsättningen. De behöver
 det inte — API:t når dem över compose-nätverket — och `internal_token` är tänkt som

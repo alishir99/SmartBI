@@ -107,11 +107,35 @@ class NumberLiteral:
     bare_integer: bool
 
 
+@dataclass(frozen=True)
+class Attribution:
+    """One accepted literal and the result that licensed it.
+
+    The point of keeping this rather than a bare pass/fail: a turn may run several queries,
+    the validator has always checked the prose against all of them, and the card carried a
+    single `query_id`. So a number grounded in one result could ship beside a chart and a
+    source chip describing a different one — traceability pointing at the wrong query. Now
+    every accepted figure names its own source.
+    """
+    literal: str
+    value: float
+    query_id: str
+
+
 @dataclass
 class ValidationResult:
     ok: bool
     violations: list[str] = field(default_factory=list)
     checked: int = 0
+    #: One entry per accepted numeric literal, in the order they appear in the prose.
+    attributions: list[Attribution] = field(default_factory=list)
+
+    def query_ids(self) -> list[str]:
+        """Distinct results that licensed at least one figure, in first-use order."""
+        seen: dict[str, None] = {}
+        for attribution in self.attributions:
+            seen.setdefault(attribution.query_id, None)
+        return list(seen)
 
 
 # ------------------------------------------------------------------------- extraction
@@ -209,12 +233,41 @@ def build_candidates(results: Iterable[CachedResult]) -> tuple[list[float], int]
 
     Sorted, so a literal is checked with a binary search rather than a scan over what can be
     a hundred thousand values.
+
+    Kept as the merged view because callers outside validation (and the eval grader) want one
+    flat set. `candidates_by_result` is the same computation kept per result, which is what
+    lets a passing literal name the query that licensed it.
     """
-    candidates: list[float] = []
-    max_rows = 0
+    results = list(results)
+    merged: list[float] = []
+    for _query_id, candidates in candidates_by_result(results):
+        merged.extend(candidates)
+    merged.sort()
+    max_rows = max((result.row_count for result in results), default=0)
+    return merged, max_rows
+
+
+def candidates_by_result(
+        results: Iterable[CachedResult]) -> list[tuple[str, list[float]]]:
+    """The same derivation as `build_candidates`, kept separately per result.
+
+    Attribution is the whole reason. `validate_narrative` runs against every result the turn
+    produced while the card carried a single `query_id`, so prose grounded in result A could
+    ship beside a chart of result B and a source chip describing B's filters and time range —
+    the artefact whose entire purpose is traceability, pointing at the wrong query. Keeping
+    the candidate sets apart means a literal that passes can say which result it came from,
+    and the card can carry all of them.
+
+    A list of pairs rather than a dict keyed by `query_id`. Ids are unique in production, but
+    a dict makes uniqueness load-bearing for *correctness*: two results sharing an id would
+    silently overwrite each other and a perfectly grounded number would be reported as a
+    fabrication. A validator must not fail closed on a bookkeeping detail, so position is the
+    key and the id is only carried along.
+    """
+    by_result: list[tuple[str, list[float]]] = []
 
     for result in results:
-        max_rows = max(max_rows, result.row_count)
+        candidates: list[float] = []
         candidates.append(float(result.row_count))
 
         # Whether the rows we hold ARE the whole result. Aggregate derivations below are only
@@ -269,11 +322,13 @@ def build_candidates(results: Iterable[CachedResult]) -> tuple[list[float], int]
                     if isinstance(current, (int, float)) and isinstance(previous, (int, float)):
                         candidates.append(float(current) - float(previous))
 
-    # Prose says "ökade med 4,2 %" for a delta of -4.2 as readily as for +4.2; the sign lives
-    # in the verb, which is not something a numeric check can read.
-    candidates.extend([-value for value in candidates])
-    candidates.sort()
-    return candidates, max_rows
+        # Prose says "ökade med 4,2 %" for a delta of -4.2 as readily as for +4.2; the sign
+        # lives in the verb, which is not something a numeric check can read.
+        candidates.extend([-value for value in candidates])
+        candidates.sort()
+        by_result.append((result.query_id, candidates))
+
+    return by_result
 
 
 def _matches(candidates: Sequence[float], value: float, tolerance: float) -> bool:
@@ -290,10 +345,13 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
     number in the prose may legitimately come from any of them.
     """
     results = list(results)
-    candidates, max_rows = build_candidates(results)
+    by_result = candidates_by_result(results)
+    max_rows = max((result.row_count for result in results), default=0)
     literals = extract_numbers(mask_entity_names(text, results))
 
     violations: list[str] = []
+    attributions: list[Attribution] = []
+
     for literal in literals:
         if (literal.bare_integer and literal.value.is_integer()
                 and _YEAR_MIN <= literal.value <= _YEAR_MAX):
@@ -307,8 +365,18 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
         # thousands and as millions. "12,4" in a sentence about millions is a rounding of
         # 12 412 331, not a hallucination, and the tolerance scales with the reading.
         scales = (1.0, 1e3, 1e6) if literal.implicit_scale_allowed else (1.0,)
-        if any(_matches(candidates, literal.value * scale, literal.tolerance * scale)
-               for scale in scales):
+
+        # Results are tried in the order the turn produced them, so a figure that several
+        # queries could account for is attributed to the first one that could — which is the
+        # one the model was looking at when it wrote the sentence.
+        source = next(
+            (query_id for query_id, candidates in by_result
+             if any(_matches(candidates, literal.value * scale, literal.tolerance * scale)
+                    for scale in scales)),
+            None)
+        if source is not None:
+            attributions.append(Attribution(literal=literal.raw, value=literal.value,
+                                            query_id=source))
             continue
 
         violations.append(
@@ -316,4 +384,5 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
             f"(summa, medel, förändring eller andel) av något värde i det."
         )
 
-    return ValidationResult(ok=not violations, violations=violations, checked=len(literals))
+    return ValidationResult(ok=not violations, violations=violations,
+                            checked=len(literals), attributions=attributions)

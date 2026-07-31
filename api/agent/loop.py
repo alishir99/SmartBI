@@ -149,6 +149,9 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     rounds = 0
     usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
              "cache_write_tokens": 0, "llm_calls": 0}
+    # Stays None when the turn produced no rows: there is then nothing to attribute, and a
+    # falsy default keeps the card-building call below from needing a second branch.
+    check = None
 
     try:
         async with mcp.session(supplier_id) as session:
@@ -275,11 +278,17 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
                     # One retry only. A second failure means the model cannot state this
                     # answer truthfully, so we keep the chart and drop the prose.
-                    if not validate_narrative(narrative, produced).ok:
+                    check = validate_narrative(narrative, produced)
+                    if not check.ok:
                         status = "validation_failed"
 
+            # `check.attributions` says which query licensed each figure that survived, so
+            # the card can attribute every number in the prose instead of pointing all of
+            # them at the chart's query.
             card = render.build_card(result=result, narrative=narrative,
-                                     envelope=envelope, status=status)
+                                     envelope=envelope, status=status,
+                                     produced=produced,
+                                     attributions=check.attributions if check else [])
 
             if card.narrative:
                 for start in range(0, len(card.narrative), _CHUNK):

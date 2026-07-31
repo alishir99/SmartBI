@@ -202,3 +202,77 @@ def test_masking_a_name_does_not_excuse_a_fabricated_figure():
         [result(TOP_LIST, columns=PRODUCT_COLUMNS)])
     assert not check.ok
     assert "9 999 999 kr" in check.violations[0]
+
+
+# --------------------------------------------------------------- provenance per tool call
+
+def named(query_id: str, rows, columns=None, row_count=None) -> CachedResult:
+    entry = result(rows, columns=columns, row_count=row_count)
+    entry.query_id = query_id
+    return entry
+
+
+REGION_COLUMNS = [
+    {"key": "region", "type": "text", "label": "Län"},
+    {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"},
+]
+
+
+def test_each_accepted_figure_names_the_query_that_licensed_it():
+    """The B8 fix. `validate_narrative` has always checked the prose against every result the
+    turn produced, while the card carried one `query_id` — so a number grounded in result A
+    shipped beside a chart of result B and a source chip describing B. The mapping existed
+    inside the check and was thrown away at the last step."""
+    months = named("q_months", [
+        {"month": "2026-03-01", "net_sales_sek": 3_450_900.50}])
+    regions = named("q_regions", [
+        {"region": "Stockholms län", "net_sales_sek": 33_696_254.00}],
+        columns=REGION_COLUMNS)
+
+    check = validate_narrative(
+        "Mars gav 3 450 900,50 kr och Stockholm stod för 33 696 254,00 kr.",
+        [months, regions])
+
+    assert check.ok, check.violations
+    assert [(a.literal, a.query_id) for a in check.attributions] == [
+        ("3 450 900,50 kr", "q_months"),
+        ("33 696 254,00 kr", "q_regions"),
+    ]
+    assert check.query_ids() == ["q_months", "q_regions"]
+
+
+def test_a_figure_several_queries_could_explain_is_attributed_to_the_first():
+    """Ambiguity is resolved by order rather than left unattributed: the turn ran the queries
+    in sequence, and the first one that accounts for the figure is the one the model was
+    looking at when it wrote the sentence."""
+    first = named("q_first", [{"month": "2026-01-01", "net_sales_sek": 1_000.00}])
+    second = named("q_second", [{"month": "2026-02-01", "net_sales_sek": 1_000.00}])
+
+    check = validate_narrative("Det blev 1 000,00 kr.", [first, second])
+
+    assert check.ok
+    assert check.attributions[0].query_id == "q_first"
+
+
+def test_two_results_sharing_a_query_id_do_not_erase_each_other():
+    """Ids are unique in production, and this must not *depend* on it. Keying the candidate
+    sets by id would make one result silently overwrite the other, and a perfectly grounded
+    number would be reported as a fabrication — a validator failing closed on a bookkeeping
+    detail is worse than one that never looked."""
+    a = named("q_same", [{"month": "2026-01-01", "net_sales_sek": 1_111.00}])
+    b = named("q_same", [{"month": "2026-02-01", "net_sales_sek": 2_222.00}],
+              row_count=1)
+
+    check = validate_narrative("Först 1 111,00 kr, sedan 2 222,00 kr.", [a, b])
+
+    assert check.ok, check.violations
+    assert len(check.attributions) == 2
+
+
+def test_a_fabricated_figure_is_attributed_to_nothing():
+    months = named("q_months", [{"month": "2026-03-01", "net_sales_sek": 3_450_900.50}])
+
+    check = validate_narrative("Mars gav 9 900 000,00 kr.", [months])
+
+    assert not check.ok
+    assert check.attributions == []

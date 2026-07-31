@@ -141,7 +141,14 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </ul>
       )}
 
-      {card.provenance && <SourceChip provenance={card.provenance} />}
+      {card.provenance && (
+        <SourceChip
+          provenance={card.provenance}
+          sources={card.sources}
+          claims={card.claims}
+          primaryQueryId={card.query_id}
+        />
+      )}
     </section>
   )
 }

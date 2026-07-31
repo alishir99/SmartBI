@@ -14,10 +14,20 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import Any
 
-from ..models import AnswerCard, ChartSpec, Column, Provenance, TimeWindow
+from ..models import (
+    AnswerCard,
+    ChartSpec,
+    Claim,
+    Column,
+    Provenance,
+    TimeWindow,
+    ToolCallRecord,
+)
 from ..result_cache import CachedResult
+from .validate import Attribution
 
 # The model is told to end with exactly one ```json block. Match the LAST one: if it wrote an
 # illustrative block earlier in its prose, the final one is the real answer.
@@ -235,10 +245,34 @@ def build_provenance(result: CachedResult) -> Provenance | None:
     )
 
 
+def build_sources(results: Sequence[CachedResult],
+                  primary: CachedResult | None) -> list[ToolCallRecord]:
+    """Provenance for every result the turn produced, the chart's first.
+
+    Order matters for the UI, not for correctness: the source chip opens on the query behind
+    the picture, and the rest are there for a reader following a figure in the prose.
+    Duplicate ids are collapsed because the same result can be both primary and produced.
+    """
+    ordered: list[CachedResult] = []
+    for result in ([primary] if primary is not None else []) + list(results):
+        if result is not None and all(seen.query_id != result.query_id for seen in ordered):
+            ordered.append(result)
+    return [ToolCallRecord(query_id=result.query_id, tool=result.tool,
+                           provenance=build_provenance(result), row_count=result.row_count)
+            for result in ordered]
+
+
 def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[str, Any],
-               status: str = "ok") -> AnswerCard:
-    """Assemble the card. `caveats` accumulates anything we had to correct."""
+               status: str = "ok", produced: Sequence[CachedResult] = (),
+               attributions: Sequence[Attribution] = ()) -> AnswerCard:
+    """Assemble the card. `caveats` accumulates anything we had to correct.
+
+    `produced` is every result the turn ran, and `attributions` says which of them licensed
+    each figure in the prose. Both default to empty so the dashboard — which produces exactly
+    one result and no narrative — is unaffected.
+    """
     caveats = [str(c) for c in (envelope.get("caveats") or [])]
+    claims = [Claim(literal=a.literal, query_id=a.query_id) for a in attributions]
 
     if result is None:
         # clarify / cannot_answer paths: no data was returned, so there is nothing to chart
@@ -257,6 +291,8 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
             status=status, narrative=narrative,
             insights=[str(i) for i in (envelope.get("insights") or [])],
             caveats=caveats,
+            sources=build_sources(produced, None),
+            claims=claims,
             suggestions=[str(s) for s in (envelope.get("suggestions") or [])],
         )
 
@@ -288,6 +324,9 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
         query_id=result.query_id,
         columns=to_columns(result),
         provenance=build_provenance(result),
+        sources=build_sources(produced, result),
+        # A suppressed narrative has no claims left to attribute.
+        claims=[] if status == "validation_failed" else claims,
         suggestions=[str(s) for s in (envelope.get("suggestions") or [])],
     )
 

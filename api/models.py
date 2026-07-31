@@ -99,6 +99,34 @@ class Provenance(BaseModel):
     tool_args: dict[str, Any] = Field(default_factory=dict)
 
 
+class Claim(BaseModel):
+    """One numeric literal in the narrative and the query that licensed it.
+
+    What turns "the numbers are checked" into "this number came from that query". The
+    validator already knew which result accounted for each figure and threw the mapping away
+    at the last step.
+    """
+
+    literal: str
+    query_id: str
+
+
+class ToolCallRecord(BaseModel):
+    """One tool result produced during the turn, with its own provenance.
+
+    A card used to carry a single `query_id` while `validate_narrative` checked the prose
+    against *every* result the turn produced. So prose grounded in result A could ship beside
+    a chart of result B and a source chip describing B's filters and time range — the one
+    artefact whose entire purpose is traceability, pointing at the wrong query. Recording
+    every result makes the card's provenance true rather than approximately true.
+    """
+
+    query_id: str
+    tool: str
+    provenance: Provenance
+    row_count: int
+
+
 class AnswerCard(BaseModel):
     """The single unit both the dashboard and the chat produce.
 
@@ -113,9 +141,15 @@ class AnswerCard(BaseModel):
     insights: list[str] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     chart: ChartSpec | None = None
+    #: The chart's source. Still singular, because a chart is drawn from exactly one result.
     query_id: str | None = None
     columns: list[Column] = Field(default_factory=list)
+    #: The chart's provenance, kept for compatibility — it is `sources[i]` for the chart's id.
     provenance: Provenance | None = None
+    #: Every result the turn produced, chart's first.
+    sources: list[ToolCallRecord] = Field(default_factory=list)
+    #: Which query licensed each accepted figure in the narrative.
+    claims: list[Claim] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
 
 

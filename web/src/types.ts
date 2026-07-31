@@ -64,6 +64,20 @@ export type Provenance = {
 export type CardStatus = 'ok' | 'cannot_answer' | 'clarify' | 'validation_failed'
 
 /** The single unit both the dashboard and the chat produce. One card type, two producers. */
+/** One tool result the turn produced, with its own provenance. */
+export type ToolCallRecord = {
+  query_id: string
+  tool: string
+  provenance: Provenance
+  row_count: number
+}
+
+/** One numeric literal in the narrative and the query that licensed it. */
+export type Claim = {
+  literal: string
+  query_id: string
+}
+
 export type AnswerCard = {
   card_id: string | null
   status: CardStatus
@@ -74,6 +88,10 @@ export type AnswerCard = {
   query_id: string | null
   columns: Column[]
   provenance: Provenance | null
+  /** Every result the turn produced, the chart's first. Empty on older saved cards. */
+  sources?: ToolCallRecord[]
+  /** Which query licensed each accepted figure in the prose. */
+  claims?: Claim[]
   suggestions: string[]
 }
 

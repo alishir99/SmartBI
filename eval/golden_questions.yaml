@@ -36,7 +36,7 @@
   # gt: sum of per_supplier["Nordström Audio AB"].net_sales_by_month for 2025-07 … 2026-06
   derivation: {measure: net_sales_sek, where: {relative: last_12_months}}
   expects:
-    numeric: {value: 41129464.59, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 49360103.36, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -48,7 +48,7 @@
   # gt: per_supplier["Nordström Audio AB"].net_sales_sek
   derivation: {measure: net_sales_sek, where: {relative: all_time}}
   expects:
-    numeric: {value: 77537281.39, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 93016415.60, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -60,7 +60,7 @@
   # derived: units over the same window; gt has the all-time figure only
   derivation: {measure: units, where: {relative: last_12_months}}
   expects:
-    numeric: {value: 24696, unit: st, tolerance_pct: 0.5}
+    numeric: {value: 24704, unit: st, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -72,7 +72,7 @@
   # gt: per_supplier["Nordström Audio AB"].units
   derivation: {measure: units, where: {relative: all_time}}
   expects:
-    numeric: {value: 47391, unit: st, tolerance_pct: 0.2}
+    numeric: {value: 47399, unit: st, tolerance_pct: 0.2}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -84,7 +84,7 @@
   # derived: COUNT(DISTINCT order_id); the `orders` measure is fact-only by design
   derivation: {measure: orders, where: {relative: last_12_months}}
   expects:
-    numeric: {value: 19156, unit: st, tolerance_pct: 0.5}
+    numeric: {value: 19150, unit: st, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -96,7 +96,7 @@
   # gt: per_supplier["Nordström Audio AB"].gross_sales_sek
   derivation: {measure: gross_sales_sek, where: {relative: all_time}}
   expects:
-    numeric: {value: 100063499.07, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 100068898.35, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -108,7 +108,7 @@
   # gt: sum of per_supplier[...].net_sales_by_month for the twelve 2025-* keys
   derivation: {measure: net_sales_sek, where: {from: "2025-01-01", to: "2025-12-31"}}
   expects:
-    numeric: {value: 39597445.91, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 47537629.76, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -120,7 +120,7 @@
   # gt: sum of per_supplier[...].net_sales_by_month for 2026-01 … 2026-06 (data ends 30 juni)
   derivation: {measure: net_sales_sek, where: {relative: ytd}}
   expects:
-    numeric: {value: 16300377.02, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 19781872.29, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -132,7 +132,7 @@
   # gt: net_sales_by_month 2025-10 + 2025-11 + 2025-12
   derivation: {measure: net_sales_sek, where: {from: "2025-10-01", to: "2025-12-31"}}
   expects:
-    numeric: {value: 16236078.16, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 19074216.04, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -145,7 +145,7 @@
   # date (2026-06-30), so it is May 2026, not the month before today
   derivation: {measure: net_sales_sek, where: {relative: last_month}}
   expects:
-    numeric: {value: 2776925.01, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 3577452.60, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -157,7 +157,7 @@
   # gt: net_sales_by_month["2026-06-01"]
   derivation: {measure: net_sales_sek, where: {from: "2026-06-01", to: "2026-06-30"}}
   expects:
-    numeric: {value: 2803465.62, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 3374914.99, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -175,18 +175,18 @@
       group_by: month
       tolerance_pct: 0.5
       points:
-        "2025-07-01": 2303237.28
-        "2025-08-01": 3364657.88
-        "2025-09-01": 2925114.25
-        "2025-10-01": 3159985.43
-        "2025-11-01": 7263522.51
-        "2025-12-01": 5812570.22
-        "2026-01-01": 3389865.54
-        "2026-02-01": 2064044.99
-        "2026-03-01": 2553385.42
-        "2026-04-01": 2712690.44
-        "2026-05-01": 2776925.01
-        "2026-06-01": 2803465.62
+        "2025-07-01": 2940252.53
+        "2025-08-01": 3756011.49
+        "2025-09-01": 3807751.01
+        "2025-10-01": 4070802.36
+        "2025-11-01": 8127460.48
+        "2025-12-01": 6875953.20
+        "2026-01-01": 3787520.04
+        "2026-02-01": 2651908.15
+        "2026-03-01": 3266156.33
+        "2026-04-01": 3123920.18
+        "2026-05-01": 3577452.60
+        "2026-06-01": 3374914.99
     tools_called: [query_sales]
     dimensions: [month]
     chart_type: line
@@ -203,11 +203,11 @@
       group_by: week
       tolerance_pct: 0.5
       points:
-        "2026-04-06": 627825.97
-        "2026-04-20": 634655.95
-        "2026-05-04": 668693.81
-        "2026-06-08": 643355.73
-        "2026-06-22": 763577.17
+        "2026-04-06": 692198.18
+        "2026-04-20": 770088.14
+        "2026-05-04": 876660.43
+        "2026-06-08": 809105.98
+        "2026-06-22": 838907.56
     tools_called: [query_sales]
     dimensions: [week]
     chart_type: line
@@ -223,14 +223,14 @@
       group_by: quarter
       tolerance_pct: 0.5
       points:
-        "2024-07-01": 7072608.71
-        "2024-10-01": 14566849.75
-        "2025-01-01": 7193997.71
-        "2025-04-01": 7574360.63
-        "2025-07-01": 8593009.41
-        "2025-10-01": 16236078.16
-        "2026-01-01": 8007295.95
-        "2026-04-01": 8293081.07
+        "2024-07-01": 8589658.93
+        "2024-10-01": 17107254.62
+        "2025-01-01": 8786305.07
+        "2025-04-01": 9173093.62
+        "2025-07-01": 10504015.03
+        "2025-10-01": 19074216.04
+        "2026-01-01": 9705584.52
+        "2026-04-01": 10076287.77
     tools_called: [query_sales]
     dimensions: [quarter]
     chart_type: [line, bar]
@@ -247,9 +247,9 @@
       group_by: year
       tolerance_pct: 0.5
       points:
-        "2024": 21639458.46
-        "2025": 39597445.91
-        "2026": 16300377.02
+        "2024": 25696913.55
+        "2025": 47537629.76
+        "2026": 19781872.29
     tools_called: [query_sales]
     dimensions: [year]
     chart_type: [bar, line]
@@ -268,7 +268,7 @@
   derivation: {measure: net_sales_sek, group_by: product, top: 5,
                where: {relative: last_12_months}}
   expects:
-    numeric: {value: 4251150.76, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 5065665.36, unit: SEK, tolerance_pct: 0.5}
     top_n:
       group_by: product
       prefix_only: true
@@ -312,7 +312,7 @@
   derivation: {measure: net_sales_sek, group_by: product, top: 5,
                where: {relative: all_time}}
   expects:
-    numeric: {value: 8824779.51, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 10568044.71, unit: SEK, tolerance_pct: 0.5}
     top_n:
       group_by: product
       prefix_only: true
@@ -359,7 +359,7 @@
   derivation: {measure: net_sales_sek, group_by: product, top: 5,
                where: {relative: all_time, region: "Stockholms län"}}
   expects:
-    numeric: {value: 3253417.23, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 3913667.05, unit: SEK, tolerance_pct: 0.5}
     top_n:
       group_by: product
       prefix_only: true
@@ -382,7 +382,7 @@
   derivation: {measure: net_sales_sek, group_by: store, top: 3,
                where: {relative: last_12_months}}
   expects:
-    numeric: {value: 4233255.51, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 5022033.59, unit: SEK, tolerance_pct: 0.5}
     top_n:
       group_by: store
       prefix_only: true
@@ -410,10 +410,10 @@
       group_by: region
       tolerance_pct: 0.5
       points:
-        "Stockholms län": 28163619.5
-        "Västra Götalands län": 10606922.18
-        "Skåne län": 7490254.35
-        "Gotlands län": 318035.55
+        "Stockholms län": 33696253.72
+        "Västra Götalands län": 12800727.63
+        "Skåne län": 8919505.47
+        "Gotlands län": 381683.44
     tools_called: [query_sales]
     dimensions: [region]
     chart_type: bar
@@ -428,7 +428,7 @@
   derivation: {measure: net_sales_sek, group_by: region, top: 1,
                where: {relative: all_time}}
   expects:
-    numeric: {value: 28163619.5, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 33696253.72, unit: SEK, tolerance_pct: 0.5}
     must_contain: ["Stockholm"]
     tools_called: [query_sales]
     dimensions: [region]
@@ -450,9 +450,9 @@
       group_by: region
       tolerance_pct: 0.5
       points:
-        "Stockholms län": 14495308.84
-        "Västra Götalands län": 5740152.55
-        "Skåne län": 4106627.88
+        "Stockholms län": 17330193.49
+        "Västra Götalands län": 6920385.19
+        "Skåne län": 4885203.50
     tools_called: [query_sales]
     dimensions: [region]
     chart_type: bar
@@ -487,8 +487,8 @@
       group_by: channel
       tolerance_pct: 0.5
       points:
-        fysisk: 29759524.42
-        online: 11369940.17
+        fysisk: 35725642.04
+        online: 13634461.32
     tools_called: [query_sales]
     dimensions: [channel]
     chart_type: [bar, pie, stacked_bar]
@@ -518,8 +518,8 @@
       group_by: channel
       tolerance_pct: 0.5
       points:
-        fysisk: 17932
-        online: 6764
+        fysisk: 17938
+        online: 6766
     tools_called: [query_sales]
     dimensions: [channel]
     chart_type: [bar, pie, stacked_bar]
@@ -533,7 +533,7 @@
   # derived: net_sales_sek / units over last_12_months
   derivation: {measure: avg_price_sek, where: {relative: last_12_months}}
   expects:
-    numeric: {value: 1665.43, unit: SEK, tolerance_pct: 1.0}
+    numeric: {value: 1998.06, unit: SEK, tolerance_pct: 1.0}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -550,8 +550,8 @@
       group_by: channel
       tolerance_pct: 1.0
       points:
-        fysisk: 1659.58
-        online: 1680.95
+        fysisk: 1991.62
+        online: 2015.14
     tools_called: [query_sales]
     dimensions: [channel]
     chart_type: [bar, kpi]
@@ -563,7 +563,7 @@
   # derived: 100 * discount / gross over last_12_months
   derivation: {measure: discount_rate, where: {relative: last_12_months}}
   expects:
-    numeric: {value: 22.51, unit: "%", tolerance_pct: 2.0}
+    numeric: {value: 7.01, unit: "%", tolerance_pct: 2.0}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -575,7 +575,7 @@
   # gt: per_supplier[...].gross_sales_sek - net_sales_sek = 100063499.07 - 77537281.39
   derivation: {measure: discount_sek, where: {relative: all_time}}
   expects:
-    numeric: {value: 22526217.68, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 7052482.75, unit: SEK, tolerance_pct: 0.5}
     tools_called: [query_sales]
     dimensions: []
     chart_type: kpi
@@ -584,7 +584,10 @@
 
 - id: discount_rate_by_month_last_12m
   question: "Visa rabattgraden per månad senaste året."
-  # derived: discount_rate per month; campaign months spike, ordinary months are near zero
+  # derived: discount_rate per month; campaign months spike, ordinary months are near zero.
+  # The spread is the point: these four literals used to read 22.48 / 22.45 / 22.31 / 22.92 —
+  # flat, because the generator discounted every line (D4). This case is now the guard: if a
+  # campaign month and an ordinary month ever agree again, the generator has re-broken.
   derivation: {measure: discount_rate, group_by: month,
                where: {relative: last_12_months}}
   expects:
@@ -592,10 +595,10 @@
       group_by: month
       tolerance_pct: 3.0
       points:
-        "2025-08-01": 22.48
-        "2025-11-01": 22.45
-        "2026-01-01": 22.31
-        "2026-05-01": 22.92
+        "2025-08-01": 13.46
+        "2025-11-01": 13.22
+        "2026-01-01": 13.20
+        "2026-05-01": 0.70
     tools_called: [query_sales]
     dimensions: [month]
     chart_type: [line, bar]
@@ -612,8 +615,8 @@
     where: {relative: last_12_months}
     compare_where: {from: "2024-07-01", to: "2025-06-30"}
   expects:
-    numeric: {value: 41129464.59, unit: SEK, tolerance_pct: 0.5}
-    delta_pct: {value: 13.05, tolerance_pct: 5.0}
+    numeric: {value: 49360103.36, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 13.07, tolerance_pct: 5.0}
     tools_called: [query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -627,8 +630,8 @@
     where: {from: "2026-04-01", to: "2026-06-30"}
     compare_where: {from: "2025-04-01", to: "2025-06-30"}
   expects:
-    numeric: {value: 8293081.07, unit: SEK, tolerance_pct: 0.5}
-    delta_pct: {value: 9.79, tolerance_pct: 5.0}
+    numeric: {value: 10076287.77, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 9.85, tolerance_pct: 5.0}
     tools_called: [query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -646,8 +649,8 @@
     where: {from: "2025-09-01", to: "2025-09-30"}
     compare_where: {from: "2025-08-01", to: "2025-08-31"}
   expects:
-    numeric: {value: 2925114.25, unit: SEK, tolerance_pct: 0.5}
-    delta_pct: {value: -13.06, tolerance_pct: 8.0}
+    numeric: {value: 3807751.01, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 1.38, tolerance_pct: 8.0}
     tools_called: [query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -661,8 +664,8 @@
     where: {from: "2026-06-01", to: "2026-06-30"}
     compare_where: {from: "2025-06-01", to: "2025-06-30"}
   expects:
-    numeric: {value: 2803465.62, unit: SEK, tolerance_pct: 0.5}
-    delta_pct: {value: 9.73, tolerance_pct: 5.0}
+    numeric: {value: 3374914.99, unit: SEK, tolerance_pct: 0.5}
+    delta_pct: {value: 9.90, tolerance_pct: 5.0}
     tools_called: [query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -710,7 +713,7 @@
     market_share: {subcategory: Högtalare, brand: Nordström}
     where: {relative: last_12_months}
   expects:
-    numeric: {value: 32.37, unit: "%", tolerance_pct: 3.0}
+    numeric: {value: 32.36, unit: "%", tolerance_pct: 3.0}
     rank: 1
     n_brands: 5
     tools_called: [query_market_share]
@@ -756,12 +759,12 @@
       group_by: month
       tolerance_pct: 0.5
       points:
-        "2024-12-01": 454100.62
-        "2025-01-01": 265554.52
-        "2025-02-01": 182653.17
-        "2025-03-01": 183760.17
-        "2025-04-01": 199565.07
-        "2025-05-01": 224297.8
+        "2024-12-01": 529867.69
+        "2025-01-01": 300169.82
+        "2025-02-01": 231060.87
+        "2025-03-01": 233447.65
+        "2025-04-01": 230280.51
+        "2025-05-01": 286920.61
     tools_called: [resolve_entities, query_sales]
     dimensions: [month]
     chart_type: line
@@ -776,7 +779,7 @@
     measure: net_sales_sek
     where: {relative: all_time, product: "Nordström Hörlurar N178 Pro"}
   expects:
-    numeric: {value: 1509931.35, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 1811747.15, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, line, bar]
     status: ok
@@ -795,10 +798,10 @@
       group_by: month
       tolerance_pct: 0.5
       points:
-        "2025-08-01": 121097.29
-        "2025-09-01": 133832.86
-        "2025-12-01": 197993.05
-        "2026-06-01": 92392.93
+        "2025-08-01": 133335.07
+        "2025-09-01": 175108.52
+        "2025-12-01": 246215.01
+        "2026-06-01": 105258.02
     tools_called: [resolve_entities, query_sales]
     dimensions: [month]
     chart_type: line
@@ -813,7 +816,7 @@
     measure: net_sales_sek
     where: {relative: all_time, store: "Täby Handelsplats 4 (ny)"}
   expects:
-    numeric: {value: 1223902.11, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 1484996.13, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -831,7 +834,7 @@
     measure: net_sales_sek
     where: {relative: last_12_months, subcategory: Hörlurar}
   expects:
-    numeric: {value: 5432808.19, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 6511354.07, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, line, bar]
     status: ok
@@ -844,7 +847,7 @@
     measure: net_sales_sek
     where: {relative: last_12_months, region: "Stockholms län"}
   expects:
-    numeric: {value: 14495308.84, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 17330193.49, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, bar, line]
     status: ok
@@ -857,7 +860,7 @@
   derivation: {measure: net_sales_sek, group_by: brand, top: 1,
                where: {relative: all_time}}
   expects:
-    numeric: {value: 47117567.07, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 56521198.45, unit: SEK, tolerance_pct: 0.5}
     must_contain: ["Nordström"]
     tools_called: [query_sales]
     dimensions: [brand]
@@ -872,7 +875,7 @@
     measure: net_sales_sek
     where: {relative: last_12_months, subcategory: TV}
   expects:
-    numeric: {value: 10097196.09, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 12086730.19, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, line, bar]
     status: ok
@@ -888,8 +891,8 @@
       group_by: brand
       tolerance_pct: 0.5
       points:
-        Nordström: 24588263.36
-        Vidar: 16541201.23
+        Nordström: 29478833.14
+        Vidar: 19881270.22
     tools_called: [query_sales]
     dimensions: [brand]
     chart_type: [bar, pie, stacked_bar]
@@ -902,7 +905,7 @@
   derivation: {measure: net_sales_sek, group_by: subcategory, top: 4,
                where: {relative: last_12_months}}
   expects:
-    numeric: {value: 10097196.09, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 12086730.19, unit: SEK, tolerance_pct: 0.5}
     top_n:
       group_by: subcategory
       prefix_only: true
@@ -920,7 +923,7 @@
     measure: net_sales_sek
     where: {relative: last_12_months, region: "Stockholms län", channel: online}
   expects:
-    numeric: {value: 4233255.51, unit: SEK, tolerance_pct: 0.5}
+    numeric: {value: 5022033.59, unit: SEK, tolerance_pct: 0.5}
     tools_called: [resolve_entities, query_sales]
     chart_type: [kpi, bar, line]
     status: ok

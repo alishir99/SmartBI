@@ -268,8 +268,67 @@ def _check_numeric(where: str, key: str, spec, *, require_unit: bool) -> list[st
     return problems
 
 
-def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
+def _is_numeric_literal(text: str) -> bool:
+    """A `must_not_contain` entry that is a figure rather than a name. Digits, spaces and
+    Swedish decimal separators only — "22 105" and "174,9" are figures, "Lumia" is not."""
+    return any(ch.isdigit() for ch in text) and all(
+        ch.isdigit() or ch in " ,." for ch in text)
+
+
+def _check_forbids(where: str, case: dict, expects: dict) -> list[str]:
+    """Every forbidden *figure* must be traceable to a live derivation.
+
+    This is the guard the adversarial suite was missing. Golden cases cannot carry an
+    untraceable number — `_check_golden` demands a `derivation` and test_expectations.py
+    re-runs it. Adversarial cases demanded nothing, so `174`, `118`, `158` and `22 105`
+    quietly stopped existing in the data at a regeneration and four negative controls
+    became unconditional passes: the suite making the *safety* claim had the weaker
+    traceability guard of the two.
+
+    A `forbids` block fixes that structurally rather than by re-pasting the numbers. It
+    declares where each literal comes from, tests/test_forbidden.py re-derives it against
+    the CSVs, and this check refuses a numeric literal that no entry accounts for — so the
+    next regeneration cannot silently disarm a control.
+    """
     problems = []
+    forbids = case.get("forbids", [])
+    if not isinstance(forbids, list):
+        return [f"{where}: `forbids` must be a list"]
+
+    declared = set()
+    for entry in forbids:
+        if not isinstance(entry, dict):
+            problems.append(f"{where}: each `forbids` entry must be a mapping")
+            continue
+        literal = entry.get("literal")
+        if not isinstance(literal, str) or not literal.strip():
+            problems.append(f"{where}: a `forbids` entry needs a non-empty `literal`")
+            continue
+        declared.add(literal)
+        if not ({"supplier", "brand_top_product"} & set(entry)):
+            problems.append(f"{where}: forbids {literal!r} names no subject — add "
+                            f"`supplier` or `brand_top_product`")
+        scale = entry.get("scale", 1)
+        if not isinstance(scale, int) or scale < 1:
+            problems.append(f"{where}: forbids {literal!r} has a non-positive `scale`")
+
+    for value in expects.get("must_not_contain") or []:
+        if _is_numeric_literal(value) and value not in declared:
+            problems.append(
+                f"{where}: must_not_contain has the figure {value!r} with no `forbids` "
+                f"entry deriving it — a forbidden number nobody re-computes stops "
+                f"existing in the data without anything noticing, and the control passes "
+                f"for the wrong reason")
+
+    for literal in declared:
+        if literal not in (expects.get("must_not_contain") or []):
+            problems.append(f"{where}: forbids derives {literal!r} but must_not_contain "
+                            f"never forbids it")
+    return problems
+
+
+def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
+    problems = _check_forbids(where, case, expects)
 
     if not case.get("category"):
         problems.append(f"{where}: missing `category` (cross_tenant, prompt_injection, "

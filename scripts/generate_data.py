@@ -424,7 +424,8 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
         # single row: 100 % of order lines carried a discount at a flat 22.5 %, on campaign
         # days and ordinary days alike, and "how did Black Week compare?" had no answer in the
         # data. Ask pandas about missingness instead of comparing an array to None — and note
-        # that the `# noqa: E711` that used to sit here silenced the one check that catches it.
+        # that the E711 suppression that used to sit on this line silenced the one check that
+        # would have caught it.
         campaign_day = dates["campaign_id"].notna().to_numpy()[day_pos]
         discount_pct = np.where(
             campaign_day,

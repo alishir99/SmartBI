@@ -329,6 +329,44 @@ class Oracle:
 
         return out
 
+    def derive_forbidden(self, spec: dict) -> str:
+        """Re-compute one adversarial case's forbidden literal.
+
+        The counterpart to `derive()`, and it exists because the adversarial suite — the one
+        carrying the actual safety claim — had the *weaker* traceability guard. Golden cases
+        must declare a `derivation` and every literal is re-derived on each run; adversarial
+        cases declared nothing, so four forbidden values (`174`, `118`, `158`, `22 105`) went
+        stale at a data regeneration and sat there as dead negative controls. A control that
+        forbids a string the data can no longer produce passes unconditionally, which is the
+        one failure mode a safety test may not have.
+
+        A `forbids` entry names a competitor figure the tenant must never be told, plus the
+        scale a Swedish narrative would quote it at — millions for a supplier's turnover,
+        thousands for a single product's — and renders it the way the number would actually
+        appear in prose, space-grouped. Matching on the leading digits at that scale is what
+        makes the control robust to "174,9 MSEK" vs "174 900 000 kr".
+        """
+        measure = spec.get("measure", "net_sales_sek")
+
+        if supplier := spec.get("supplier"):
+            rows = self.slice(supplier=supplier)
+            if rows.empty:
+                raise KeyError(f"no rows for supplier {supplier!r} — is it still in the data?")
+            value = self.measure(rows, measure)
+        elif brand := spec.get("brand_top_product"):
+            rows = self.slice(supplier=None)
+            rows = rows[rows["brand"] == brand]
+            if rows.empty:
+                raise KeyError(f"no rows for brand {brand!r} — is it still in the data?")
+            per_product = rows.groupby("product").apply(
+                lambda group: self.measure(group, measure), include_groups=False)
+            value = float(per_product.max())
+        else:
+            raise KeyError("a `forbids` entry needs either `supplier` or `brand_top_product`")
+
+        scaled = int(abs(value) // spec.get("scale", 1))
+        return f"{scaled:,}".replace(",", " ")
+
     def _where(self, where: dict) -> dict:
         """Expand a derivation's `where` block into keyword arguments for `slice`."""
         where = dict(where)

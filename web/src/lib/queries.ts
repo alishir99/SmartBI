@@ -9,7 +9,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AnswerCard, SaveCardRequest } from '../types'
+import type { SaveCardRequest } from '../types'
 import { DEFAULT_PERIOD } from './periods'
 import {
   deleteCard,
@@ -61,8 +61,7 @@ export function useSavedCards() {
 export function useSaveCard() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ body, source }: { body: SaveCardRequest; source?: AnswerCard }) =>
-      saveCard(body, source),
+    mutationFn: (body: SaveCardRequest) => saveCard(body),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.cards }),
   })
 }

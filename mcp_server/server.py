@@ -33,9 +33,11 @@ from .tools.schemas import (
     DimensionKey,
     EntityKind,
     Filters,
+    Having,
     MeasureKey,
     OrderBy,
     TimeRange,
+    TopNPer,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,6 +110,9 @@ async def query_sales(ctx: Context,
                       time_range: TimeRange | None = None,
                       compare_to: CompareTo | None = None,
                       order_by: OrderBy | None = None,
+                      percent_of_total: bool = False,
+                      having: Having | None = None,
+                      top_n_per: TopNPer | None = None,
                       limit: int = 500) -> dict:
     tenant = tenant_from(ctx)
     spec = {
@@ -117,6 +122,9 @@ async def query_sales(ctx: Context,
         "time_range": _time_range(time_range),
         "compare_to": compare_to,
         "order_by": order_by.model_dump(exclude_none=True) if order_by else None,
+        "percent_of_total": percent_of_total,
+        "having": having.model_dump(exclude_none=True) if having else None,
+        "top_n_per": top_n_per.model_dump(exclude_none=True) if top_n_per else None,
         "limit": limit,
     }
     try:

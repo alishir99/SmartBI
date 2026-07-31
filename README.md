@@ -98,9 +98,6 @@ och körs så här mot en igång-körande stack:
 POSTGRES_HOST=localhost pytest -q -m integration
 ```
 
-Frontenden kan köras utan backend för design- och demoarbete: sätt `VITE_USE_MOCKS=true`
-i `web/.env.local` så serveras fixturerna i `web/src/lib/mocks.ts` i stället för API:et.
-
 ---
 
 ## Arkitektur

@@ -26,7 +26,6 @@ from anthropic import AsyncAnthropic
 from ..config import settings
 from ..mcp_client import McpClient, McpToolError
 from ..models import (
-    AnswerCard,
     CardEvent,
     ErrorEvent,
     StatusEvent,
@@ -323,21 +322,3 @@ def _result_for(envelope: dict[str, Any],
 
 def _dumps(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
-
-
-async def run_turn_to_card(*, question: str, supplier_id: int, mcp: McpClient,
-                           cache: ResultCache,
-                           history: list[dict[str, str]] | None = None) -> AnswerCard:
-    """Non-streaming convenience wrapper, used by tests and the eval harness."""
-    card: AnswerCard | None = None
-    error: str | None = None
-    async for event in run_turn(question=question, history=history or [],
-                                supplier_id=supplier_id, mcp=mcp, cache=cache):
-        if isinstance(event, CardEvent):
-            card = event.card
-        elif isinstance(event, ErrorEvent):
-            error = event.message
-    if card is None:
-        return AnswerCard(status="cannot_answer",
-                          narrative=error or "Inget svar producerades.")
-    return card

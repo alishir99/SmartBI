@@ -50,13 +50,10 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
     if (!card.chart || !card.provenance) return
     save.mutate(
       {
-        body: {
-          title: card.chart.title,
-          chart: card.chart,
-          tool_name: card.provenance.tool,
-          tool_args: card.provenance.tool_args,
-        },
-        source: card,
+        title: card.chart.title,
+        chart: card.chart,
+        tool_name: card.provenance.tool,
+        tool_args: card.provenance.tool_args,
       },
       { onSuccess: () => setSaved(true) },
     )

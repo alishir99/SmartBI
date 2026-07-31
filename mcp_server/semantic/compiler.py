@@ -440,28 +440,11 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                                  filters, params, date_ordinals=bool(date_dimensions))
 
         if dimensions:
-            # FULL OUTER is the right join: a product that sold in only one of the two
-            # periods still appears. Date dimensions join on position within the window
-            # rather than on value — cur.month and prev.month are disjoint by
-            # construction, so joining on the value matched zero rows and every delta
-            # came back NULL.
-            #
-            # Non-date dimensions join on plain equality, and it has to be plain equality.
-            # `IS NOT DISTINCT FROM` looks strictly better — it makes a NULL group match its
-            # counterpart instead of dropping it — but Postgres cannot hash- or merge-join
-            # on it, and a FULL OUTER JOIN has no other strategy available, so the planner
-            # rejects the whole query:
-            #
-            #     FeatureNotSupportedError: FULL JOIN is only supported with
-            #     merge-joinable or hash-joinable join conditions
-            #
-            # That made every compare_to over a product, brand or region dimension fail at
-            # run time while parsing perfectly — which is exactly how it survived: the
-            # compiler tests assert on emitted SQL with sqlglot and never execute it, and no
-            # integration test paired compare_to with a non-date dimension. The NULL group it
-            # was protecting is a dimension value that is itself NULL, which none of these
-            # columns can be; the cost of the fix is nothing and the cost of the elegance was
-            # the entire feature.
+            # FULL OUTER so a group present in only one period still appears. Dates join
+            # on position, not value: cur.month and prev.month are disjoint by construction.
+            # Everything else joins on plain `=` — Postgres cannot hash- or merge-join
+            # `IS NOT DISTINCT FROM`, and FULL OUTER has no other strategy, so it fails at
+            # run time (integration-tested; the compiler tests only parse).
             conditions, select_parts = [], []
             for key in dimensions:
                 if key in date_dimensions:

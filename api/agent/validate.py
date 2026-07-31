@@ -96,11 +96,6 @@ _MAX_COUNTING_INTEGER = 50
 _FLOAT_EPSILON = 1e-6
 
 
-#: What kind of quantity a literal claims to be, read off the unit it was written with.
-#: `percent` and `money` are mutually exclusive evidence, and keeping them apart is what
-#: stops "Marknadsandelen var 2,89 %" from matching a revenue of 2 890 100 at a scale of 1e6.
-UnitClass = str  # "percent" | "money" | "count" | "unknown"
-
 _PERCENT_WORDS = {"%", "procent"}
 _MONEY_WORDS = {"kr", "sek", "kronor"}
 _COUNT_WORDS = {"st", "styck", "enheter"}
@@ -115,8 +110,8 @@ class NumberLiteral:
     implicit_scale_allowed: bool
     #: True when the literal is a plain integer with no unit at all.
     bare_integer: bool
-    #: The unit it was written with: percent, money, count, or unknown when it carried none.
-    unit_class: UnitClass = "unknown"
+    #: "percent" | "money" | "count" | "unknown", read off the unit it carried.
+    unit_class: str = "unknown"
     #: Character offset in the (masked) narrative, so the words around it can be read.
     position: int = 0
 
@@ -143,13 +138,6 @@ class ValidationResult:
     checked: int = 0
     #: One entry per accepted numeric literal, in the order they appear in the prose.
     attributions: list[Attribution] = field(default_factory=list)
-
-    def query_ids(self) -> list[str]:
-        """Distinct results that licensed at least one figure, in first-use order."""
-        seen: dict[str, None] = {}
-        for attribution in self.attributions:
-            seen.setdefault(attribution.query_id, None)
-        return list(seen)
 
 
 # ------------------------------------------------------------------------- extraction
@@ -255,42 +243,13 @@ def _numbers_in(rows: Sequence[dict], key: str) -> list[float]:
     return values
 
 
-def build_candidates(results: Iterable[CachedResult]) -> tuple[list[float], int]:
-    """Every value the model is allowed to have used, plus the largest row count seen.
-
-    Sorted, so a literal is checked with a binary search rather than a scan over what can be
-    a hundred thousand values.
-
-    Kept as the merged view because callers outside validation (and the eval grader) want one
-    flat set. `candidates_by_result` is the same computation kept per result, which is what
-    lets a passing literal name the query that licensed it.
-    """
-    results = list(results)
-    merged: list[float] = []
-    for _query_id, buckets in candidates_by_result(results):
-        for values in buckets.values():
-            merged.extend(values)
-    merged.sort()
-    max_rows = max((result.row_count for result in results), default=0)
-    return merged, max_rows
-
-
 def candidates_by_result(
         results: Iterable[CachedResult]) -> list[tuple[str, list[float]]]:
-    """The same derivation as `build_candidates`, kept separately per result.
+    """Every value the model may legitimately have used, kept per result so an accepted
+    literal can name the query that licensed it.
 
-    Attribution is the whole reason. `validate_narrative` runs against every result the turn
-    produced while the card carried a single `query_id`, so prose grounded in result A could
-    ship beside a chart of result B and a source chip describing B's filters and time range —
-    the artefact whose entire purpose is traceability, pointing at the wrong query. Keeping
-    the candidate sets apart means a literal that passes can say which result it came from,
-    and the card can carry all of them.
-
-    A list of pairs rather than a dict keyed by `query_id`. Ids are unique in production, but
-    a dict makes uniqueness load-bearing for *correctness*: two results sharing an id would
-    silently overwrite each other and a perfectly grounded number would be reported as a
-    fabrication. A validator must not fail closed on a bookkeeping detail, so position is the
-    key and the id is only carried along.
+    A list of pairs, not a dict keyed by `query_id`: two results sharing an id would
+    overwrite each other and report a grounded number as a fabrication.
     """
     by_result: list[tuple[str, dict[str, list[float]]]] = []
 
@@ -326,17 +285,10 @@ def candidates_by_result(
             own = unit_of.get(key, "unknown")
             add(own, *values)                                           # the cells themselves
 
-            # Row-wise *percentage* derivations are the promiscuous family: a 500-row result
-            # yields 500 shares plus 499 pairwise pct-deltas, and mirrored across zero that is
-            # a thousand values blanketing [-100, 100] — which is why the review measured
-            # ~40 % of fabricated percentages passing. They are also the family the model
-            # cannot honestly have computed for rows it never saw: it is handed 25, and since
-            # the preview now carries server-computed totals, means and extremes, it has no
-            # legitimate reason to derive a share for row 300 by hand.
-            #
-            # So these are licensed only over the window the model was actually shown. Whole-
-            # series derivations (sum, mean, first→last) stay over every row: those are claims
-            # about the result as a whole, and the envelope hands them over explicitly.
+            # Shares and pairwise deltas are licensed only over the rows the model saw: a
+            # 500-row result otherwise yields ~1 000 percentages blanketing [-100, 100], and
+            # the model cannot honestly derive a share for a row it never received. Whole-
+            # series derivations below stay over every row — the envelope hands those over.
             seen = values[:PREVIEW_ROWS]
 
             if complete:
@@ -397,19 +349,10 @@ def _class_of_unit(unit: str | None) -> str:
     return "unknown"
 
 
-# Which candidate classes a literal of each class is allowed to match.
-#
-# This is the fix for the review's measured ~40 % false-accept rate on fabricated
-# percentages. `build_candidates` emits every cell, every pairwise delta, every share and
-# every pct-delta, then mirrors the lot across zero — roughly 4 000 values for a 500-row
-# result, about a thousand of them inside [-100, 100]. A percentage claim could match any of
-# them, including a raw SEK cell read at a scale of 1e6: "Marknadsandelen var 2,89 %" matched
-# a revenue of 2 890 100. Requiring the literal's own unit to license the class it matches
-# removes that entire family at once, without touching the derivations themselves.
-#
-# `unknown` stays permissive in both directions. A bare "12,4" carries no evidence about what
-# it is, and this file's stated bias is that suppressing a true answer costs more than
-# admitting one that is right to within half its own last digit.
+# A literal may only match candidates of its own kind, so a `%` claim cannot match a raw SEK
+# cell. Without this, ~32 % of fabricated percentages passed. `unknown` stays permissive
+# both ways: a bare "12,4" is no evidence either way, and this file prefers admitting a
+# true-ish number to suppressing a true one.
 _ALLOWED_CLASSES: dict[str, tuple[str, ...]] = {
     "percent": ("percent", "unknown"),
     "money": ("money", "unknown"),

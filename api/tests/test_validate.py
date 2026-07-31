@@ -238,7 +238,7 @@ def test_each_accepted_figure_names_the_query_that_licensed_it():
         ("3 450 900,50 kr", "q_months"),
         ("33 696 254,00 kr", "q_regions"),
     ]
-    assert check.query_ids() == ["q_months", "q_regions"]
+
 
 
 def test_a_figure_several_queries_could_explain_is_attributed_to_the_first():

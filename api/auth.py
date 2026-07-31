@@ -1,10 +1,8 @@
 """Password hashing, token issue/verify, and the login routes.
 
-Argon2id, in the PHC string format (`$argon2id$v=19$m=...,t=...,p=...$salt$hash`). The
-hashing primitive comes from `cryptography` rather than `argon2-cffi` because that is what
-is actually installed in this environment — but the *format* is argon2-cffi's, so hashes
-written by either library verify against the other. That matters because the seeder writes
-`app_user.password_hash` and this module reads it.
+Argon2id via `argon2-cffi`, which is the same library the seeder hashes with — so there is
+one implementation of the format rather than two that have to agree. Parameters are read
+back from the stored hash, so raising the cost later does not lock out existing users.
 
 JWT is HS256 with a short TTL (§D11: MVP-grade, two independent layers with RLS behind it).
 The only claims that matter are `sub`, `supplier_id` and `role` — and `supplier_id` from
@@ -13,13 +11,11 @@ this verified token is the *only* source of tenant scope anywhere in the API.
 
 from __future__ import annotations
 
-import base64
-import hmac
-import os
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
+from argon2 import PasswordHasher
+from argon2.exceptions import Argon2Error
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from . import db, ratelimit
@@ -29,51 +25,21 @@ from .models import LoginRequest, LoginResponse, User
 
 # OWASP's second recommended Argon2id configuration (19 MiB, t=2, p=1). Chosen over a
 # heavier profile because login latency is user-visible and the memory cost is the parameter
-# that actually resists GPU cracking.
-_MEMORY_KIB = 19 * 1024
-_ITERATIONS = 2
-_LANES = 1
-_HASH_LEN = 32
-_SALT_LEN = 16
-
-
-def _b64(raw: bytes) -> str:
-    # argon2's PHC variant uses unpadded standard base64.
-    return base64.b64encode(raw).decode().rstrip("=")
-
-
-def _unb64(value: str) -> bytes:
-    return base64.b64decode(value + "=" * (-len(value) % 4))
+# that actually resists GPU cracking. The same numbers are what makes an unthrottled login
+# endpoint a memory amplifier — see api/ratelimit.py.
+_hasher = PasswordHasher(memory_cost=19 * 1024, time_cost=2, parallelism=1)
 
 
 def hash_password(password: str) -> str:
-    salt = os.urandom(_SALT_LEN)
-    digest = Argon2id(salt=salt, length=_HASH_LEN, iterations=_ITERATIONS,
-                      lanes=_LANES, memory_cost=_MEMORY_KIB).derive(password.encode())
-    return (f"$argon2id$v=19$m={_MEMORY_KIB},t={_ITERATIONS},p={_LANES}"
-            f"${_b64(salt)}${_b64(digest)}")
+    return _hasher.hash(password)
 
 
 def verify_password(password: str, encoded: str) -> bool:
-    """Recompute with the stored parameters and compare in constant time.
-
-    Parameters are read from the hash rather than from settings so that raising the cost
-    later does not lock out existing users.
-    """
+    """Constant-time by construction. A malformed hash is a failed login, not a 500."""
     try:
-        _, algorithm, _version, params, salt_b64, hash_b64 = encoded.split("$")
-        if algorithm != "argon2id":
-            return False
-        parsed = dict(part.split("=", 1) for part in params.split(","))
-        expected = _unb64(hash_b64)
-        digest = Argon2id(
-            salt=_unb64(salt_b64), length=len(expected),
-            iterations=int(parsed["t"]), lanes=int(parsed["p"]),
-            memory_cost=int(parsed["m"]),
-        ).derive(password.encode())
-    except Exception:                    # noqa: BLE001 — a malformed hash is a failed login
+        return _hasher.verify(encoded, password)
+    except (Argon2Error, ValueError):
         return False
-    return hmac.compare_digest(digest, expected)
 
 
 # ------------------------------------------------------------------------------ tokens

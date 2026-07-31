@@ -100,6 +100,43 @@ POSTGRES_HOST=localhost pytest -q -m integration
 
 ---
 
+## Loggning
+
+Varje rad är ett JSON-objekt och varje turn har ett eget `turn_id`, så en hel fråga går att
+följa från början till slut. Loggen skrivs till stdout (`docker compose logs api`) och till
+`./logs/api.jsonl`, som överlever en omstart.
+
+```bash
+# Allt som hände i en viss turn
+jq 'select(.turn_id=="666c25eb2c19")' logs/api.jsonl
+
+# Vad avvisade validatorn, och av vilken anledning?
+jq -r 'select(.event=="validate.rejected") | .reasons[]' logs/api.jsonl | sort | uniq -c
+
+# Långsammaste verktygsanropen
+jq -r 'select(.event=="tool.call") | [.ms, .tool, .row_count] | @tsv' logs/api.jsonl | sort -rn | head
+```
+
+En turn ser ut så här:
+
+```
+turn.start        question, history_turns
+tool.call         tool, tool_args, ms, row_count, source, query_id
+validate.rejected reasons ["not_in_result"|"wrong_direction"|"not_the_argmax"], literals
+turn.end          status, ms, tools, input_tokens, output_tokens, llm_calls
+```
+
+**Vad som medvetet inte loggas:** inga resultatrader. Produkten bygger på att en leverantör
+inte kan se en annans siffror, och en loggfil som citerar rader vore samma läcka via en
+omväg. Radantal, kolumnnamn och verktygsargument loggas — argumenten är id:n och datum som
+anroparen själv skickade in. Frågetexten loggas, eftersom `audit_turn` redan sparar den
+medvetet (§11.2) och att felsöka ett dåligt svar utan att veta vad som frågades är gissning.
+
+`audit_turn` är kvar och gör något annat: den är affärsloggen — en rad per turn, i databasen,
+för fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som det blev.
+
+---
+
 ## Arkitektur
 
 ```

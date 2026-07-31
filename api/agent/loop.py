@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -156,9 +157,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     yield StatusEvent(message=_FRIENDLY_STATUS.get(use.name, "Hämtar data…"))
                     yield ToolCallEvent(tool=use.name, args=args)
 
+                    call_started = time.monotonic()
                     try:
                         payload = await mcp.call_on(session, use.name, args)
                     except McpToolError as exc:
+                        logger.warning("", extra={
+                            "event": "tool.error", "tool": use.name, "tool_args": args,
+                            "ms": int((time.monotonic() - call_started) * 1000),
+                            "error": str(exc)[:300]})
                         # A tool error is usually a spec validation failure, and the message
                         # names the allowed values — exactly what the model needs to recover.
                         tool_results.append({
@@ -182,6 +188,12 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         "type": "tool_result", "tool_use_id": use.id,
                         "content": _dumps(content),
                     })
+                    logger.info("", extra={
+                        "event": "tool.call", "tool": use.name, "tool_args": args,
+                        "ms": int((time.monotonic() - call_started) * 1000),
+                        "row_count": int(payload.get("row_count", 0) or 0),
+                        "source": (payload.get("meta") or {}).get("source"),
+                        "query_id": cached.query_id if use.name in ROW_TOOLS else None})
                     yield ToolResultEvent(
                         tool=use.name,
                         row_count=int(payload.get("row_count", 0) or 0))
@@ -199,7 +211,12 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                 check = validate_narrative(narrative, produced)
 
                 if not check.ok:
-                    logger.warning("numeric validation failed: %s", check.violations)
+                    logger.warning("numeric validation failed", extra={
+                        "event": "validate.rejected",
+                        "reasons": sorted({v.reason for v in check.violations}),
+                        "literals": [v.literal for v in check.violations],
+                        "checked": check.checked,
+                        "attributed": len(check.attributions)})
                     yield StatusEvent(message="Skriver om svaret…")
                     messages.append({"role": "assistant", "content": _text_of(response)})
                     messages.append({"role": "user",

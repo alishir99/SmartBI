@@ -93,10 +93,20 @@ class Attribution:
     query_id: str
 
 
+@dataclass(frozen=True)
+class Violation:
+    """A rejected literal, with the reason as a code rather than only Swedish prose."""
+
+    literal: str
+    #: not_in_result | wrong_direction | not_the_argmax
+    reason: str
+    message: str
+
+
 @dataclass
 class ValidationResult:
     ok: bool
-    violations: list[str] = field(default_factory=list)
+    violations: list[Violation] = field(default_factory=list)
     checked: int = 0
     # : One entry per accepted numeric literal, in the order they appear in the prose.
     attributions: list[Attribution] = field(default_factory=list)
@@ -345,9 +355,9 @@ _SUPERLATIVES = ("störst", "störste", "bäst", "bäste", "högst", "toppar", "
 _SUPERLATIVE_WINDOW = 90
 
 
-def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[str]:
+def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Violation]:
     """Assert that a named winner really is the argmax of the full result."""
-    violations: list[str] = []
+    violations: list[Violation] = []
     lowered = text.lower()
 
     for result in results:
@@ -387,10 +397,10 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[str]:
                               key=len, default=None)
                 if claimed is None or claimed in winners:
                     continue
-                violations.append(
-                    f"\"{named[claimed]}\" utpekas som störst/bäst, men det är inte den "
-                    f"högsta raden för {primary} i resultatet."
-                )
+                violations.append(Violation(
+                    literal=named[claimed], reason="not_the_argmax",
+                    message=f"\"{named[claimed]}\" utpekas som störst/bäst, men det är inte "
+                            f"den högsta raden för {primary} i resultatet."))
     return violations
 
 
@@ -411,7 +421,7 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
     max_rows = max((result.row_count for result in results), default=0)
     literals = extract_numbers(mask_entity_names(text, results))
 
-    violations: list[str] = []
+    violations: list[Violation] = []
     attributions: list[Attribution] = []
 
     for literal in literals:
@@ -447,19 +457,21 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
 
         if source is not None:
             if _direction_disagrees(text, literal, sign):
-                violations.append(
-                    f"\"{literal.raw}\" finns i resultatet, men åt andra hållet: texten "
-                    f"beskriver en förändring i motsatt riktning mot vad datan visar."
-                )
+                violations.append(Violation(
+                    literal=literal.raw, reason="wrong_direction",
+                    message=f"\"{literal.raw}\" finns i resultatet, men åt andra hållet: "
+                            f"texten beskriver en förändring i motsatt riktning mot vad "
+                            f"datan visar."))
                 continue
             attributions.append(Attribution(literal=literal.raw, value=literal.value,
                                             query_id=source))
             continue
 
-        violations.append(
-            f"\"{literal.raw}\" finns inte i resultatet och är inte en tillåten härledning "
-            f"(summa, medel, förändring eller andel) av något värde i det."
-        )
+        violations.append(Violation(
+            literal=literal.raw, reason="not_in_result",
+            message=f"\"{literal.raw}\" finns inte i resultatet och är inte en tillåten "
+                    f"härledning (summa, medel, förändring eller andel) av något värde "
+                    f"i det."))
 
     # Entity claims, which carry no digits at all and were therefore invisible to everything
     # above.

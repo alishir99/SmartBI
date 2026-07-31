@@ -99,6 +99,11 @@ services:
     environment:
       POSTGRES_HOST: db
       MCP_URL: http://mcp:8081/mcp
+      # stdout is what `docker compose logs` reads; the file is what survives a restart and
+      # what you grep after the fact. Both carry the same JSON.
+      LOG_FILE: /app/logs/api.jsonl
+    volumes:
+      - ./logs:/app/logs
     ports:
       - "8000:8000"
     depends_on:

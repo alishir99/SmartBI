@@ -76,7 +76,7 @@ def test_a_fabricated_total_is_rejected():
     check = validate_narrative(
         "Försäljningen under kvartalet var 12 900 000,00 kr.", [MONTHLY])
     assert not check.ok
-    assert "12 900 000,00" in check.violations[0]
+    assert check.violations[0].literal.startswith("12 900 000,00")
 
 
 def test_a_number_close_but_not_equal_is_rejected():
@@ -187,7 +187,7 @@ def test_masking_a_name_does_not_excuse_a_fabricated_figure():
         "Nordström TV N100 Pro sålde för 9 999 999 kr.",
         [result(TOP_LIST, columns=PRODUCT_COLUMNS)])
     assert not check.ok
-    assert "9 999 999 kr" in check.violations[0]
+    assert check.violations[0].literal == "9 999 999 kr"
 
 
 # --------------------------------------------------------------- provenance per tool call
@@ -279,7 +279,7 @@ def test_prose_may_not_reverse_the_direction_of_a_real_change(prose):
     """B3, and the most consequential claim in any sales answer."""
     check = validate_narrative(prose, [WITH_DELTA])
     assert not check.ok
-    assert "andra hållet" in check.violations[0]
+    assert check.violations[0].reason == "wrong_direction"
 
 
 @pytest.mark.parametrize("prose", [
@@ -335,7 +335,7 @@ def test_naming_the_wrong_winner_is_caught():
     check = validate_narrative(
         "Den bäst säljande produkten är Vidar Hörlurar V191 Studio.", [TOP_THREE])
     assert not check.ok
-    assert "störst/bäst" in check.violations[0]
+    assert check.violations[0].reason == "not_the_argmax"
 
 
 def test_naming_the_right_winner_passes():

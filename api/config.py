@@ -76,6 +76,18 @@ class Settings(BaseSettings):
     tenant_token_budget: int | None = 5_000_000
     tenant_budget_window_hours: int = 24
 
+    # --- Logging (api/logs.py) ---
+    # `json` for anything shipped, `text` for a local run. The file handler is always JSON:
+    # a log you have to regex is a log nobody aggregates.
+    log_level: str = "INFO"
+    log_format: str = "json"
+    # Empty disables the file and leaves stdout only, which is what the container wants —
+    # docker and Cloud Run both collect stdout, and a file inside a container is a file
+    # nobody reads. Set it when running the API directly.
+    log_file: str = ""
+    log_max_bytes: int = 20 * 1024 * 1024
+    log_backup_count: int = 5
+
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     public_web_url: str = "http://localhost:5173"

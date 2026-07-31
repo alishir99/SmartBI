@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth, db
+from . import auth, db, logs
 from .config import settings
 from .mcp_client import McpClient
 from .result_cache import ResultCache
 from .routes import cards, chat, dashboard, result
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(name)s %(message)s")
-logger = logging.getLogger(__name__)
+logs.configure()
+logger = logging.getLogger("api")
 
 
 @asynccontextmanager
@@ -28,7 +28,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.init_pool()
     app.state.mcp = McpClient()
     app.state.cache = ResultCache()
-    logger.info("api ready — mcp=%s model=%s", settings.mcp_url, settings.llm_model)
+    logger.info("api ready", extra={"event": "startup", "mcp_url": settings.mcp_url,
+                                    "model": settings.llm_model,
+                                    "env": settings.solvigo_env})
     try:
         yield
     finally:
@@ -51,6 +53,30 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """One id per request, echoed back and attached to every log line underneath it.
+
+    Honours an inbound `X-Request-Id` so a trace survives a proxy; mints one otherwise. This
+    is what turns a pile of lines into a story you can follow.
+    """
+    request_id = request.headers.get("X-Request-Id") or logs.new_turn_id()
+    logs.bind(request_id=request_id, path=request.url.path, method=request.method)
+    started = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("unhandled", extra={
+            "event": "http.error", "ms": int((time.monotonic() - started) * 1000)})
+        raise
+    # Health checks run every few seconds and would otherwise be the bulk of the log.
+    if request.url.path != "/health":
+        logger.info("", extra={"event": "http.request", "status": response.status_code,
+                               "ms": int((time.monotonic() - started) * 1000)})
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 @app.middleware("http")

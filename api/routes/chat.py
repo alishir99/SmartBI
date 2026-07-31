@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from .. import db, ratelimit
+from .. import db, logs, ratelimit
 from ..agent.loop import run_turn
 from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
@@ -47,6 +47,10 @@ async def chat(body: ChatRequest,
 
 async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                   cache: ResultCache) -> AsyncIterator[str]:
+    logs.bind(turn_id=logs.new_turn_id(), supplier_id=tenant.supplier_id,
+              user_id=tenant.user_id)
+    logger.info("", extra={"event": "turn.start", "question": body.question,
+                           "history_turns": len(body.history)})
     started = time.monotonic()
     tool_calls: list[dict] = []
     status = "error"
@@ -101,5 +105,14 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                 output_tokens=usage.output_tokens if usage else None,
                 status=status,
             )
+            logger.info("", extra={
+                "event": "turn.end", "status": status,
+                "ms": int((time.monotonic() - started) * 1000),
+                "tools": [c["tool"] for c in tool_calls],
+                "query_id": card.query_id if card else None,
+                "narrative_chars": len(card.narrative) if card else 0,
+                "input_tokens": usage.input_tokens if usage else None,
+                "output_tokens": usage.output_tokens if usage else None,
+                "llm_calls": usage.llm_calls if usage else None})
         except Exception:  # noqa: BLE001
             logger.warning("could not write audit row", exc_info=True)

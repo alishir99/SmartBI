@@ -140,7 +140,7 @@ gränssnittet, så ett avböjande märkt "ok" presenteras för användaren som e
 """
 
 
-def regeneration_prompt(violations: list[str]) -> str:
+def regeneration_prompt(violations: list) -> str:
     """The one bounded retry (§9.2)."""
     listed = "\n".join(f"- {violation}" for violation in violations)
     return (

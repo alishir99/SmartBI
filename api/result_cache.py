@@ -50,6 +50,62 @@ class CachedResult:
     def numeric_columns(self) -> list[str]:
         return [c["key"] for c in self.columns if c.get("type") == "number"]
 
+    def label_columns(self) -> list[str]:
+        """The non-numeric columns — what identifies a row to a reader.
+
+        `suppressed` and `reason` are excluded: they describe the *row's status* rather than
+        the thing the row is about, and naming a k-anonymity suppression as if it were an
+        entity would be both wrong and alarming.
+        """
+        return [c["key"] for c in self.columns
+                if c.get("type") != "number" and c["key"] not in ("suppressed", "reason")]
+
+    def aggregates(self) -> dict[str, Any]:
+        """Computed over the FULL result set, for the model to quote instead of infer.
+
+        This closes the gap that made prose and chart able to name different winners while
+        both passed validation. The model sees 25 rows; `propose_chart` sorts all 500. Asked
+        for "the best-selling product", the model answered from its sample, the chart drew the
+        real maximum, and the validator accepted the prose because the number it quoted *was*
+        genuinely in the result set — just not the largest one. Two authoritative-looking
+        halves of one card, disagreeing. Worse than a hallucination, because nothing about it
+        looks wrong.
+
+        So the superlative is computed here and handed over, rather than left as an inference
+        over rows the model cannot see. `max` and `min` carry the identifying columns of the
+        row they came from, which is what turns "8 932 965" into "P40" — the answer the
+        question was actually asking for.
+
+        Rows whose value is missing are skipped rather than counted as zero. That matters for
+        `query_market_share`, where a suppressed row genuinely has no `share_pct`: treating it
+        as zero would drag the mean down and could make a suppressed slice look like the
+        minimum, which is a disclosure by arithmetic.
+        """
+        labels = self.label_columns()
+        out: dict[str, Any] = {}
+
+        for key in self.numeric_columns():
+            pairs = [(row[key], row) for row in self.rows
+                     if isinstance(row.get(key), (int, float))
+                     and not isinstance(row.get(key), bool)]
+            if not pairs:
+                continue
+            values = [value for value, _ in pairs]
+            hi_value, hi_row = max(pairs, key=lambda pair: pair[0])
+            lo_value, lo_row = min(pairs, key=lambda pair: pair[0])
+
+            def identify(row: dict[str, Any]) -> dict[str, Any]:
+                return {label: row.get(label) for label in labels if row.get(label) is not None}
+
+            out[key] = {
+                "total": round(float(sum(values)), 2),
+                "mean": round(float(sum(values)) / len(values), 2),
+                "max": {"value": hi_value, **identify(hi_row)},
+                "min": {"value": lo_value, **identify(lo_row)},
+                "counted_rows": len(values),
+            }
+        return out
+
     def preview(self, limit: int = PREVIEW_ROWS) -> dict[str, Any]:
         """What the model gets instead of the data.
 
@@ -58,18 +114,28 @@ class CachedResult:
         sample". Conflating them would let the model claim it saw everything.
         """
         rows = self.rows[:limit]
+        sampled = self.row_count > len(rows)
         return {
             "query_id": self.query_id,
             "columns": self.columns,
             "rows": rows,
             "row_count": self.row_count,
             "preview_rows": len(rows),
-            "truncated_for_model": self.row_count > len(rows),
+            "truncated_for_model": sampled,
+            # Over every row, not the sample above. Present even when nothing was truncated,
+            # so the model is never asked to work out which mode it is in.
+            "aggregates": self.aggregates(),
             "meta": self.meta,
             "note": (
                 f"Detta är en förhandsvisning av {len(rows)} av {self.row_count} rader. "
                 "Hela resultatet finns kvar på servern och ritas i diagrammet — referera "
                 "till query_id i din ChartSpec istället för att räkna upp värden."
+                + (" `aggregates` är beräknat över ALLA rader, inte över urvalet ovan: "
+                   "använd det för summa, snitt, största och minsta värde. Raderna du ser "
+                   "är ett stickprov och den största posten finns sannolikt inte bland dem."
+                   if sampled else
+                   " `aggregates` är beräknat över alla rader — använd det för summa, snitt, "
+                   "största och minsta värde i stället för att räkna själv.")
             ),
         }
 

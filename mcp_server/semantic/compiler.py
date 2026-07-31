@@ -351,10 +351,29 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             raise SpecError(f"kan inte sortera på '{key}' som inte grupperas")
         direction = "DESC" if str(order_by.get("dir", "desc")).lower() == "desc" else "ASC"
         sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {key} {direction} NULLS LAST"
-    elif dimensions and DIMENSIONS[dimensions[0]].type == "date":
-        # NULLS LAST matters under compare: a period present only in the comparison
-        # window has no current date, and should trail rather than lead the series.
-        sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {dimensions[0]} ASC NULLS LAST"
+    elif dimensions:
+        # Every grouped query gets a total order, and it has to be *total* rather than merely
+        # present. With no ORDER BY at all the LIMIT below cut an arbitrary slice, so the model
+        # saw an arbitrary 25 rows while propose_chart sorted the full set — prose and chart
+        # could name different winners and both pass validation. A partial order is the same
+        # bug wearing a fix: ordering by the leading date alone still leaves the trailing
+        # period's rows in whatever sequence the plan produced, and "whatever the plan
+        # produced" differs between the rollup and the fact table for the same question.
+        #
+        # A leading date dimension still sorts ascending, because a time series reads forward
+        # and the chart expects it. Everything else sorts by the first measure descending,
+        # which is what "top N" means and what a LIMIT should therefore keep. The remaining
+        # dimensions are appended as tie-breakers so the order is deterministic even when the
+        # measure ties — otherwise two runs of the same query can still disagree.
+        leading = dimensions[0]
+        if DIMENSIONS[leading].type == "date":
+            # NULLS LAST matters under compare: a period present only in the comparison
+            # window has no current date, and should trail rather than lead the series.
+            keys = [f"{leading} ASC NULLS LAST"]
+        else:
+            keys = [f"{measures[0]} DESC NULLS LAST"]
+        keys += [f"{key} ASC NULLS LAST" for key in dimensions if key != leading]
+        sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {', '.join(keys)}"
 
     limit = spec.get("limit")
     if limit is None:

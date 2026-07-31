@@ -62,8 +62,15 @@ query_sales eller query_market_share.
 Verktygssvaret du får är en FÖRHANDSVISNING på högst 25 rader. Hela resultatet ligger kvar \
 på servern under sitt query_id och är det som ritas i diagrammet. Räkna därför aldrig upp \
 rader, och summera aldrig en förhandsvisning som om den vore hela datan — hänvisa till \
-query_id och låt diagrammet visa resten. Om row_count är större än antalet rader du ser, \
-säg "topp N" eller "de största", inte "totalt".
+query_id och låt diagrammet visa resten.
+
+Varje verktygssvar innehåller `aggregates`, beräknat på SERVERN över ALLA rader — inte över \
+de rader du ser. Där finns summa, snitt, största och minsta värde per mått, och `max` och \
+`min` bär med sig vilken produkt, butik eller månad de kommer från. Använd dem. Frågar någon \
+efter "den bäst säljande produkten", "totalt" eller "snittet" är svaret `aggregates`, aldrig \
+något du själv läser ut ur urvalet. Den största posten finns oftast INTE bland de 25 rader du \
+ser, så en superlativ du härleder ur dem pekar ut fel rad — och diagrammet, som ritas ur hela \
+resultatet, kommer att visa en annan vinnare än din text påstår.
 
 Om ett urval är för tunt returnerar query_market_share suppressed=true. Det är inte ett fel: \
 marknadsandelen är utelämnad för att den annars skulle avslöja en enskild konkurrents \

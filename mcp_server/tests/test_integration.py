@@ -382,16 +382,13 @@ async def test_the_two_sources_answer_the_same_question_identically(
         "measures": ["net_sales_sek", "units", "gross_sales_sek", "discount_sek"],
         "dimensions": ["month", "region"],
         "time_range": {"from": truth["coverage"]["from"], "to": truth["coverage"]["to"]},
-        # Explicit, and above the 528 groups this produces (24 months x 22 regions).
-        # The first draft of this test left it at DEFAULT_LIMIT=500 and failed with the two
-        # sources returning *different regions* for the last month — not a reconciliation
-        # failure but finding B2 in the review: with `order_by` absent the compiler orders by
-        # the leading date dimension alone, so a LIMIT that bites cuts an arbitrary slice of
-        # the trailing group, and "arbitrary" differs between two physical sources. That is a
-        # real defect and it belongs to the ordering fix, not here; this test asks whether the
-        # two sources hold the same numbers, and it should not be able to fail for a second
-        # reason.
-        "limit": 5000,
+        # Deliberately left at DEFAULT_LIMIT, which this spec exceeds: 24 months x 22 regions
+        # is 528 groups against a limit of 500. That combination is what caught B2 — with the
+        # compiler ordering by the leading date dimension alone, the LIMIT cut an arbitrary
+        # slice of the trailing month, and "arbitrary" differed between the two physical
+        # sources, so the two returned *different regions* for June 2026. The ordering is now
+        # total, so a biting LIMIT keeps the same rows in the same order whichever object
+        # answered. Raising the limit here would make the test pass without asking that.
     }
 
     answers = {}
@@ -408,6 +405,10 @@ async def test_the_two_sources_answer_the_same_question_identically(
         "the rollup and the fact table returned different groups: "
         f"only in rollup {sorted(set(rollup) - set(fact))[:3]}, "
         f"only in fact {sorted(set(fact) - set(rollup))[:3]}")
+    assert list(rollup) == list(fact), (
+        "the two sources returned the same groups in a different order — a LIMIT that bites "
+        "would then cut a different slice from each, which is how prose and chart came to "
+        "name different winners")
 
     for key, rollup_row in rollup.items():
         fact_row = fact[key]

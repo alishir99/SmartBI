@@ -33,6 +33,7 @@ from ..models import (
     TokenEvent,
     ToolCallEvent,
     ToolResultEvent,
+    UsageEvent,
 )
 from ..result_cache import CachedResult, ResultCache, from_tool_result
 from . import render
@@ -70,6 +71,43 @@ _FRIENDLY_STATUS = {
 }
 
 
+def _system() -> list[dict[str, Any]] | str:
+    """The system prompt as a cacheable content block.
+
+    `system=SYSTEM` as a plain string was structurally *ready* for caching and never
+    actually requested it: `cache_control` attaches to content blocks, and a bare string is
+    not one. So the ~1 900-token prefix was re-read at full price on every call, several
+    times per turn.
+
+    Gated on the provider because it is only meaningful to Anthropic. The demo runs against
+    DeepSeek's Anthropic-compatible endpoint, which does its own automatic context caching
+    and has no use for the hint; sending it there would be an untested field on a
+    third-party API for no gain. Pointing `llm_base_url` at api.anthropic.com — the swap
+    decision D1 already describes — turns it on.
+    """
+    if "api.anthropic.com" not in settings.llm_base_url:
+        return SYSTEM
+    return [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}]
+
+
+def _add_usage(total: dict[str, int], response: Any) -> None:
+    """Accumulate one response's usage. `audit_turn` has had input_tokens/output_tokens
+    columns since the first schema and they were written NULL, because nothing collected
+    what the SDK hands back on every single call. This is what the per-tenant cost cap
+    needs, and it costs one function."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    total["llm_calls"] += 1
+    for field, key in (("input_tokens", "input_tokens"),
+                       ("output_tokens", "output_tokens"),
+                       ("cache_read_input_tokens", "cache_read_tokens"),
+                       ("cache_creation_input_tokens", "cache_write_tokens")):
+        value = getattr(usage, field, None)
+        if isinstance(value, int):
+            total[key] += value
+
+
 def _client() -> AsyncAnthropic:
     """The only place the provider is named. Swapping to real Claude is these two settings."""
     return AsyncAnthropic(api_key=settings.llm_api_key, base_url=settings.llm_base_url,
@@ -90,8 +128,9 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                    mcp: McpClient, cache: ResultCache) -> AsyncIterator[Any]:
     """Drive one question to an AnswerCard, yielding SSE event models as it goes.
 
-    The final event is always a CardEvent or an ErrorEvent, so the frontend has exactly one
-    terminal state to handle.
+    The last event to reach the wire is always a CardEvent or an ErrorEvent, so the frontend
+    has exactly one terminal state to handle. A `UsageEvent` follows it for the caller's own
+    bookkeeping; routes/chat.py records it and does not forward it.
     """
     if not settings.llm_api_key:
         yield ErrorEvent(message="LLM_API_KEY är inte satt — agenten kan inte köra.")
@@ -108,6 +147,8 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     produced: list[CachedResult] = []
     calls = 0
     rounds = 0
+    usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
+             "cache_write_tokens": 0, "llm_calls": 0}
 
     try:
         async with mcp.session(supplier_id) as session:
@@ -119,10 +160,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                 response = await client.messages.create(
                     model=settings.llm_model,
                     max_tokens=settings.llm_max_tokens,
-                    system=SYSTEM,
+                    system=_system(),
                     tools=tools,
                     messages=messages,
                 )
+                _add_usage(usage, response)
 
                 uses = _tool_uses(response)
                 if response.stop_reason != "tool_use" or not uses:
@@ -222,10 +264,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     response = await client.messages.create(
                         model=settings.llm_model,
                         max_tokens=settings.llm_max_tokens,
-                        system=SYSTEM,
+                        system=_system(),
                         tools=tools,
                         messages=messages,
                     )
+                    _add_usage(usage, response)
                     narrative, retry_envelope = render.split_answer(_text_of(response))
                     envelope = {**envelope, **retry_envelope}
                     result = _result_for(envelope, produced)
@@ -247,6 +290,10 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     except Exception as exc:  # noqa: BLE001 — the SSE stream needs one terminal event
         logger.exception("agent turn failed")
         yield ErrorEvent(message=f"Något gick fel i agenten: {exc}")
+    finally:
+        # In `finally` because a turn that died partway still spent real money, and a cost
+        # cap fed only by successful turns is a cap with a hole in it.
+        yield UsageEvent(**usage)
 
 
 def _result_for(envelope: dict[str, Any],

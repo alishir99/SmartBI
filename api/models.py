@@ -182,6 +182,23 @@ class ErrorEvent(BaseModel):
     message: str
 
 
+class UsageEvent(BaseModel):
+    """Token accounting for one turn. Internal: the chat route consumes it to fill
+    `audit_turn.input_tokens`/`output_tokens` and does NOT forward it over SSE.
+
+    It travels as an event rather than a return value because `run_turn` is a generator and
+    the counts are only complete once it has finished — and because a turn that dies partway
+    still has real cost to record. Keeping it off the wire is deliberate: the browser has no
+    use for token counts, and the per-tenant cost cap this feeds is a server-side concern.
+    """
+    type: Literal["usage"] = "usage"
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    llm_calls: int = 0
+
+
 # ----------------------------------------------------------------------------- result
 
 class ResultPage(BaseModel):

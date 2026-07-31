@@ -19,7 +19,7 @@ from .. import db
 from ..agent.loop import run_turn
 from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
-from ..models import CardEvent, ChatRequest, ErrorEvent, ToolCallEvent
+from ..models import CardEvent, ChatRequest, ErrorEvent, ToolCallEvent, UsageEvent
 from ..result_cache import ResultCache
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
     tool_calls: list[dict] = []
     status = "error"
     card = None
+    usage: UsageEvent | None = None
 
     try:
         async for event in run_turn(
@@ -59,6 +60,13 @@ async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
             mcp=mcp,
             cache=cache,
         ):
+            if isinstance(event, UsageEvent):
+                # Server-side bookkeeping only. The browser has no use for token counts, and
+                # putting them on the wire would make cost a client-visible detail of every
+                # answer — so this one event is consumed rather than forwarded.
+                usage = event
+                continue
+
             if isinstance(event, ToolCallEvent):
                 tool_calls.append({"tool": event.tool, "args": event.args})
             elif isinstance(event, CardEvent):
@@ -79,14 +87,19 @@ async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
                 question=body.question,
                 tool_calls=tool_calls,
                 row_counts={"queries": len(tool_calls),
-                            "query_id": card.query_id if card else None},
+                            "query_id": card.query_id if card else None,
+                            # Cache hits are the difference between ~$0.17 and ~$0.04 a
+                            # question, so the split is worth keeping next to the totals
+                            # rather than folding into input_tokens and losing it.
+                            **({"llm_calls": usage.llm_calls,
+                                "cache_read_tokens": usage.cache_read_tokens,
+                                "cache_write_tokens": usage.cache_write_tokens}
+                               if usage else {})},
                 latency_ms=int((time.monotonic() - started) * 1000),
-                # The agent loop does not surface usage yet, so these stay null rather than
-                # zero — a zero would read as "this turn was free" in any cost rollup.
-                # Threading real counts out of run_turn is what §11.2's per-tenant cost cap
-                # needs; until then the column is honestly empty.
-                input_tokens=None,
-                output_tokens=None,
+                # Null rather than zero when the loop reported nothing: a zero would read as
+                # "this turn was free" in any cost rollup, which is a worse lie than a gap.
+                input_tokens=usage.input_tokens if usage else None,
+                output_tokens=usage.output_tokens if usage else None,
                 status=status,
             )
         except Exception:  # noqa: BLE001

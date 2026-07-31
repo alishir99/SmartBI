@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 import pytest
 
 from api.agent import loop as agent_loop
-from api.models import CardEvent
+from api.models import CardEvent, UsageEvent
 from api.result_cache import ResultCache
 
 MARS = 3_450_900.50
@@ -45,12 +45,18 @@ class Block:
         self.__dict__.update(fields)
 
 
+class Usage:
+    def __init__(self, **fields):
+        self.__dict__.update(fields)
+
+
 class Response:
-    def __init__(self, text: str = "", uses: list | None = None):
+    def __init__(self, text: str = "", uses: list | None = None, usage: Usage | None = None):
         self.content = list(uses or [])
         if text:
             self.content.append(Block(type="text", text=text))
         self.stop_reason = "tool_use" if uses else "end_turn"
+        self.usage = usage
 
 
 class FakeMessages:
@@ -113,6 +119,16 @@ async def run(monkeypatch, script, *, repeat_last: bool = False) -> object:
             card = event.card
     assert card is not None
     return card, client
+
+
+async def usage_of(monkeypatch, script) -> UsageEvent | None:
+    client = FakeClient(script)
+    monkeypatch.setattr(agent_loop.settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(agent_loop, "_client", lambda: client)
+    events = [event async for event in
+              agent_loop.run_turn(question="Hur gick mars?", history=[], supplier_id=1,
+                                  mcp=FakeMcp(), cache=ResultCache())]
+    return next((e for e in events if isinstance(e, UsageEvent)), None), events
 
 
 def query_turn() -> Response:
@@ -212,6 +228,68 @@ async def test_the_tool_budget_is_never_exceeded(monkeypatch):
     assert client.messages.calls == agent_loop.MAX_ROUNDS
     assert agent_loop.MAX_TOOL_CALLS < agent_loop.MAX_ROUNDS, (
         "a round cap at or below the tool budget would cut turns off before they spend it")
+
+
+# ------------------------------------------------------------------- cost accounting
+
+@pytest.mark.asyncio
+async def test_usage_is_summed_across_every_call_in_the_turn(monkeypatch):
+    """`audit_turn` has had input_tokens/output_tokens since the first schema and wrote NULL
+    into both, because nothing collected what the SDK returns on every call. A turn costs
+    the sum of its calls, not the last one."""
+    truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
+    usage, _ = await usage_of(monkeypatch, [
+        Response(uses=[Block(type="tool_use", id="tu_1", name="query_sales", input={})],
+                 usage=Usage(input_tokens=2000, output_tokens=100,
+                             cache_creation_input_tokens=1900, cache_read_input_tokens=0)),
+        Response(truth, usage=Usage(input_tokens=300, output_tokens=250,
+                                    cache_creation_input_tokens=0,
+                                    cache_read_input_tokens=1900)),
+    ])
+
+    assert usage is not None
+    assert usage.llm_calls == 2
+    assert usage.input_tokens == 2300
+    assert usage.output_tokens == 350
+    # The whole point of the cached prefix: written once, read back on the second call.
+    assert usage.cache_write_tokens == 1900
+    assert usage.cache_read_tokens == 1900
+
+
+@pytest.mark.asyncio
+async def test_usage_is_reported_even_when_the_turn_fails(monkeypatch):
+    """A turn that dies partway still spent real money. A cost cap fed only by successful
+    turns is a cap with a hole in it."""
+    usage, events = await usage_of(monkeypatch, [])   # empty script → the fake raises
+
+    assert any(type(e).__name__ == "ErrorEvent" for e in events)
+    assert usage is not None and usage.llm_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_usage_survives_a_provider_that_reports_none(monkeypatch):
+    """Not every Anthropic-compatible endpoint returns a usage block, and a missing one must
+    not take the turn down with it."""
+    truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
+    usage, _ = await usage_of(monkeypatch, [query_turn(), Response(truth)])
+
+    assert usage is not None
+    assert (usage.input_tokens, usage.output_tokens, usage.llm_calls) == (0, 0, 0)
+
+
+def test_the_cached_prefix_is_only_sent_to_anthropic(monkeypatch):
+    """`cache_control` attaches to content blocks, so `system=SYSTEM` as a bare string was
+    structurally ready for caching and never requested it. Turning it on is provider-
+    specific: DeepSeek's compatible endpoint does its own automatic caching and has no use
+    for the hint, and sending an untested field to a third party buys nothing."""
+    monkeypatch.setattr(agent_loop.settings, "llm_base_url", "https://api.deepseek.com/anthropic")
+    assert isinstance(agent_loop._system(), str)
+
+    monkeypatch.setattr(agent_loop.settings, "llm_base_url", "https://api.anthropic.com")
+    blocks = agent_loop._system()
+    assert isinstance(blocks, list)
+    assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+    assert blocks[0]["text"] == agent_loop.SYSTEM
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,7 @@ MeasureKey = Literal[
 
 DimensionKey = Literal[
     "day", "week", "month", "quarter", "year",
+    "month_of_year", "weekday", "is_holiday", "campaign_id",
     "product", "brand", "subcategory", "category",
     "region", "channel", "store", "city",
     "customer_segment", "loyalty_tier",
@@ -78,4 +79,43 @@ class OrderBy(BaseModel):
 
     measure: MeasureKey | None = None
     dimension: DimensionKey | None = None
+    # The one free-text field on the whole tool surface, and the reason it is safe: it is
+    # matched against the column list the compiler is about to emit and rejected if absent,
+    # so it can only ever name a column this query already has. It exists because the
+    # interesting sort keys are derived and therefore have no registry entry — sorting by
+    # net_sales_sek_delta_pct is the difference between finding the biggest decliner and
+    # finding the biggest seller that happens to have declined.
+    field: str | None = Field(
+        None, description="Kolumnnyckel ur resultatet, för härledda kolumner: "
+                          "'<mått>_delta_pct' och '<mått>_compare' (kräver compare_to), "
+                          "'<mått>_pct_of_total' (kräver percent_of_total). "
+                          "Okända nycklar avvisas.")
     dir: Literal["asc", "desc"] = "desc"
+
+
+class Having(BaseModel):
+    """Filter on an aggregate — the threshold applies after grouping, not per order line."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(
+        description="Ett hämtat mått, eller dess härledda kolumn under compare_to "
+                    "('<mått>_compare', '<mått>_delta_pct'). Dimensioner filtreras med "
+                    "filters, inte här.")
+    op: Literal[">", ">=", "<", "<=", "=", "!="]
+    value: float
+
+
+class TopNPer(BaseModel):
+    """Top N *within* each value of a dimension, rather than N rows overall.
+
+    Without this, "topplista per län" is a global LIMIT and returns the ten best rows in the
+    country — which in practice is ten Stockholm rows and no list per county at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dimension: DimensionKey = Field(
+        description="Dimensionen att dela upp topplistan på. Måste också finnas i "
+                    "dimensions.")
+    n: int = Field(ge=1, description="Antal rader per värde i dimensionen.")

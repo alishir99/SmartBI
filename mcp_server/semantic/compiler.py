@@ -11,6 +11,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from decimal import Decimal
 
 from .model import (
     BASE_JOINS,
@@ -29,6 +30,12 @@ from .model import (
 
 class SpecError(ValueError):
     """The request cannot be expressed. Always the caller's fault, never a 500."""
+
+
+# What `having.op` may say, and what that becomes in SQL. The operator that reaches the
+# query is this dict's *value* — a constant from this file — never the caller's string,
+# even where the two happen to spell the same thing.
+HAVING_OPS = {">": ">", ">=": ">=", "<": "<", "<=": "<=", "=": "=", "!=": "<>"}
 
 
 @dataclass
@@ -278,6 +285,135 @@ def _select_block(source: str, measures: list[str], dimensions: list[str],
     return sql
 
 
+def _positive_int(value, name: str) -> int:
+    # bool is an int in Python, so `limit=True` would otherwise pass as "one row". A caller
+    # who sends a boolean has made a mistake and should hear about it.
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SpecError(f"{name} måste vara ett positivt heltal")
+    return value
+
+
+def _order_key(order_by: dict, available: list[str]) -> tuple[str, str]:
+    """Resolve one sort key against the columns the query actually returns.
+
+    `field` is what lets a caller sort by a column that no registry entry names — the
+    derived `_delta_pct`, `_compare` and `_pct_of_total` columns. Validating against the
+    emitted column list rather than against MEASURES/DIMENSIONS covers those *and* keeps the
+    old rejections: a measure that was not selected is not in the list either.
+    """
+    key = order_by.get("field") or order_by.get("measure") or order_by.get("dimension")
+    if key not in available:
+        raise SpecError(f"kan inte sortera på '{key}'; tillgängliga kolumner: {available}")
+    direction = "DESC" if str(order_by.get("dir", "desc")).lower() == "desc" else "ASC"
+    return key, direction
+
+
+def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[str],
+                    columns: list[dict], params: Params,
+                    compare: bool) -> tuple[str, list[dict], list[str] | None]:
+    """Share-of-total, aggregate filtering and per-partition top-N, applied after grouping.
+
+    All three need the grouped result to already exist — a share needs the total, a rank
+    within a county needs that county's other rows, and filtering on SUM(...) cannot happen
+    before the SUM. Wrapping the finished query rather than extending the aggregate SELECT is
+    what makes this compose with the compare branch for free: a delta column is just another
+    column to sort, filter or rank on.
+
+    Order inside the wrapper is deliberate and visible in the SQL: WHERE runs before window
+    functions in the same SELECT, so `having` prunes rows *before* the share denominator and
+    the ranking see them — "andelen av det jag frågade efter", not of some larger set. LIMIT
+    runs after both, so a truncating limit never distorts a percentage.
+
+    Returns the wrapped SQL, the extended column list, and — when top-N is in play — the
+    presentation order the caller must use, since any other order interleaves the partitions
+    and makes a per-county top list unreadable.
+    """
+    percent_of_total = spec.get("percent_of_total")
+    having = spec.get("having")
+    top_n_per = spec.get("top_n_per")
+    if not (percent_of_total or having or top_n_per):
+        return sql, columns, None
+
+    base_keys = [column["key"] for column in columns]
+    select_parts = list(base_keys)
+
+    share_of: list[str] = []
+    if percent_of_total:
+        share_of = [key for key in measures if MEASURES[key].additive]
+        if not share_of:
+            raise SpecError(
+                f"percent_of_total kräver ett summerbart mått; {sorted(measures)} är "
+                "kvoter vars andelar inte betyder något")
+        for key in share_of:
+            measure = MEASURES[key]
+            # 100.0, not 100: SUM(qty) is a bigint and integer division would silently
+            # truncate every share to a whole percent.
+            select_parts.append(
+                f"ROUND((100.0 * {key} / NULLIF(SUM({key}) OVER (), 0))::numeric, 1) "
+                f"AS {key}_pct_of_total")
+            columns = [*columns, {"key": f"{key}_pct_of_total", "type": "number", "unit": "%",
+                                  "label": f"{measure.label} (andel av totalen)"}]
+
+    output_keys = [column["key"] for column in columns]
+
+    where = ""
+    if having:
+        # Only aggregates: filtering a dimension is what `filters` is for, and doing it here
+        # would run after the grouping instead of before it — same rows, more work, and a
+        # second way to express one thing.
+        aggregate_keys = set(measures)
+        if compare:
+            aggregate_keys |= {f"{key}_compare" for key in measures}
+            aggregate_keys |= {f"{key}_delta_pct" for key in measures}
+        key = having.get("field") or having.get("measure")
+        if key not in aggregate_keys:
+            raise SpecError(
+                f"having kan bara filtrera på ett hämtat mått; '{key}' är inte ett av "
+                f"{sorted(aggregate_keys)}. Använd filters för att filtrera på dimensioner.")
+        operator = HAVING_OPS.get(having.get("op"))
+        if operator is None:
+            raise SpecError(
+                f"okänd operator '{having.get('op')}'; tillåtna: {sorted(HAVING_OPS)}")
+        value = having.get("value")
+        if isinstance(value, bool) or not isinstance(value, int | float | Decimal):
+            raise SpecError("having.value måste vara ett tal")
+        # Both sides cast to numeric: the measures are a mix of numeric and bigint, and
+        # Decimal is the only Python type asyncpg encodes as numeric without complaint.
+        where = (f"\n WHERE {key}::numeric {operator} "
+                 f"{params.add(Decimal(str(value)))}::numeric")
+
+    order: list[str] | None = None
+    if top_n_per:
+        partition = top_n_per.get("dimension")
+        if partition not in dimensions:
+            raise SpecError(f"top_n_per.dimension '{partition}' måste vara en av de "
+                            f"grupperade dimensionerna {dimensions}")
+        rows = _positive_int(top_n_per.get("n"), "top_n_per.n")
+        order_by = spec.get("order_by")
+        if order_by:
+            rank_key, direction = _order_key(order_by, output_keys)
+            if rank_key not in base_keys:
+                # A window function cannot see another window function's alias at the same
+                # level, and ranking by a share is in any case the same order as ranking by
+                # the measure it divides.
+                raise SpecError(f"kan inte rangordna top_n_per på '{rank_key}'; "
+                                "använd måttet självt")
+        else:
+            rank_key, direction = measures[0], "DESC"
+        select_parts.append(f"ROW_NUMBER() OVER (PARTITION BY {partition} "
+                            f"ORDER BY {rank_key} {direction} NULLS LAST) AS __rank")
+        order = [f"{partition} ASC NULLS LAST", f"{rank_key} {direction} NULLS LAST"]
+
+    sql = f"SELECT {', '.join(select_parts)}\n  FROM (\n{sql}\n) q{where}"
+    if top_n_per:
+        # A second level, because a window function is not available to the WHERE of the
+        # SELECT that computes it. Projecting the keys explicitly is also what keeps __rank
+        # out of the table view and the CSV export.
+        sql = (f"SELECT {', '.join(output_keys)}\n  FROM (\n{sql}\n) w"
+               f"\n WHERE __rank <= {params.add(rows)}")
+    return sql, columns, order
+
+
 def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
     """Validate and compile. Raises SpecError on anything it cannot express."""
     measures, dimensions, filters = _validate(spec)
@@ -308,8 +444,24 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             # periods still appears. Date dimensions join on position within the window
             # rather than on value — cur.month and prev.month are disjoint by
             # construction, so joining on the value matched zero rows and every delta
-            # came back NULL. Non-date dimensions join on value, with IS NOT DISTINCT
-            # FROM so a NULL group still matches its counterpart.
+            # came back NULL.
+            #
+            # Non-date dimensions join on plain equality, and it has to be plain equality.
+            # `IS NOT DISTINCT FROM` looks strictly better — it makes a NULL group match its
+            # counterpart instead of dropping it — but Postgres cannot hash- or merge-join
+            # on it, and a FULL OUTER JOIN has no other strategy available, so the planner
+            # rejects the whole query:
+            #
+            #     FeatureNotSupportedError: FULL JOIN is only supported with
+            #     merge-joinable or hash-joinable join conditions
+            #
+            # That made every compare_to over a product, brand or region dimension fail at
+            # run time while parsing perfectly — which is exactly how it survived: the
+            # compiler tests assert on emitted SQL with sqlglot and never execute it, and no
+            # integration test paired compare_to with a non-date dimension. The NULL group it
+            # was protecting is a dimension value that is itself NULL, which none of these
+            # columns can be; the cost of the fix is nothing and the cost of the elegance was
+            # the entire feature.
             conditions, select_parts = [], []
             for key in dimensions:
                 if key in date_dimensions:
@@ -319,7 +471,7 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                     select_parts.append(f"c.{key}")
                     select_parts.append(f"pv.{key} AS {key}_compare")
                 else:
-                    conditions.append(f"c.{key} IS NOT DISTINCT FROM pv.{key}")
+                    conditions.append(f"c.{key} = pv.{key}")
                     select_parts.append(f"COALESCE(c.{key}, pv.{key}) AS {key}")
             join = f"FULL OUTER JOIN prev pv ON {' AND '.join(conditions)}"
         else:
@@ -332,7 +484,10 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                 f"pv.{key} AS {key}_compare",
                 # The delta is computed here rather than by the model. Arithmetic the
                 # database can do is arithmetic the model cannot get wrong.
-                f"ROUND((100 * (c.{key} - pv.{key}) / "
+                # 100.0 rather than 100: units and orders are bigints, and integer
+                # division truncated every one of their deltas to a whole percent
+                # before ROUND ever saw a decimal.
+                f"ROUND((100.0 * (c.{key} - pv.{key}) / "
                 f"NULLIF(ABS(pv.{key}), 0))::numeric, 1) AS {key}_delta_pct",
             ]
 
@@ -340,17 +495,16 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                f"SELECT {', '.join(select_parts)}\n  FROM cur c\n  {join}")
         columns = _columns(dimensions, measures, compare=True)
 
+    sql, columns, order = _post_aggregate(sql, spec, measures, dimensions, columns, params,
+                                          compare=compare_window is not None)
+
     order_by = spec.get("order_by")
-    if order_by:
-        key = order_by.get("measure") or order_by.get("dimension")
-        if key not in MEASURES and key not in DIMENSIONS:
-            raise SpecError(f"kan inte sortera på okänt fält '{key}'")
-        if key in MEASURES and key not in measures:
-            raise SpecError(f"kan inte sortera på '{key}' som inte hämtas")
-        if key in DIMENSIONS and key not in dimensions:
-            raise SpecError(f"kan inte sortera på '{key}' som inte grupperas")
-        direction = "DESC" if str(order_by.get("dir", "desc")).lower() == "desc" else "ASC"
-        sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {key} {direction} NULLS LAST"
+    if order:
+        # Forced by top_n_per: the partitions have to come out grouped.
+        keys = order
+    elif order_by:
+        key, direction = _order_key(order_by, [column["key"] for column in columns])
+        keys = [f"{key} {direction} NULLS LAST"]
     elif dimensions:
         # Every grouped query gets a total order, and it has to be *total* rather than merely
         # present. With no ORDER BY at all the LIMIT below cut an arbitrary slice, so the model
@@ -373,16 +527,17 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         else:
             keys = [f"{measures[0]} DESC NULLS LAST"]
         keys += [f"{key} ASC NULLS LAST" for key in dimensions if key != leading]
+    else:
+        keys = []
+
+    if keys:
         sql = f"SELECT * FROM (\n{sql}\n) q ORDER BY {', '.join(keys)}"
 
-    limit = spec.get("limit")
-    if limit is None:
-        limit = DEFAULT_LIMIT
     # `or DEFAULT_LIMIT` would quietly turn limit=0 into 500. A caller asking for zero rows
     # has made a mistake and should hear about it.
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise SpecError("limit måste vara ett positivt heltal")
-    sql += f"\n LIMIT {min(int(limit), MAX_ROWS)}"
+    limit = spec.get("limit")
+    limit = DEFAULT_LIMIT if limit is None else _positive_int(limit, "limit")
+    sql += f"\n LIMIT {min(limit, MAX_ROWS)}"
 
     return CompiledQuery(sql=sql, params=params.values, source=source, columns=columns,
                          time_range=window, compare_range=compare_window)

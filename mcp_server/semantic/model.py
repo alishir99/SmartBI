@@ -72,6 +72,10 @@ class Measure:
     expr: dict[str, str]
     joins: dict[str, tuple[str, ...]] = field(default_factory=dict)
     description: str = ""
+    # Whether the rows of this measure sum to a meaningful whole. Ratios do not: the shares
+    # of a total average price add up to 100 % and mean nothing. percent_of_total refuses to
+    # emit a column for a non-additive measure rather than emit a plausible wrong one.
+    additive: bool = True
 
     def requires(self, source: str) -> tuple[str, ...]:
         return self.joins.get(source, ())
@@ -116,6 +120,30 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
               expr={ROLLUP: "s.channel", FACT: "st.channel"},
               joins={FACT: ("store",)}),
 
+    # Calendar attributes, not periods. A period dimension cuts the window into consecutive
+    # slices; these fold it — every July in the window lands in the same group. That is what
+    # "vilken månad säljer bäst?" and "hur ser en normalvecka ut?" actually ask, and it is
+    # why they are separate keys rather than a mode on `month`.
+    Dimension("month_of_year", "Månad på året", "number",
+              expr={ROLLUP: "EXTRACT(MONTH FROM {date})::int",
+                    FACT: "EXTRACT(MONTH FROM {date})::int"}),
+    # ISODOW, so 1 = måndag and the natural numeric sort is the order a Swedish reader
+    # expects. dim_date.weekday is 0-based; deriving from the date instead keeps one
+    # definition for both sources rather than two that silently differ by one.
+    Dimension("weekday", "Veckodag", "number",
+              expr={ROLLUP: "EXTRACT(ISODOW FROM {date})::int",
+                    FACT: "EXTRACT(ISODOW FROM {date})::int"}),
+    # Fact-only: the rollup carries the date but not the calendar's judgement of it, and
+    # hard-coding the red days into SQL here would be a second source of truth for them.
+    # Returned as words rather than a boolean because the answer is prose, not a flag.
+    Dimension("is_holiday", "Dagtyp", "text",
+              expr={FACT: "CASE WHEN d.is_holiday THEN 'Röd dag' ELSE 'Vardag' END"}),
+    # NULL means "no campaign ran that day", which makes the ordinary days a group of their
+    # own — the comparison the question is usually after. There is no dim_campaign, so the
+    # id is all there is to return.
+    Dimension("campaign_id", "Kampanj", "number",
+              expr={FACT: "d.campaign_id"}),
+
     # Below the rollup's grain — asking for any of these forces the fact table.
     Dimension("store", "Butik", "text",
               expr={FACT: "st.name"}, joins={FACT: ("store",)}),
@@ -144,11 +172,11 @@ MEASURES: dict[str, Measure] = {m.key: m for m in [
     Measure("avg_price_sek", "Snittpris", "SEK",
             expr={ROLLUP: "SUM(s.net_sales_sek) / NULLIF(SUM(s.qty), 0)",
                   FACT: "SUM(f.net_amount_sek) / NULLIF(SUM(f.quantity), 0)"},
-            description="Nettoförsäljning delat med antal enheter."),
+            description="Nettoförsäljning delat med antal enheter.", additive=False),
     Measure("discount_rate", "Rabattgrad", "%",
             expr={ROLLUP: "100 * SUM(s.discount_sek) / NULLIF(SUM(s.gross_sales_sek), 0)",
                   FACT: "100 * SUM(f.discount_amount_sek) / NULLIF(SUM(f.gross_amount_sek), 0)"},
-            description="Rabatt som andel av bruttoförsäljning."),
+            description="Rabatt som andel av bruttoförsäljning.", additive=False),
 
     # Deliberately fact-only. The rollup stores n_orders per (date, product, region,
     # channel); summing that across products would count a two-product basket twice.

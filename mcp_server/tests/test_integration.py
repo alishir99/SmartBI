@@ -417,3 +417,104 @@ async def test_the_two_sources_answer_the_same_question_identically(
                 f"{measure} at {key}: rollup {rollup_row[measure]} "
                 f"vs fact {fact_row[measure]}")
         assert int(rollup_row["units"]) == int(fact_row["units"]), key
+
+
+# ------------------------------------------------- the post-aggregate stage really runs
+
+async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers):
+    """The gap that let a broken feature stay green for a whole remediation pass.
+
+    `compare_to` over a product dimension compiled to valid-looking SQL and failed in
+    Postgres every time: the join used `IS NOT DISTINCT FROM`, which cannot be hash- or
+    merge-joined, and FULL OUTER JOIN has no other strategy — so the planner rejected the
+    query with FeatureNotSupportedError. test_compiler.py parses the SQL with sqlglot and
+    never executes it, and no integration test paired compare_to with anything but a date.
+    Between them, two green suites and a feature that could not run.
+    """
+    payload = await query_sales(tenant(suppliers[truth["demo_supplier"]]), {
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "time_range": {"relative": "last_12_months"},
+        "compare_to": "same_period_last_year",
+        "order_by": {"measure": "net_sales_sek_delta_pct", "dir": "asc"},
+        "limit": 5,
+    })
+
+    assert payload["rows"], "no rows came back at all"
+    # Sorting on the derived column is the whole point: the biggest decliner is typically
+    # mid-sized, so sorting by current value never surfaces it.
+    deltas = [row["net_sales_sek_delta_pct"] for row in payload["rows"]
+              if row.get("net_sales_sek_delta_pct") is not None]
+    assert deltas, "every delta came back NULL — the comparison join matched nothing"
+    assert deltas == sorted(deltas), "ascending sort on the derived column did not hold"
+
+
+async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
+    """percent_of_total, HAVING and partitioned top-N against the real planner.
+
+    Each closes a question the coverage-gap table lists as unanswerable, and each is a shape
+    the compiler had never emitted before — which is exactly when "it parses" and "it runs"
+    are most likely to diverge.
+    """
+    scope = tenant(suppliers[truth["demo_supplier"]])
+    window = {"relative": "last_12_months"}
+
+    share = await query_sales(scope, {
+        "measures": ["net_sales_sek"], "dimensions": ["channel"],
+        "time_range": window, "percent_of_total": True})
+    percentages = [row["net_sales_sek_pct_of_total"] for row in share["rows"]]
+    assert percentages, "percent_of_total produced no column"
+    # The reason this measure exists: the model was being asked to divide, which the prompt
+    # forbids. A total that does not reach 100 means it is still being asked to.
+    assert abs(sum(percentages) - 100.0) < 0.5, percentages
+
+    filtered = await query_sales(scope, {
+        "measures": ["net_sales_sek"], "dimensions": ["product"], "time_range": window,
+        "having": {"measure": "net_sales_sek", "op": ">", "value": 1_000_000}})
+    assert filtered["rows"]
+    assert all(row["net_sales_sek"] > 1_000_000 for row in filtered["rows"])
+
+    per_region = await query_sales(scope, {
+        "measures": ["net_sales_sek"], "dimensions": ["region", "product"],
+        "time_range": window, "top_n_per": {"dimension": "region", "n": 2}})
+    counts: dict[str, int] = {}
+    for row in per_region["rows"]:
+        counts[row["region"]] = counts.get(row["region"], 0) + 1
+    assert counts, "partitioned top-N produced no rows"
+    assert max(counts.values()) <= 2, counts
+    # And more than one region survives, which is the actual complaint: a flat GROUP BY with
+    # a global LIMIT returned ten Stockholm rows and nothing else.
+    assert len(counts) > 1, "only one region came back — the partition did not apply"
+
+
+async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers):
+    """`dim_date` already carried all four; they were simply never exposed. Registry-only
+    changes are the easiest kind to get subtly wrong, because nothing fails to compile."""
+    scope = tenant(suppliers[truth["demo_supplier"]])
+    window = {"relative": "last_12_months"}
+
+    for dimension, expected_rows in (("month_of_year", 12), ("weekday", 7)):
+        payload = await query_sales(scope, {
+            "measures": ["net_sales_sek"], "dimensions": [dimension],
+            "time_range": window})
+        assert len(payload["rows"]) == expected_rows, (
+            f"{dimension} returned {len(payload['rows'])} groups, expected {expected_rows}")
+
+    holidays = await query_sales(scope, {
+        "measures": ["net_sales_sek"], "dimensions": ["is_holiday"], "time_range": window})
+    assert {str(row["is_holiday"]) for row in holidays["rows"]} == {"Vardag", "Röd dag"}
+
+    # campaign_id is only worth exposing because the generator bug that discounted every
+    # single line is fixed: campaign days now discount far harder than ordinary ones, so
+    # "how did Black Week compare?" has an answer in the data for the first time.
+    campaigns = await query_sales(scope, {
+        "measures": ["discount_rate"], "dimensions": ["campaign_id"],
+        "time_range": window})
+    rates = {row["campaign_id"]: float(row["discount_rate"]) for row in campaigns["rows"]}
+    assert len(rates) > 1, "no campaign breakdown came back"
+    on_campaign = [rate for key, rate in rates.items() if key is not None]
+    off_campaign = [rate for key, rate in rates.items() if key is None]
+    if on_campaign and off_campaign:
+        assert min(on_campaign) > max(off_campaign), (
+            f"campaign days ({on_campaign}) do not discount harder than ordinary days "
+            f"({off_campaign}) — the generator's campaign branch may have re-broken")

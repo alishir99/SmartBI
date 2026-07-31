@@ -6,6 +6,7 @@ real rows is the job of the golden-question eval (§13.2), not of these tests.
 """
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 import sqlglot
@@ -108,6 +109,22 @@ def test_dates_are_bound_parameters():
     {"measures": ["net_sales_sek"], "compare_to": "next_year"},
     {"measures": ["net_sales_sek"], "order_by": {"measure": "units"}},
     {"measures": ["net_sales_sek"], "order_by": {"dimension": "region"}},
+    # Post-aggregate: every reference has to name a column the query actually emits.
+    {"measures": ["net_sales_sek"], "order_by": {"field": "net_sales_sek_delta_pct"}},
+    {"measures": ["net_sales_sek"], "order_by": {"field": "net_sales_sek_pct_of_total"}},
+    {"measures": ["net_sales_sek"], "order_by": {"field": "1; DROP TABLE dim_store"}},
+    {"measures": ["net_sales_sek"], "having": {"field": "units", "op": ">", "value": 1}},
+    {"measures": ["net_sales_sek"], "dimensions": ["region"],
+     "having": {"field": "region", "op": ">", "value": 1}},
+    {"measures": ["net_sales_sek"], "having": {"field": "net_sales_sek", "op": "OR 1=1",
+                                               "value": 1}},
+    {"measures": ["net_sales_sek"], "having": {"field": "net_sales_sek", "op": ">",
+                                               "value": "1 OR 1=1"}},
+    {"measures": ["net_sales_sek"], "dimensions": ["region"],
+     "top_n_per": {"dimension": "product", "n": 3}},
+    {"measures": ["net_sales_sek"], "dimensions": ["region"],
+     "top_n_per": {"dimension": "region", "n": 0}},
+    {"measures": ["avg_price_sek"], "dimensions": ["channel"], "percent_of_total": True},
 ])
 def test_bad_specs_are_rejected(spec):
     with pytest.raises(SpecError):
@@ -230,8 +247,15 @@ def test_compare_mixing_a_date_and_a_plain_dimension():
         "time_range": "last_12_months",
     })
     assert "c.month__ord = pv.month__ord" in compiled.sql
-    assert "c.product IS NOT DISTINCT FROM pv.product" in compiled.sql
+    assert "c.product = pv.product" in compiled.sql
     assert "COALESCE(c.product, pv.product) AS product" in compiled.sql
+    # Plain equality, and this assertion is the reason. `IS NOT DISTINCT FROM` reads better
+    # — it makes a NULL group match instead of dropping it — but Postgres can neither hash-
+    # nor merge-join on it, and FULL OUTER JOIN has no third strategy, so the planner
+    # rejected the entire query at run time with FeatureNotSupportedError. Every compare_to
+    # over a product, brand or region dimension was broken in production while this file was
+    # green, because these tests parse the SQL and never execute it.
+    assert "IS NOT DISTINCT FROM" not in compiled.sql
 
 
 def test_compare_without_a_date_dimension_needs_no_ordinal():
@@ -298,6 +322,211 @@ def test_columns_carry_units_and_swedish_labels():
     assert by_key["net_sales_sek"]["unit"] == "SEK"
     assert by_key["net_sales_sek"]["label"] == "Nettoförsäljning"
     assert by_key["region"]["label"] == "Län"
+
+
+# ------------------------------------------------------- post-aggregate stage
+#
+# One narrow layer on top of the grouped result. Each test below stands for a Swedish
+# question the compiler could not express before it existed.
+
+
+def test_order_by_a_derived_compare_column():
+    """"Vilka produkter tappar mest mot förra året?" — the biggest decliner is usually a
+    mid-sized product, so sorting by the current value never surfaces it."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "compare_to": "same_period_last_year",
+        "order_by": {"field": "net_sales_sek_delta_pct", "dir": "asc"},
+        "limit": 10,
+    })
+    assert "ORDER BY net_sales_sek_delta_pct ASC" in compiled.sql
+
+
+def test_order_by_measure_and_dimension_still_work():
+    """The old spelling is what api/routes/dashboard.py sends; `field` is additive."""
+    assert "ORDER BY units DESC" in compile_ok({
+        "measures": ["units"], "dimensions": ["product"],
+        "order_by": {"measure": "units"}}).sql
+    assert "ORDER BY region ASC" in compile_ok({
+        "measures": ["units"], "dimensions": ["region"],
+        "order_by": {"dimension": "region", "dir": "asc"}}).sql
+
+
+def test_percent_of_total_is_computed_in_sql():
+    """"Hur stor andel av försäljningen är online?" — two golden cases used to depend on
+    the model dividing, which the system prompt forbids."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["channel"],
+        "percent_of_total": True,
+    })
+    assert "SUM(net_sales_sek) OVER ()" in compiled.sql
+    assert [c["key"] for c in compiled.columns][-1] == "net_sales_sek_pct_of_total"
+    assert compiled.columns[-1]["unit"] == "%"
+
+
+def test_percent_of_total_avoids_integer_division():
+    """SUM(qty) is a bigint; 100 * bigint / bigint truncates every share to a whole
+    percent, and a share that reads 12 when it is 12.4 is simply wrong."""
+    compiled = compile_ok({
+        "measures": ["units"], "dimensions": ["channel"], "percent_of_total": True})
+    assert "100.0 * units" in compiled.sql
+
+
+def test_percent_of_total_refuses_non_additive_measures():
+    """Shares of an average price add to 100 % and mean nothing."""
+    with pytest.raises(SpecError, match="summerbart"):
+        compile_query({"measures": ["discount_rate"], "dimensions": ["channel"],
+                       "percent_of_total": True}, COVERAGE)
+
+
+def test_percent_of_total_skips_the_ratio_measures_it_cannot_share():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek", "avg_price_sek"],
+        "dimensions": ["channel"],
+        "percent_of_total": True,
+    })
+    keys = [c["key"] for c in compiled.columns]
+    assert "net_sales_sek_pct_of_total" in keys
+    assert "avg_price_sek_pct_of_total" not in keys
+
+
+def test_partitioned_top_n_ranks_within_the_partition():
+    """"Topplista per län" — a flat GROUP BY with a global LIMIT returns ten Stockholm
+    rows and no per-county list at all."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["region", "product"],
+        "top_n_per": {"dimension": "region", "n": 3},
+    })
+    assert ("ROW_NUMBER() OVER (PARTITION BY region ORDER BY net_sales_sek DESC"
+            in compiled.sql)
+    assert "WHERE __rank <=" in compiled.sql
+    # Grouped by county, best first inside each — any other order is unreadable.
+    assert "ORDER BY region ASC NULLS LAST, net_sales_sek DESC" in compiled.sql
+
+
+def test_the_rank_column_never_reaches_the_caller():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["region", "product"],
+        "top_n_per": {"dimension": "region", "n": 3},
+    })
+    assert not any(c["key"] == "__rank" for c in compiled.columns)
+    # The outer projection is explicit precisely so __rank stops at the wrapper.
+    assert compiled.sql.rindex("__rank") < compiled.sql.index("LIMIT")
+    assert "SELECT *" not in compiled.sql.split(") w")[-1]
+
+
+def test_top_n_per_takes_its_ranking_from_order_by():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek", "units"],
+        "dimensions": ["region", "product"],
+        "order_by": {"measure": "units", "dir": "desc"},
+        "top_n_per": {"dimension": "region", "n": 2},
+    })
+    assert "PARTITION BY region ORDER BY units DESC" in compiled.sql
+
+
+def test_having_filters_on_the_aggregate_not_the_row():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "having": {"field": "net_sales_sek", "op": ">=", "value": 100_000},
+    })
+    assert "WHERE net_sales_sek::numeric >=" in compiled.sql
+    assert "100000" not in compiled.sql          # the threshold is a bound parameter
+    assert Decimal("100000") in compiled.params
+
+
+def test_having_can_target_a_derived_compare_column():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "compare_to": "same_period_last_year",
+        "having": {"field": "net_sales_sek_delta_pct", "op": "<", "value": -10},
+    })
+    assert "WHERE net_sales_sek_delta_pct::numeric <" in compiled.sql
+
+
+def test_having_runs_before_the_share_denominator():
+    """WHERE is evaluated before window functions in the same SELECT, so the percentages
+    are of the rows the caller asked to keep — not of a set they filtered away."""
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["product"],
+        "percent_of_total": True,
+        "having": {"field": "net_sales_sek", "op": ">", "value": 0},
+    })
+    assert compiled.sql.index("SUM(net_sales_sek) OVER ()") < compiled.sql.index(
+        "WHERE net_sales_sek::numeric >")
+
+
+def test_the_post_aggregate_stage_is_absent_when_nothing_asks_for_it():
+    """No wrapper, no window, no behaviour change for every query written before it."""
+    compiled = compile_ok({"measures": ["net_sales_sek"], "dimensions": ["product"]})
+    assert "OVER (" not in compiled.sql
+    assert "__rank" not in compiled.sql
+
+
+def test_all_four_post_aggregate_features_compose():
+    compiled = compile_ok({
+        "measures": ["net_sales_sek"],
+        "dimensions": ["region", "product"],
+        "compare_to": "same_period_last_year",
+        "percent_of_total": True,
+        "having": {"field": "net_sales_sek", "op": ">", "value": 1000},
+        "order_by": {"measure": "net_sales_sek"},
+        "top_n_per": {"dimension": "region", "n": 3},
+        "limit": 50,
+    })
+    sql = compiled.sql
+    assert "FULL OUTER JOIN" in sql
+    assert "SUM(net_sales_sek) OVER ()" in sql
+    assert "ROW_NUMBER() OVER (PARTITION BY region" in sql
+    assert "__rank <=" in sql
+    assert sql.rstrip().endswith("LIMIT 50")
+
+
+# ------------------------------------------------------- calendar dimensions
+
+
+def test_calendar_dimensions_fold_the_window_instead_of_cutting_it():
+    """"Vilken månad säljer bäst?" groups every July together, unlike `month`."""
+    compiled = compile_ok({"measures": ["net_sales_sek"], "dimensions": ["month_of_year"]})
+    assert compiled.source == ROLLUP
+    assert "EXTRACT(MONTH FROM s.date)" in compiled.sql
+    assert "GROUP BY EXTRACT(MONTH FROM s.date)::int" in compiled.sql
+
+
+def test_weekday_is_monday_first():
+    """ISODOW, not dim_date.weekday: the column is 0-based and deriving it from the date
+    keeps one definition across both sources."""
+    compiled = compile_ok({"measures": ["units"], "dimensions": ["weekday"]})
+    assert "EXTRACT(ISODOW FROM s.date)" in compiled.sql
+
+
+@pytest.mark.parametrize("key, fragment", [
+    ("is_holiday", "d.is_holiday"),
+    ("campaign_id", "d.campaign_id"),
+])
+def test_dim_date_only_calendar_dimensions_force_the_fact_table(key, fragment):
+    compiled = compile_ok({"measures": ["net_sales_sek"], "dimensions": [key]})
+    assert compiled.source == FACT
+    assert fragment in compiled.sql
+    assert "JOIN dim_date d" in compiled.sql
+
+
+def test_campaign_days_can_be_compared_with_ordinary_days():
+    """The generator discounts ~22.5 % on campaign days against ~8 % otherwise, so this
+    is the question the dimension exists for."""
+    compiled = compile_ok({
+        "measures": ["discount_rate", "net_sales_sek"],
+        "dimensions": ["campaign_id"],
+        "time_range": "last_12_months",
+    })
+    assert "GROUP BY d.campaign_id" in compiled.sql
 
 
 def test_joins_are_emitted_in_dependency_order():

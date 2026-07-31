@@ -276,3 +276,114 @@ def test_a_fabricated_figure_is_attributed_to_nothing():
 
     assert not check.ok
     assert check.attributions == []
+
+
+# ----------------------------------------------------------- direction, class and winner
+
+WITH_DELTA = result(
+    [{"month": "2026-03-01", "net_sales_sek": 3_450_900.50,
+      "net_sales_sek_delta_pct": -8.2}],
+    columns=[
+        {"key": "month", "type": "date", "label": "Månad"},
+        {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"},
+        {"key": "net_sales_sek_delta_pct", "type": "number", "label": "Förändring",
+         "unit": "%"},
+    ])
+
+
+@pytest.mark.parametrize("prose", [
+    "Försäljningen ökade med 8,2 % jämfört med förra året.",
+    "Försäljningen växte med 8,2 % mot i fjol.",
+    "Försäljningen steg 8,2 % mot i fjol.",
+])
+def test_prose_may_not_reverse_the_direction_of_a_real_change(prose):
+    """B3, and the most consequential claim in any sales answer.
+
+    Candidates used to be stored mirrored across zero — the comment said "the sign lives in
+    the verb", which was true and was exactly the problem: nothing read the verb. A delta of
+    -8.2 licensed the literal "8,2", so a report of an 8 % *rise* against data showing an 8 %
+    *fall* passed as grounded. The number was right and the sentence was the opposite of true.
+    """
+    check = validate_narrative(prose, [WITH_DELTA])
+    assert not check.ok
+    assert "andra hållet" in check.violations[0]
+
+
+@pytest.mark.parametrize("prose", [
+    "Försäljningen minskade med 8,2 % jämfört med förra året.",
+    "Försäljningen sjönk med 8,2 % mot i fjol.",
+    "Försäljningen tappade 8,2 % mot i fjol.",
+    # No direction word at all: nothing to contradict, so nothing is asserted.
+    "Förändringen var 8,2 % jämfört med förra året.",
+    # Written with its own sign, which agrees with the data.
+    "Försäljningen var -8,2 % mot i fjol.",
+])
+def test_prose_that_states_the_direction_correctly_still_passes(prose):
+    """The half that matters more: a tightened validator which rejects true statements is
+    worse than the loose one it replaced."""
+    check = validate_narrative(prose, [WITH_DELTA])
+    assert check.ok, check.violations
+
+
+def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
+    """B4's compounding factor. `implicit_scale_allowed` exists so an unsuffixed money figure
+    can be read as millions — applied to a `%` literal it let "Marknadsandelen var 2,89 %"
+    match a revenue of 2 890 100. A percentage is written at the scale it means."""
+    revenue = result(
+        [{"region": "Stockholms län", "net_sales_sek": 2_890_100.00}],
+        columns=[{"key": "region", "type": "text", "label": "Län"},
+                 {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"}])
+
+    assert not validate_narrative("Marknadsandelen var 2,89 %.", [revenue]).ok
+    # The same digits as money are still fine — the literal now has to agree about what it is.
+    assert validate_narrative("Stockholm stod för 2 890 100,00 kr.", [revenue]).ok
+
+
+def test_a_share_of_the_total_is_still_a_legitimate_percentage():
+    """The gate is on the *class*, not on percentages as such. A share is the derivation that
+    legitimately turns kronor into a proportion, and it has to survive."""
+    two = result(
+        [{"region": "A", "net_sales_sek": 750.0},
+         {"region": "B", "net_sales_sek": 250.0}],
+        columns=[{"key": "region", "type": "text", "label": "Län"},
+                 {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"}])
+    assert validate_narrative("A stod för 75,0 % av försäljningen.", [two]).ok
+
+
+# ------------------------------------------------------------------------- superlatives
+
+TOP_THREE = result(
+    [{"product": "Nordström TV N100 Pro", "net_sales_sek": 8_932_965.00},
+     {"product": "Vidar Hörlurar V191 Studio", "net_sales_sek": 4_251_150.76},
+     {"product": "Vidar Tillbehör V139 Compact", "net_sales_sek": 1_000_000.00}],
+    columns=PRODUCT_COLUMNS)
+
+
+def test_naming_the_wrong_winner_is_caught():
+    """The claim that carries no digits at all, and was therefore invisible to every check in
+    this file. "Den bäst säljande produkten är X" is among the most common questions a
+    supplier asks, and the model answers it from a 25-row sample of up to 500."""
+    check = validate_narrative(
+        "Den bäst säljande produkten är Vidar Hörlurar V191 Studio.", [TOP_THREE])
+    assert not check.ok
+    assert "störst/bäst" in check.violations[0]
+
+
+def test_naming_the_right_winner_passes():
+    check = validate_narrative(
+        "Den bäst säljande produkten är Nordström TV N100 Pro med 8 932 965,00 kr.",
+        [TOP_THREE])
+    assert check.ok, check.violations
+
+
+def test_a_superlative_about_an_entity_not_in_the_result_stays_silent():
+    """Conservative on purpose: a false rejection here suppresses a correct answer. If the
+    name is not one the result carries, there is nothing to check it against and the guard
+    says nothing rather than guessing."""
+    assert validate_narrative(
+        "Den bäst säljande produkten är Okänd Produkt.", [TOP_THREE]).ok
+
+
+def test_mentioning_a_product_without_a_superlative_is_not_a_winner_claim():
+    assert validate_narrative(
+        "Vidar Hörlurar V191 Studio sålde för 4 251 150,76 kr.", [TOP_THREE]).ok

@@ -31,7 +31,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 
-from ..result_cache import CachedResult
+from ..result_cache import PREVIEW_ROWS, CachedResult
 
 # --- magnitude suffixes -----------------------------------------------------------------
 # Written as they actually appear in Swedish financial prose. `mdkr` is included because a
@@ -96,6 +96,16 @@ _MAX_COUNTING_INTEGER = 50
 _FLOAT_EPSILON = 1e-6
 
 
+#: What kind of quantity a literal claims to be, read off the unit it was written with.
+#: `percent` and `money` are mutually exclusive evidence, and keeping them apart is what
+#: stops "Marknadsandelen var 2,89 %" from matching a revenue of 2 890 100 at a scale of 1e6.
+UnitClass = str  # "percent" | "money" | "count" | "unknown"
+
+_PERCENT_WORDS = {"%", "procent"}
+_MONEY_WORDS = {"kr", "sek", "kronor"}
+_COUNT_WORDS = {"st", "styck", "enheter"}
+
+
 @dataclass(frozen=True)
 class NumberLiteral:
     raw: str
@@ -105,6 +115,10 @@ class NumberLiteral:
     implicit_scale_allowed: bool
     #: True when the literal is a plain integer with no unit at all.
     bare_integer: bool
+    #: The unit it was written with: percent, money, count, or unknown when it carried none.
+    unit_class: UnitClass = "unknown"
+    #: Character offset in the (masked) narrative, so the words around it can be read.
+    position: int = 0
 
 
 @dataclass(frozen=True)
@@ -205,12 +219,25 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
         tolerance = 0.5 * (10.0 ** -decimals) * scale
         tolerance += abs(value) * _FLOAT_EPSILON
 
+        if suffix in _PERCENT_WORDS:
+            unit_class = "percent"
+        elif suffix in _MONEY_WORDS or suffix in SCALES:
+            # A magnitude suffix is always money here: "3,45 Mkr", "2 tusen". No percentage
+            # is written with one.
+            unit_class = "money"
+        elif suffix in _COUNT_WORDS:
+            unit_class = "count"
+        else:
+            unit_class = "unknown"
+
         literals.append(NumberLiteral(
             raw=match.group(0).strip(),
             value=value,
             tolerance=tolerance,
             implicit_scale_allowed=suffix not in SCALES,
             bare_integer=decimals == 0 and not has_unit,
+            unit_class=unit_class,
+            position=match.start(),
         ))
     return literals
 
@@ -240,8 +267,9 @@ def build_candidates(results: Iterable[CachedResult]) -> tuple[list[float], int]
     """
     results = list(results)
     merged: list[float] = []
-    for _query_id, candidates in candidates_by_result(results):
-        merged.extend(candidates)
+    for _query_id, buckets in candidates_by_result(results):
+        for values in buckets.values():
+            merged.extend(values)
     merged.sort()
     max_rows = max((result.row_count for result in results), default=0)
     return merged, max_rows
@@ -264,11 +292,18 @@ def candidates_by_result(
     fabrication. A validator must not fail closed on a bookkeeping detail, so position is the
     key and the id is only carried along.
     """
-    by_result: list[tuple[str, list[float]]] = []
+    by_result: list[tuple[str, dict[str, list[float]]]] = []
 
     for result in results:
-        candidates: list[float] = []
-        candidates.append(float(result.row_count))
+        buckets: dict[str, list[float]] = {"money": [], "percent": [], "count": [],
+                                           "unknown": []}
+        unit_of = {column["key"]: _class_of_unit(column.get("unit"))
+                   for column in result.columns}
+
+        def add(bucket: str, *values: float, _buckets=buckets) -> None:
+            _buckets[bucket].extend(values)
+
+        add("count", float(result.row_count))
 
         # Whether the rows we hold ARE the whole result. Aggregate derivations below are only
         # sound when they are: if the tool capped the result at MAX_ROWS, the sum of what we
@@ -280,7 +315,7 @@ def candidates_by_result(
         # `limit` is the one tool argument that legitimately shows up in prose ("topp 10").
         limit = result.tool_args.get("limit")
         if isinstance(limit, int) and not isinstance(limit, bool):
-            candidates.append(float(limit))
+            add("count", float(limit))
 
         numeric_keys = result.numeric_columns()
         for key in numeric_keys:
@@ -288,29 +323,47 @@ def candidates_by_result(
             if not values:
                 continue
 
-            candidates.extend(values)                                   # the cells themselves
+            own = unit_of.get(key, "unknown")
+            add(own, *values)                                           # the cells themselves
+
+            # Row-wise *percentage* derivations are the promiscuous family: a 500-row result
+            # yields 500 shares plus 499 pairwise pct-deltas, and mirrored across zero that is
+            # a thousand values blanketing [-100, 100] — which is why the review measured
+            # ~40 % of fabricated percentages passing. They are also the family the model
+            # cannot honestly have computed for rows it never saw: it is handed 25, and since
+            # the preview now carries server-computed totals, means and extremes, it has no
+            # legitimate reason to derive a share for row 300 by hand.
+            #
+            # So these are licensed only over the window the model was actually shown. Whole-
+            # series derivations (sum, mean, first→last) stay over every row: those are claims
+            # about the result as a whole, and the envelope hands them over explicitly.
+            seen = values[:PREVIEW_ROWS]
 
             if complete:
                 total = sum(values)
-                candidates.append(total)                                # sum
-                candidates.append(total / len(values))                  # mean
+                # A sum or a mean is the same kind of quantity as the column it came from:
+                # summing kronor gives kronor. A sum of percentages is meaningless, but
+                # harmless to keep — nothing in prose quotes one.
+                add(own, total, total / len(values))
                 if total:
-                    # share: each value as a percentage of its column total
-                    candidates.extend(100.0 * value / total for value in values)
+                    # Share is a percentage NO MATTER what the column's unit is: this is the
+                    # derivation that turns kronor into a proportion, and it is the reason a
+                    # `%` literal has any legitimate claim on a money column at all.
+                    add("percent", *(100.0 * value / total for value in seen))
 
             # delta between adjacent rows stays available either way — it is local to two rows
             # and does not depend on holding the whole series.
-            for previous, current in pairwise(values):
-                candidates.append(current - previous)
+            for previous, current in pairwise(seen):
+                add(own, current - previous)
                 if previous:
-                    candidates.append(100.0 * (current - previous) / abs(previous))
+                    add("percent", 100.0 * (current - previous) / abs(previous))
 
             if complete:
                 # first→last is a statement about the series as a whole, so it needs the
                 # whole series.
-                candidates.append(values[-1] - values[0])
+                add(own, values[-1] - values[0])
                 if values[0]:
-                    candidates.append(100.0 * (values[-1] - values[0]) / abs(values[0]))
+                    add("percent", 100.0 * (values[-1] - values[0]) / abs(values[0]))
 
             # delta against the comparison period, when compare_to produced a paired column.
             # The percentage form already exists as a cell (`*_delta_pct`, computed in SQL);
@@ -320,20 +373,200 @@ def candidates_by_result(
                 for row in result.rows:
                     current, previous = row.get(key), row.get(compare_key)
                     if isinstance(current, (int, float)) and isinstance(previous, (int, float)):
-                        candidates.append(float(current) - float(previous))
+                        add(unit_of.get(key, "unknown"), float(current) - float(previous))
 
-        # Prose says "ökade med 4,2 %" for a delta of -4.2 as readily as for +4.2; the sign
-        # lives in the verb, which is not something a numeric check can read.
-        candidates.extend([-value for value in candidates])
-        candidates.sort()
-        by_result.append((result.query_id, candidates))
+        # Candidates stay SIGNED. The magnitude check looks for the literal at either sign
+        # (see `_matching_sign`), so prose may still say "ökade med 4,2 %" for a delta of
+        # -4.2 — but storing the mirror image would erase the very fact the direction check
+        # needs. Sign-blind matching is a property of the *lookup*, not of the data.
+        for values in buckets.values():
+            values.sort()
+        by_result.append((result.query_id, buckets))
 
     return by_result
+
+
+def _class_of_unit(unit: str | None) -> str:
+    """A column's unit, as the same vocabulary a literal is classified into."""
+    if unit == "%":
+        return "percent"
+    if unit == "SEK":
+        return "money"
+    if unit == "st":
+        return "count"
+    return "unknown"
+
+
+# Which candidate classes a literal of each class is allowed to match.
+#
+# This is the fix for the review's measured ~40 % false-accept rate on fabricated
+# percentages. `build_candidates` emits every cell, every pairwise delta, every share and
+# every pct-delta, then mirrors the lot across zero — roughly 4 000 values for a 500-row
+# result, about a thousand of them inside [-100, 100]. A percentage claim could match any of
+# them, including a raw SEK cell read at a scale of 1e6: "Marknadsandelen var 2,89 %" matched
+# a revenue of 2 890 100. Requiring the literal's own unit to license the class it matches
+# removes that entire family at once, without touching the derivations themselves.
+#
+# `unknown` stays permissive in both directions. A bare "12,4" carries no evidence about what
+# it is, and this file's stated bias is that suppressing a true answer costs more than
+# admitting one that is right to within half its own last digit.
+_ALLOWED_CLASSES: dict[str, tuple[str, ...]] = {
+    "percent": ("percent", "unknown"),
+    "money": ("money", "unknown"),
+    "count": ("count", "unknown"),
+    "unknown": ("money", "percent", "count", "unknown"),
+}
 
 
 def _matches(candidates: Sequence[float], value: float, tolerance: float) -> bool:
     index = bisect.bisect_left(candidates, value - tolerance)
     return index < len(candidates) and candidates[index] <= value + tolerance
+
+
+def _matching_sign(buckets: dict[str, list[float]], allowed: tuple[str, ...],
+                   value: float, tolerance: float) -> int | None:
+    """Whether the value matches, and with which sign it was found.
+
+    Returns +1 or -1 for the sign of the candidate that matched, or None for no match. The
+    sign is what `_direction_disagrees` needs: candidates are mirrored across zero so the
+    *magnitude* check stays indifferent to how the prose phrases a change, and the direction
+    is then checked once, against the verb, where the information actually lives.
+    """
+    for bucket in allowed:
+        values = buckets.get(bucket)
+        if not values:
+            continue
+        # Both signs are tried explicitly, which is what keeps the magnitude check indifferent
+        # to phrasing now that the candidates are no longer stored mirrored. "ökade med 4,2 %"
+        # and a stored delta of -4.2 still match here; whether that phrasing is *honest* is
+        # the direction check's question, not this one's.
+        positive = _matches(values, abs(value), tolerance)
+        negative = _matches(values, -abs(value), tolerance)
+        if positive and negative:
+            return 0    # the data holds both; direction is unconstrained
+        if positive:
+            return 1
+        if negative:
+            return -1
+    return None
+
+
+# Swedish direction verbs, as they appear in the prose a sales model writes. Deliberately
+# short: this is a check on the *most consequential* claim in a sales answer, not a general
+# sentiment model, and every word here has to be unambiguous about direction on its own.
+_RISING = ("ökade", "ökat", "ökar", "ökning", "steg", "stigit", "stiger", "växte", "växt",
+           "växer", "tillväxt", "uppgång", "förbättrades", "förbättring", "starkare",
+           "högre", "upp")
+_FALLING = ("minskade", "minskat", "minskar", "minskning", "föll", "fallit", "faller",
+            "sjönk", "sjunkit", "sjunker", "tappade", "tappat", "tappar", "tapp",
+            "nedgång", "försämrades", "försämring", "svagare", "lägre", "ned", "ner")
+
+# How far back from a literal to look for the verb that gives it a direction. One clause,
+# roughly: "försäljningen ökade med 8,2 %" is 26 characters, and widening this far enough to
+# span a sentence boundary would start reading the direction of a *different* claim.
+_DIRECTION_WINDOW = 60
+
+
+def _stated_direction(text: str, position: int) -> int | None:
+    """+1 for a rise, -1 for a fall, None when the prose does not say.
+
+    Read from the words *before* the literal, because Swedish puts the verb first: "steg med
+    8,2 %", "tappade 4 procent". Looking forward as well would catch the verb belonging to the
+    next clause.
+    """
+    window = text[max(0, position - _DIRECTION_WINDOW):position].lower()
+    rising = max((window.rfind(word) for word in _RISING), default=-1)
+    falling = max((window.rfind(word) for word in _FALLING), default=-1)
+    if rising < 0 and falling < 0:
+        return None
+    # The nearest verb wins: "försäljningen ökade i mars men minskade med 8,2 % i april".
+    return 1 if rising > falling else -1
+
+
+# Swedish superlatives that name a winner. "störst" and "bäst" are the two a sales answer
+# actually reaches for; the rest are the forms a model varies into.
+_SUPERLATIVES = ("störst", "störste", "bäst", "bäste", "högst", "toppar", "topp",
+                 "mest sålda", "mest sålde", "ledande", "vinnare")
+
+# How far after a superlative to look for the entity it is claiming about. One clause:
+# "den bäst säljande produkten är Nordström TV N100 Pro" is about 50 characters.
+_SUPERLATIVE_WINDOW = 90
+
+
+def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[str]:
+    """Assert that a named winner really is the argmax of the full result.
+
+    The other half of the B3 gap. `validate_narrative` checks digits, so *"den bäst säljande
+    produkten är X"* was completely unverifiable — no number appears in it at all, and it is
+    among the most common things a supplier asks. The model sees 25 of up to 500 rows, so
+    before the preview carried server-computed extremes it was answering superlatives from a
+    sample and naming the wrong row while the chart drew the right one.
+
+    Deliberately conservative, because a false rejection here suppresses a correct answer:
+    it fires only when a superlative word is followed, within one clause, by a name that the
+    result actually contains in a label column. An unrecognised name, a superlative about
+    something that is not a row, or a result with no obvious primary measure all stay silent.
+    A guard that only speaks when it is sure is worth more than one that argues.
+    """
+    violations: list[str] = []
+    lowered = text.lower()
+
+    for result in results:
+        measures = result.numeric_columns()
+        labels = result.label_columns()
+        if not measures or not labels or len(result.rows) < 2:
+            continue
+
+        # The primary measure is the first numeric column that is not a derived comparison —
+        # the same choice propose_chart makes, so prose and chart are judged against one axis.
+        primary = next((key for key in measures
+                        if not key.endswith(("_compare", "_delta_pct"))), None)
+        if primary is None:
+            continue
+
+        winners = {str(row[label]).lower()
+                   for label in labels
+                   for row in [max(result.rows,
+                                   key=lambda r: r.get(primary)
+                                   if isinstance(r.get(primary), (int, float))
+                                   and not isinstance(r.get(primary), bool) else float("-inf"))]
+                   if row.get(label) is not None}
+        named = {str(row[label]).lower(): str(row[label])
+                 for label in labels for row in result.rows
+                 if row.get(label) is not None}
+
+        for word in _SUPERLATIVES:
+            start = 0
+            while (found := lowered.find(word, start)) != -1:
+                start = found + len(word)
+                window = lowered[found:found + _SUPERLATIVE_WINDOW]
+                # The entity the sentence is about: the longest known name in the window, so
+                # "Nordström TV N100 Pro" wins over a bare "Nordström".
+                claimed = max((name for name in named if name and name in window),
+                              key=len, default=None)
+                if claimed is None or claimed in winners:
+                    continue
+                violations.append(
+                    f"\"{named[claimed]}\" utpekas som störst/bäst, men det är inte den "
+                    f"högsta raden för {primary} i resultatet."
+                )
+    return violations
+
+
+def _direction_disagrees(text: str, literal: NumberLiteral, sign: int) -> bool:
+    """The B3 hole. `candidates` are mirrored across zero, so a delta of -8.2 licenses the
+    literal "8,2" — and the *verb* is what says which way it went. Nothing read the verb, so
+    "Försäljningen ÖKADE med 8,2 %" passed against data showing a fall of exactly that much.
+    That is the single most consequential claim in a sales answer, and it was unverifiable.
+
+    Only fires when the matched candidate exists at one sign only. When the data holds both
+    +x and -x there is nothing to contradict, and asserting otherwise would invent a
+    violation out of an ambiguity.
+    """
+    if sign == 0:
+        return False
+    stated = _stated_direction(text, literal.position)
+    return stated is not None and stated != sign
 
 
 # -------------------------------------------------------------------------- validation
@@ -364,17 +597,38 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
         # Try the literal as written, then — only when it carried no magnitude suffix — as
         # thousands and as millions. "12,4" in a sentence about millions is a rounding of
         # 12 412 331, not a hallucination, and the tolerance scales with the reading.
-        scales = (1.0, 1e3, 1e6) if literal.implicit_scale_allowed else (1.0,)
+        #
+        # A percentage never gets the implicit rescaling. That allowance exists so an
+        # unsuffixed money figure can be read as millions, and applying it to a `%` literal is
+        # what let "Marknadsandelen var 2,89 %" match a revenue of 2 890 100. A percentage is
+        # written at the scale it means.
+        scales = ((1.0, 1e3, 1e6)
+                  if literal.implicit_scale_allowed and literal.unit_class != "percent"
+                  else (1.0,))
+        allowed = _ALLOWED_CLASSES[literal.unit_class]
 
         # Results are tried in the order the turn produced them, so a figure that several
         # queries could account for is attributed to the first one that could — which is the
         # one the model was looking at when it wrote the sentence.
-        source = next(
-            (query_id for query_id, candidates in by_result
-             if any(_matches(candidates, literal.value * scale, literal.tolerance * scale)
-                    for scale in scales)),
-            None)
+        source, sign = None, 0
+        for query_id, buckets in by_result:
+            found = next(
+                (found for found in
+                 (_matching_sign(buckets, allowed, literal.value * scale,
+                                 literal.tolerance * scale) for scale in scales)
+                 if found is not None),
+                None)
+            if found is not None:
+                source, sign = query_id, found
+                break
+
         if source is not None:
+            if _direction_disagrees(text, literal, sign):
+                violations.append(
+                    f"\"{literal.raw}\" finns i resultatet, men åt andra hållet: texten "
+                    f"beskriver en förändring i motsatt riktning mot vad datan visar."
+                )
+                continue
             attributions.append(Attribution(literal=literal.raw, value=literal.value,
                                             query_id=source))
             continue
@@ -383,6 +637,11 @@ def validate_narrative(text: str, results: Iterable[CachedResult]) -> Validation
             f"\"{literal.raw}\" finns inte i resultatet och är inte en tillåten härledning "
             f"(summa, medel, förändring eller andel) av något värde i det."
         )
+
+    # Entity claims, which carry no digits at all and were therefore invisible to everything
+    # above. "Den bäst säljande produkten är X" is among the most common questions a supplier
+    # asks and was the one kind of answer nothing could check.
+    violations += check_superlatives(text, results)
 
     return ValidationResult(ok=not violations, violations=violations,
                             checked=len(literals), attributions=attributions)

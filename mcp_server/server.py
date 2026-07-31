@@ -95,7 +95,7 @@ async def resolve_entities(ctx: Context, text: str,
                            kinds: list[EntityKind] | None = None,
                            limit: int = 8) -> dict:
     tenant = tenant_from(ctx)
-    return await resolve_tool.resolve_entities(tenant, text, kinds, limit)
+    return await resolve_tool.resolve_entities(tenant, text, list(kinds) if kinds else None, limit)
 
 
 @mcp.tool(

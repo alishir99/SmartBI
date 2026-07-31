@@ -486,7 +486,7 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         # Forced by top_n_per: the partitions have to come out grouped.
         keys = order
     elif order_by:
-        key, direction = _order_key(order_by, [column["key"] for column in columns])
+        key, direction = _order_key(order_by, [str(column["key"]) for column in columns])
         keys = [f"{key} {direction} NULLS LAST"]
     elif dimensions:
         # Every grouped query gets a total order, and it has to be *total* rather than merely
@@ -526,8 +526,9 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
                          time_range=window, compare_range=compare_window)
 
 
-def _columns(dimensions: list[str], measures: list[str], compare: bool) -> list[dict]:
-    columns = []
+def _columns(dimensions: list[str], measures: list[str],
+             compare: bool) -> list[dict]:
+    columns: list[dict] = []
     for key in dimensions:
         dimension = DIMENSIONS[key]
         columns.append({"key": key, "type": dimension.type, "label": dimension.label})

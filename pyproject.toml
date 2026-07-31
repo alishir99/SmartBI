@@ -9,7 +9,11 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
-    "python-jose[cryptography]>=3.3",
+    # PyJWT, not python-jose: jose was declared and never imported, is unmaintained and
+    # carries CVE history, and pulled `cryptography` in behind it. PyJWT was already the
+    # library api/auth.py imports — it just happened to resolve transitively through `mcp`,
+    # which is a dependency an upgrade could silently drop.
+    "pyjwt>=2.9",
     "argon2-cffi>=23.1",
     # Upper bound is load-bearing, not caution: mcp 2.0 renamed mcp.server.fastmcp to
     # mcp.server.mcpserver, so an unpinned rebuild fails at import in mcp_server/server.py.
@@ -65,3 +69,20 @@ markers = [
     # a clean-clone command.
     "integration: requires a running, seeded Postgres (see README).",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+# Test modules use deliberately partial fakes — a FakeMcp implements the three methods the
+# loop actually calls, and typing it as the full client would mean importing a protocol that
+# exists only to satisfy the checker.
+exclude = "tests/"
+
+# The two SDK boundaries. `anthropic` and `mcp` express their request and response shapes as
+# large TypedDict unions; we build those payloads as plain dicts on purpose, because the
+# provider is swappable behind three settings (decision D1) and pinning our own call sites to
+# one vendor's generated types would undo that. Relaxed here, in one place with a reason,
+# rather than as `type: ignore` scattered down the call sites.
+[[tool.mypy.overrides]]
+module = ["api.agent.loop", "api.mcp_client"]
+disable_error_code = ["arg-type", "union-attr"]

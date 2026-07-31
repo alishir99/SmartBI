@@ -16,8 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from ..agent.render import presentable_columns, presentable_row
-from ..deps import TenantContext, get_cache, get_supplier_scope
-from ..models import ResultPage
+from ..deps import ScopedTenant, get_cache, get_supplier_scope
+from ..models import Column, ResultPage
 from ..result_cache import ResultCache
 
 router = APIRouter(prefix="/api", tags=["result"])
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/api", tags=["result"])
 MAX_PAGE = 5_000
 
 
-def _lookup(query_id: str, tenant: TenantContext, cache: ResultCache):
-    result = cache.get(query_id, int(tenant.supplier_id))
+def _lookup(query_id: str, tenant: ScopedTenant, cache: ResultCache):
+    result = cache.get(query_id, tenant.supplier_id)
     if result is None:
         # 404, not 403, and deliberately so: a 403 would confirm that this query_id exists and
         # belongs to someone else. An attacker probing ids learns nothing from a 404.
@@ -38,7 +38,7 @@ def _lookup(query_id: str, tenant: TenantContext, cache: ResultCache):
 async def get_result(query_id: str,
                      offset: int = Query(0, ge=0),
                      limit: int = Query(1000, ge=1, le=MAX_PAGE),
-                     tenant: TenantContext = Depends(get_supplier_scope),
+                     tenant: ScopedTenant = Depends(get_supplier_scope),
                      cache: ResultCache = Depends(get_cache)) -> ResultPage:
     result = _lookup(query_id, tenant, cache)
     page = result.rows[offset:offset + limit]
@@ -48,8 +48,8 @@ async def get_result(query_id: str,
     columns = presentable_columns(result)
     return ResultPage(
         query_id=result.query_id,
-        columns=[{"key": c["key"], "type": c.get("type", "text"),
-                  "label": c.get("label", c["key"]), "unit": c.get("unit")}
+        columns=[Column(key=c["key"], type=c.get("type", "text"),
+                        label=c.get("label", c["key"]), unit=c.get("unit"))
                  for c in columns],
         rows=[presentable_row(row) for row in page],
         row_count=result.row_count,
@@ -59,7 +59,7 @@ async def get_result(query_id: str,
 
 @router.get("/export/{query_id}.csv")
 async def export_csv(query_id: str,
-                     tenant: TenantContext = Depends(get_supplier_scope),
+                     tenant: ScopedTenant = Depends(get_supplier_scope),
                      cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     result = _lookup(query_id, tenant, cache)
     # An export is the most likely thing to be forwarded to someone who never saw the app,

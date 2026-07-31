@@ -16,7 +16,7 @@ from .. import db
 from ..agent import render
 from ..auth import create_share_token
 from ..config import settings
-from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
+from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
 from ..models import (
     ALLOWED_CARD_TOOLS,
@@ -49,16 +49,16 @@ REFRESH_CONCURRENCY = 4
 
 
 @router.get("/cards", response_model=list[AnswerCard])
-async def get_cards(tenant: TenantContext = Depends(get_supplier_scope),
+async def get_cards(tenant: ScopedTenant = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> list[AnswerCard]:
     """Re-run the most recent saved cards so the numbers are current, not as-of-save."""
-    rows = await db.list_cards(int(tenant.supplier_id), MAX_REFRESHED_CARDS)
+    rows = await db.list_cards(tenant.supplier_id, MAX_REFRESHED_CARDS)
     limit = asyncio.Semaphore(REFRESH_CONCURRENCY)
 
     async def refresh(row: dict) -> AnswerCard:
         async with limit:
-            return await _refresh_card(row, int(tenant.supplier_id), mcp, cache)
+            return await _refresh_card(row, tenant.supplier_id, mcp, cache)
 
     # `gather` preserves order, so the newest-first ordering from the query survives.
     return list(await asyncio.gather(*(refresh(row) for row in rows)))
@@ -107,9 +107,9 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
 
 @router.post("/cards", response_model=AnswerCard, status_code=status.HTTP_201_CREATED)
 async def save_card(body: SaveCardRequest,
-                    tenant: TenantContext = Depends(get_supplier_scope)) -> AnswerCard:
+                    tenant: ScopedTenant = Depends(get_supplier_scope)) -> AnswerCard:
     card_id = await db.insert_card(
-        user_id=tenant.user_id, supplier_id=int(tenant.supplier_id), title=body.title,
+        user_id=tenant.user_id, supplier_id=tenant.supplier_id, title=body.title,
         chart_spec=body.chart.model_dump(), tool_name=body.tool_name,
         tool_args=body.tool_args)
     return AnswerCard(card_id=str(card_id), status="ok", chart=body.chart)
@@ -117,15 +117,15 @@ async def save_card(body: SaveCardRequest,
 
 @router.delete("/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_card(card_id: int,
-                      tenant: TenantContext = Depends(get_supplier_scope)) -> Response:
-    if not await db.delete_card(card_id, int(tenant.supplier_id)):
+                      tenant: ScopedTenant = Depends(get_supplier_scope)) -> Response:
+    if not await db.delete_card(card_id, tenant.supplier_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Okänt card_id")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/share", response_model=ShareResponse)
 async def share(body: ShareRequest,
-                tenant: TenantContext = Depends(get_supplier_scope)) -> ShareResponse:
+                tenant: ScopedTenant = Depends(get_supplier_scope)) -> ShareResponse:
     """Signed, expiring, read-only link.
 
     Snapshot is the default. A live link re-executes the query later, and it has to do so
@@ -139,14 +139,17 @@ async def share(body: ShareRequest,
     What remains is the part worth reviewing — the scope-carrying token — and the missing
     piece is a page that verifies it and renders the card under the scope it names.
     """
-    card = await db.get_card(body.card_id, int(tenant.supplier_id))
+    # int(): card_id crosses the wire as a string but the column is a bigint, and
+    # asyncpg does not coerce. Nothing caught it because the share UI is hidden.
+    card = await db.get_card(int(body.card_id), tenant.supplier_id)
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Okänt card_id")
 
     token, expires_at = create_share_token(
-        card_id=str(body.card_id), supplier_id=int(tenant.supplier_id), mode=body.mode)
+        card_id=str(body.card_id), supplier_id=tenant.supplier_id, mode=body.mode)
+    # The contract is {url, expires_at}; `mode` was being passed and silently dropped,
+    # since the model does not declare it.
     return ShareResponse(
         url=f"{settings.public_web_url}/delad/{token}",
         expires_at=expires_at.isoformat(),
-        mode=body.mode,
     )

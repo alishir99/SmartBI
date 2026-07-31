@@ -41,7 +41,8 @@ jobs:
       - name: Lint
         run: |
           ruff check mcp_server api scripts eval
-          mypy mcp_server api --ignore-missing-imports
+          # Settings live in pyproject's [tool.mypy] so this and a local run agree.
+          mypy mcp_server api
 
       # Deselected rather than skipped: the Postgres service is up at this point but the
       # schema has not been applied yet, so the integration suite has nothing to talk to.

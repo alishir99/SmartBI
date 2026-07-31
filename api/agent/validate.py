@@ -244,7 +244,7 @@ def _numbers_in(rows: Sequence[dict], key: str) -> list[float]:
 
 
 def candidates_by_result(
-        results: Iterable[CachedResult]) -> list[tuple[str, list[float]]]:
+        results: Iterable[CachedResult]) -> list[tuple[str, dict[str, list[float]]]]:
     """Every value the model may legitimately have used, kept per result so an accepted
     literal can name the query that licensed it.
 
@@ -323,9 +323,11 @@ def candidates_by_result(
             compare_key = f"{key}_compare"
             if compare_key in numeric_keys:
                 for row in result.rows:
-                    current, previous = row.get(key), row.get(compare_key)
-                    if isinstance(current, (int, float)) and isinstance(previous, (int, float)):
-                        add(unit_of.get(key, "unknown"), float(current) - float(previous))
+                    now, before = row.get(key), row.get(compare_key)
+                    if (isinstance(now, (int, float)) and not isinstance(now, bool)
+                            and isinstance(before, (int, float))
+                            and not isinstance(before, bool)):
+                        add(unit_of.get(key, "unknown"), float(now) - float(before))
 
         # Candidates stay SIGNED. The magnitude check looks for the literal at either sign
         # (see `_matching_sign`), so prose may still say "ökade med 4,2 %" for a delta of
@@ -467,13 +469,15 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[str]:
         if primary is None:
             continue
 
-        winners = {str(row[label]).lower()
-                   for label in labels
-                   for row in [max(result.rows,
-                                   key=lambda r: r.get(primary)
-                                   if isinstance(r.get(primary), (int, float))
-                                   and not isinstance(r.get(primary), bool) else float("-inf"))]
-                   if row.get(label) is not None}
+        def measure_of(row: dict, key: str = primary) -> float:
+            value = row.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return float("-inf")
+            return float(value)
+
+        top = max(result.rows, key=measure_of)
+        winners = {str(top[label]).lower() for label in labels
+                   if top.get(label) is not None}
         named = {str(row[label]).lower(): str(row[label])
                  for label in labels for row in result.rows
                  if row.get(label) is not None}

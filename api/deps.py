@@ -9,6 +9,7 @@ mcp_client.py are the two you need to read.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -54,9 +55,16 @@ async def get_current_user(
     )
 
 
+class ScopedTenant(TenantContext):
+    """A `TenantContext` past the None check, so callers stop writing `int(...)` round a
+    value the dependency already guaranteed. Type-only: the instance is the same object."""
+
+    supplier_id: int
+
+
 async def get_supplier_scope(
     tenant: TenantContext = Depends(get_current_user),
-) -> TenantContext:
+) -> ScopedTenant:
     """For the data endpoints: refuse rather than guess when there is no supplier scope.
 
     `retail_analyst` and `system_admin` have `supplier_id IS NULL`. Cross-supplier access is
@@ -70,7 +78,7 @@ async def get_supplier_scope(
             "Kontot är inte kopplat till en leverantör. Leverantörsdata kräver ett "
             "leverantörskonto.",
         )
-    return tenant
+    return cast(ScopedTenant, tenant)
 
 
 def get_mcp(request: Request) -> McpClient:

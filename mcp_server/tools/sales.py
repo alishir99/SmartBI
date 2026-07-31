@@ -69,7 +69,7 @@ async def query_sales(tenant: TenantContext, spec: dict) -> dict:
             "dimensions": list(spec.get("dimensions") or []),
             # True when the caller's own limit cut the result, so the model can say "topp 10"
             # rather than implying it saw everything.
-            "truncated": bool(limit) and len(rows) >= int(limit),
+            "truncated": limit is not None and len(rows) >= int(limit),
             "executed_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     }

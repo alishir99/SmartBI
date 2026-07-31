@@ -72,7 +72,7 @@ async def record_turn(
     supplier_id: int | None,
     question: str,
     tool_calls: list[dict[str, Any]],
-    row_counts: dict[str, int],
+    row_counts: dict[str, Any],
     latency_ms: int,
     input_tokens: int | None,
     output_tokens: int | None,

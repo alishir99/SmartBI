@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from ..models import (
     AnswerCard,
+    CardStatus,
     ChartSpec,
     Claim,
     Column,
@@ -257,9 +258,14 @@ def build_sources(results: Sequence[CachedResult],
     for result in ([primary] if primary is not None else []) + list(results):
         if result is not None and all(seen.query_id != result.query_id for seen in ordered):
             ordered.append(result)
-    return [ToolCallRecord(query_id=result.query_id, tool=result.tool,
-                           provenance=build_provenance(result), row_count=result.row_count)
-            for result in ordered]
+    records = []
+    for result in ordered:
+        provenance = build_provenance(result)
+        if provenance is not None:
+            records.append(ToolCallRecord(
+                query_id=result.query_id, tool=result.tool,
+                provenance=provenance, row_count=result.row_count))
+    return records
 
 
 def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[str, Any],
@@ -288,7 +294,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
         if status == "ok":
             status = "cannot_answer"
         return AnswerCard(
-            status=status, narrative=narrative,
+            status=cast(CardStatus, status), narrative=narrative,
             insights=[str(i) for i in (envelope.get("insights") or [])],
             caveats=caveats,
             sources=build_sources(produced, None),
@@ -315,7 +321,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
                           "utelämnats. Diagrammet nedan kommer direkt från databasen.")
 
     return AnswerCard(
-        status=status,
+        status=cast(CardStatus, status),
         narrative="" if status == "validation_failed" else narrative,
         insights=([] if status == "validation_failed"
                   else [str(i) for i in (envelope.get("insights") or [])]),

@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from .. import db, ratelimit
 from ..agent.loop import run_turn
-from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
+from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
 from ..models import CardEvent, ChatRequest, ErrorEvent, ToolCallEvent, UsageEvent
 from ..result_cache import ResultCache
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 
 @router.post("/chat")
 async def chat(body: ChatRequest,
-               tenant: TenantContext = Depends(get_supplier_scope),
+               tenant: ScopedTenant = Depends(get_supplier_scope),
                mcp: McpClient = Depends(get_mcp),
                cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     # Both refusals happen before the response starts, so they are a plain 429 with a Swedish
@@ -39,7 +39,7 @@ async def chat(body: ChatRequest,
     # user, which is what stops a loop; the budget bounds *money* per tenant, which the turn
     # cap cannot, since one question can read 200 k tokens of context and the next one 3 k.
     ratelimit.enforce_chat_turn(tenant.user_id)
-    await ratelimit.enforce_tenant_budget(int(tenant.supplier_id))
+    await ratelimit.enforce_tenant_budget(tenant.supplier_id)
 
     return StreamingResponse(
         _stream(body, tenant, mcp, cache),
@@ -54,7 +54,7 @@ async def chat(body: ChatRequest,
     )
 
 
-async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
+async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                   cache: ResultCache) -> AsyncIterator[str]:
     started = time.monotonic()
     tool_calls: list[dict] = []
@@ -66,7 +66,7 @@ async def _stream(body: ChatRequest, tenant: TenantContext, mcp: McpClient,
         async for event in run_turn(
             question=body.question,
             history=[turn.model_dump() for turn in body.history],
-            supplier_id=int(tenant.supplier_id),
+            supplier_id=tenant.supplier_id,
             mcp=mcp,
             cache=cache,
         ):

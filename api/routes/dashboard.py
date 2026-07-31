@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..agent import render
-from ..deps import TenantContext, get_cache, get_mcp, get_supplier_scope
+from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
 from ..models import AnswerCard, DashboardResponse, Kpi
 from ..result_cache import ResultCache, from_tool_result
@@ -62,7 +62,7 @@ def _period_spec(period: str) -> tuple[dict, dict]:
 async def dashboard(period: str = Query(DEFAULT_PERIOD,
                                         description="Nyckel ur PERIODS; okänt värde faller "
                                                     "tillbaka på standardfönstret."),
-                    tenant: TenantContext = Depends(get_supplier_scope),
+                    tenant: ScopedTenant = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> DashboardResponse:
     supplier_id = tenant.supplier_id
@@ -107,14 +107,15 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"Kunde inte hämta dashboarddata: {exc}") from exc
 
+    payloads: dict[str, tuple[str, dict, dict]] = {
+        "trend": ("query_sales", {}, trend),
+        "top_products": ("query_sales", {}, top_products),
+        "by_region": ("query_sales", {}, by_region),
+    }
     cached = {
         name: cache.put(from_tool_result(supplier_id=supplier_id, tool=tool,
                                          tool_args=args, payload=payload))
-        for name, (tool, args, payload) in {
-            "trend": ("query_sales", {}, trend),
-            "top_products": ("query_sales", {}, top_products),
-            "by_region": ("query_sales", {}, by_region),
-        }.items()
+        for name, (tool, args, payload) in payloads.items()
     }
 
     return DashboardResponse(

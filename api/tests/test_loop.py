@@ -54,20 +54,28 @@ class Response:
 
 
 class FakeMessages:
-    def __init__(self, script: list[Response]):
+    def __init__(self, script: list[Response], *, repeat_last: bool = False):
         self.script = list(script)
         self.calls = 0
+        # `repeat_last` models the case the iteration cap exists for: a model that will keep
+        # asking for tools no matter what it is told. Without a cap the loop never leaves.
+        self.repeat_last = repeat_last
+        self.kwargs: list[dict] = []
 
     async def create(self, **kwargs):
         self.calls += 1
+        self.kwargs.append(kwargs)
+        if self.calls > 200:
+            raise AssertionError("runaway loop — the iteration cap did not hold")
         if not self.script:
             raise AssertionError("the loop asked the model for more turns than were scripted")
-        return self.script.pop(0)
+        return self.script[0] if self.repeat_last and len(self.script) == 1 \
+            else self.script.pop(0)
 
 
 class FakeClient:
-    def __init__(self, script):
-        self.messages = FakeMessages(script)
+    def __init__(self, script, *, repeat_last: bool = False):
+        self.messages = FakeMessages(script, repeat_last=repeat_last)
 
 
 class FakeMcp:
@@ -93,8 +101,8 @@ def envelope(status: str, query_id: str | None = None) -> str:
     return f'```json\n{{"status": "{status}"{ident}}}\n```'
 
 
-async def run(monkeypatch, script) -> object:
-    client = FakeClient(script)
+async def run(monkeypatch, script, *, repeat_last: bool = False) -> object:
+    client = FakeClient(script, repeat_last=repeat_last)
     monkeypatch.setattr(agent_loop.settings, "llm_api_key", "test-key")
     monkeypatch.setattr(agent_loop, "_client", lambda: client)
     mcp = FakeMcp()
@@ -153,6 +161,57 @@ async def test_the_retry_is_accepted_when_it_corrects_itself(monkeypatch):
 
     assert card.status == "clarify"
     assert "3 450 900,50" in card.narrative
+
+
+@pytest.mark.asyncio
+async def test_the_retry_still_declares_the_tools(monkeypatch):
+    """B7. By the time the retry fires, `messages` holds the tool_use blocks from the
+    planning phase, and a request carrying tool_use without a `tools` declaration is a 400 on
+    api.anthropic.com. The loop's broad `except` would turn that into a turn-level error —
+    losing a fully grounded chart because the *prose* failed validation, which is the exact
+    inverse of what the retry is for. So the retry has to declare tools like every other call.
+    """
+    lie = f"Mars gav 9 900 000 kr.\n{envelope('ok')}"
+    fixed = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
+    card, client = await run(monkeypatch, [query_turn(), Response(lie), Response(fixed)])
+
+    assert card.status == "ok"
+    retry = client.messages.kwargs[-1]
+    assert retry["tools"], "the regeneration request dropped the tool declarations"
+    # And the history it carries is exactly why that matters. Blocks arrive as SDK objects
+    # here and as dicts once the loop has appended its own, so read either shape.
+    def block_type(block):
+        return block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+
+    assert any(block_type(block) == "tool_use"
+               for message in retry["messages"]
+               if isinstance(message.get("content"), list)
+               for block in message["content"])
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_never_stops_asking_for_tools_is_cut_off(monkeypatch):
+    """B6. The tool budget bounds the *work*, not the conversation. Once `calls` reaches
+    MAX_TOOL_CALLS the budget branch reports the exhaustion and moves on without
+    incrementing anything, so a model that keeps emitting tool_use — entirely plausible
+    after eight "budget is spent" errors — drove `while True` forever at one full LLM round
+    trip per pass. MAX_ROUNDS is what actually ends the turn.
+    """
+    card, client = await run(monkeypatch, [query_turn()], repeat_last=True)
+
+    assert client.messages.calls == agent_loop.MAX_ROUNDS
+    # The turn still ends in a card rather than an error, and the rows it did fetch survive.
+    assert card is not None
+    assert card.chart is not None
+
+
+@pytest.mark.asyncio
+async def test_the_tool_budget_is_never_exceeded(monkeypatch):
+    """The other half: the round cap must not become a way to buy more tool calls."""
+    _, client = await run(monkeypatch, [query_turn()], repeat_last=True)
+    assert client.messages.calls == agent_loop.MAX_ROUNDS
+    assert agent_loop.MAX_TOOL_CALLS < agent_loop.MAX_ROUNDS, (
+        "a round cap at or below the tool budget would cut turns off before they spend it")
 
 
 @pytest.mark.asyncio

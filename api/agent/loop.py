@@ -46,6 +46,16 @@ logger = logging.getLogger(__name__)
 # needs (the deepest is capabilities → resolve → query).
 MAX_TOOL_CALLS = 8
 
+# Hard ceiling on trips round the loop, which is a different thing from the tool budget and
+# the reason the comment above was not true on its own. Once `calls` hits MAX_TOOL_CALLS the
+# budget branch reports the exhaustion to the model and moves on *without* incrementing
+# anything — so a model that keeps emitting tool_use (entirely plausible after eight
+# "budget is spent" errors) drove the loop forever, at one full LLM round trip per pass. The
+# tool budget bounds the work; this bounds the conversation. Comfortably above the deepest
+# legitimate turn, which is three passes, plus room for the model to recover from a spec
+# error or two.
+MAX_ROUNDS = 12
+
 # Tools whose results hold rows worth caching and charting.
 ROW_TOOLS = {"query_sales", "query_market_share"}
 
@@ -62,7 +72,8 @@ _FRIENDLY_STATUS = {
 
 def _client() -> AsyncAnthropic:
     """The only place the provider is named. Swapping to real Claude is these two settings."""
-    return AsyncAnthropic(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
+    return AsyncAnthropic(api_key=settings.llm_api_key, base_url=settings.llm_base_url,
+                          timeout=settings.llm_timeout_seconds)
 
 
 def _text_of(response: Any) -> str:
@@ -96,6 +107,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     # them, because a legitimate answer may quote a number from an earlier query in the turn.
     produced: list[CachedResult] = []
     calls = 0
+    rounds = 0
 
     try:
         async with mcp.session(supplier_id) as session:
@@ -103,6 +115,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             yield StatusEvent(message="Tänker…")
 
             while True:
+                rounds += 1
                 response = await client.messages.create(
                     model=settings.llm_model,
                     max_tokens=settings.llm_max_tokens,
@@ -113,6 +126,15 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
                 uses = _tool_uses(response)
                 if response.stop_reason != "tool_use" or not uses:
+                    break
+
+                if rounds >= MAX_ROUNDS:
+                    # Out of rounds mid-plan: keep whatever was produced and fall through to
+                    # validation and rendering rather than raising. The turn still ends in a
+                    # card, and if nothing was produced the model's own text stands — which
+                    # is the same shape as any other answer that reached no tool.
+                    logger.warning("agent loop hit MAX_ROUNDS=%d after %d tool call(s)",
+                                   MAX_ROUNDS, calls)
                     break
 
                 messages.append({"role": "assistant", "content": response.content})
@@ -190,10 +212,18 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     messages.append({"role": "assistant", "content": _text_of(response)})
                     messages.append({"role": "user",
                                      "content": regeneration_prompt(check.violations)})
+                    # `tools=tools` is load-bearing, not copy-paste. `messages` at this point
+                    # still holds the tool_use blocks from the planning phase, and a request
+                    # carrying tool_use without a `tools` declaration is a 400 on
+                    # api.anthropic.com. The broad `except` below would have turned that into
+                    # a turn-level error — so the user would lose a perfectly good, fully
+                    # grounded chart because the *prose* failed validation. That is the exact
+                    # inverse of what this retry exists to guarantee.
                     response = await client.messages.create(
                         model=settings.llm_model,
                         max_tokens=settings.llm_max_tokens,
                         system=SYSTEM,
+                        tools=tools,
                         messages=messages,
                     )
                     narrative, retry_envelope = render.split_answer(_text_of(response))

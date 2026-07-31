@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com/anthropic"
     llm_model: str = "deepseek-v4-pro"
     llm_max_tokens: int = 8000
+    # The SDK's own default is 10 minutes per request and it retries twice, so one question
+    # could hold a connection for over half an hour before anything gave up. A turn makes
+    # several of these calls in sequence, so the per-request budget has to be well under
+    # what a user will wait for the whole turn.
+    llm_timeout_seconds: float = 60.0
 
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

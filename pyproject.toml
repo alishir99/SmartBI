@@ -73,6 +73,12 @@ markers = [
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true
+# There are no __init__.py files: Python has not needed them since 3.3, and pytest does not
+# either while no two test modules share a basename. mypy is the one tool that does — api
+# and mcp_server each have a `config.py`, and without a package root it sees two modules
+# both called `config`. This tells it where the roots are instead.
+explicit_package_bases = true
+mypy_path = "."
 # Test modules use deliberately partial fakes — a FakeMcp implements the three methods the
 # loop actually calls, and typing it as the full client would mean importing a protocol that
 # exists only to satisfy the checker.

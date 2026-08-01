@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SaveCardRequest } from '../types'
-import { DEFAULT_PERIOD } from './periods'
+import { DEFAULT_BASIS, DEFAULT_PERIOD } from './periods'
 import {
   deleteCard,
   fetchCards,
@@ -14,16 +14,17 @@ import {
 
 export const queryKeys = {
   // The period is part of the key: two windows are two different results, and sharing one cache
-  // entry between them would show last year's figures under this week's label.
-  dashboard: (period: string) => ['dashboard', period] as const,
+  // entry between them would show last year's figures under this week's label. The comparison
+  // basis is part of it for the same reason — it changes every delta in the response.
+  dashboard: (period: string, basis: string) => ['dashboard', period, basis] as const,
   cards: ['cards'] as const,
   result: (queryId: string) => ['result', queryId] as const,
 }
 
-export function useDashboard(period: string = DEFAULT_PERIOD) {
+export function useDashboard(period: string = DEFAULT_PERIOD, basis: string = DEFAULT_BASIS) {
   return useQuery({
-    queryKey: queryKeys.dashboard(period),
-    queryFn: () => fetchDashboard(period),
+    queryKey: queryKeys.dashboard(period, basis),
+    queryFn: () => fetchDashboard(period, basis),
     staleTime: 5 * 60 * 1000,
     // Keeps the previous window on screen while the next one loads, so switching period does
     // not blank the page and bounce the layout.

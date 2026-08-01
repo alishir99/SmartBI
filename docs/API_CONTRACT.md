@@ -111,11 +111,16 @@ utelämnats. Diagrammet nedan kommer direkt från databasen."*
 ## Dashboard — deterministic, no LLM
 
 ```
-GET /api/dashboard  →  { kpis: Kpi[], cards: AnswerCard[] }
+GET /api/dashboard?period=…&basis=…  →  { kpis: Kpi[], cards: AnswerCard[] }
 ```
 
 Goes through the same MCP tools as the chat, server-side, with no model involved. Same
 numbers, same provenance, guaranteed.
+
+`period` is a key from `PERIODS`; `basis` is `same_period_last_year` (default),
+`previous_period` or `none`. The basis reaches the KPI deltas, the trend overlay and the
+share tile together, so no two numbers on the screen are measured against different windows.
+Unknown values for either fall back to the default rather than erroring.
 
 ```ts
 type Kpi = {
@@ -123,15 +128,15 @@ type Kpi = {
   label: string              // "Försäljning", "Andel av kategori", ...
   value: number
   unit: "SEK" | "st" | "%"
-  delta_pct: number | null   // vs same period last year; percentage *points* when unit is "%"
-  delta_label: string | null // "vs föregående år"
+  delta_pct: number | null   // on the requested basis; percentage *points* when unit is "%"
+  delta_label: string | null // "vs samma period förra året"; null when basis is "none"
   rank_label: string | null  // "#2 av 6 varumärken"
   spark: number[]            // the measure over the period's own grain, oldest first; [] if none
 }
 ```
 
-`delta_pct` is null for windows with no honest counterpart (`last_7_days`, `last_30_days`,
-`last_90_days`, `all_time`) — the tile then reads "Ingen jämförelseperiod".
+`delta_pct` is null when the basis is `none`, and when the comparison window returned nothing
+to compare against — the tile then reads "Ingen jämförelseperiod".
 
 Cards returned, in order: revenue trend by month (own vs category index), top 10 products,
 sales by region. Each is a full `AnswerCard` with `chart` and `query_id` set.

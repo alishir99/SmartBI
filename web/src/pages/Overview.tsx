@@ -1,8 +1,9 @@
 /** Översikt — the deterministic dashboard. */
 
+import type { ReactNode } from 'react'
 import { useDashboard } from '../lib/queries'
-import { usePeriod } from '../lib/usePeriod'
-import { PeriodFilter } from '../components/PeriodFilter'
+import { useCompareBasis, usePeriod } from '../lib/usePeriod'
+import { BasisFilter, PeriodFilter } from '../components/PeriodFilter'
 import { useChatStore } from '../lib/chat'
 import { AnswerCardView } from '../components/AnswerCard'
 import { KpiTile } from '../components/KpiTile'
@@ -10,9 +11,15 @@ import { PageHeader } from '../components/PageHeader'
 import { CardSkeleton, KpiSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
 
+/** Period and basis are one group: they describe the same window together. */
+function Filters({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>
+}
+
 export function OverviewPage() {
   const [period, setPeriod] = usePeriod()
-  const dashboard = useDashboard(period)
+  const [basis, setBasis] = useCompareBasis()
+  const dashboard = useDashboard(period, basis)
   const ask = useChatStore((state) => state.ask)
 
   if (dashboard.isPending) {
@@ -22,7 +29,10 @@ export function OverviewPage() {
           title="Översikt"
           description="Din försäljning hos handlaren."
         >
-          <PeriodFilter value={period} onChange={setPeriod} busy />
+          <Filters>
+            <PeriodFilter value={period} onChange={setPeriod} busy />
+            <BasisFilter value={basis} onChange={setBasis} busy />
+          </Filters>
         </PageHeader>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[0, 1, 2, 3].map((index) => (
@@ -51,7 +61,10 @@ export function OverviewPage() {
         description="Din försäljning hos handlaren."
         provenance={provenance}
       >
-        <PeriodFilter value={period} onChange={setPeriod} busy={dashboard.isFetching} />
+        <Filters>
+          <PeriodFilter value={period} onChange={setPeriod} busy={dashboard.isFetching} />
+          <BasisFilter value={basis} onChange={setBasis} busy={dashboard.isFetching} />
+        </Filters>
       </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

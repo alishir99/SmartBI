@@ -14,7 +14,7 @@ import type {
 import { apiUrl } from './env'
 import { getToken } from './auth'
 import { streamSse } from './sse'
-import { DEFAULT_PERIOD } from './periods'
+import { DEFAULT_BASIS, DEFAULT_PERIOD } from './periods'
 
 export class ApiError extends Error {
   constructor(
@@ -75,8 +75,12 @@ export async function fetchMe(): Promise<User> {
 
 // --- dashboard, results -----------------------------------------------------
 
-export async function fetchDashboard(period = DEFAULT_PERIOD): Promise<DashboardResponse> {
-  return request<DashboardResponse>(`/api/dashboard?period=${encodeURIComponent(period)}`)
+export async function fetchDashboard(
+  period = DEFAULT_PERIOD,
+  basis = DEFAULT_BASIS,
+): Promise<DashboardResponse> {
+  const query = new URLSearchParams({ period, basis })
+  return request<DashboardResponse>(`/api/dashboard?${query}`)
 }
 
 export async function fetchResult(queryId: string): Promise<ResultResponse> {

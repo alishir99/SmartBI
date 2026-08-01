@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from api.result_cache import CachedResult
-from api.routes.dashboard import _card, _kpis
+from api.routes.dashboard import BASES, DEFAULT_BASIS, PERIODS, _card, _kpis
 
 TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
                     "net_sales_sek_delta_pct": 12.5, "units_delta_pct": 3.0,
@@ -211,6 +211,36 @@ def test_the_share_tile_carries_no_sparkline():
     share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0)]}
 
     assert share_kpi(_kpis(TOTALS, share, TREND)).spark == []
+
+
+# --------------------------------------------------------------- the comparison basis
+
+def test_every_basis_but_none_is_a_compare_to_the_compiler_implements():
+    """A basis the compiler does not know would fail the whole dashboard, not one tile."""
+    assert set(BASES) - {"none"} == {"previous_period", "same_period_last_year"}
+
+
+def test_every_tile_names_the_basis_it_was_measured_on():
+    """One control, one meaning: no two deltas on screen may carry different labels."""
+    share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                               own=250.0, category=1000.0)]}
+
+    kpis = _kpis(TOTALS, share, TREND, BASES["previous_period"])
+
+    assert {k.delta_label for k in kpis} == {"vs föregående period"}
+
+
+def test_no_comparison_leaves_every_tile_without_a_label():
+    kpis = _kpis(TOTALS, NO_SHARE, TREND, BASES["none"])
+
+    assert all(k.delta_label is None for k in kpis)
+
+
+def test_the_default_basis_is_one_of_the_offered_bases():
+    assert DEFAULT_BASIS in BASES
+    # Every period is now offered every basis; the gate that dropped the comparison on some
+    # windows was there because the user had not chosen. Now they choose.
+    assert all("compare" not in settings for settings in PERIODS.values())
 
 
 # ------------------------------------------------------------------------- the tiles

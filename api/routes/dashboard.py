@@ -20,13 +20,25 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 DEFAULT_PERIOD = "last_12_months"
 
 PERIODS: dict[str, dict] = {
-    "last_7_days":     {"label": "Senaste veckan",     "grain": "day",     "compare": False},
-    "last_30_days":    {"label": "Senaste 30 dagarna", "grain": "day",     "compare": False},
-    "last_90_days":    {"label": "Senaste kvartalet",  "grain": "week",    "compare": False},
-    "last_month":      {"label": "Förra månaden",      "grain": "day",     "compare": True},
-    "ytd":             {"label": "Hittills i år",      "grain": "month",   "compare": True},
-    "last_12_months":  {"label": "Senaste 12 mån",     "grain": "month",   "compare": True},
-    "all_time":        {"label": "Hela perioden",      "grain": "quarter", "compare": False},
+    "last_7_days":     {"label": "Senaste veckan",     "grain": "day"},
+    "last_30_days":    {"label": "Senaste 30 dagarna", "grain": "day"},
+    "last_90_days":    {"label": "Senaste kvartalet",  "grain": "week"},
+    "last_month":      {"label": "Förra månaden",      "grain": "day"},
+    "ytd":             {"label": "Hittills i år",      "grain": "month"},
+    "last_12_months":  {"label": "Senaste 12 mån",     "grain": "month"},
+    "all_time":        {"label": "Hela perioden",      "grain": "quarter"},
+}
+
+# "Versus last period" and "versus last year" answer different questions — seasonality makes the
+# first misleading for a retailer in November and the second misleading after a range change.
+# The product used to assume the second silently, and dropped it entirely on the windows where
+# it made no sense. It is now a control the user sets, with one meaning across the whole screen.
+DEFAULT_BASIS = "same_period_last_year"
+
+BASES: dict[str, str | None] = {
+    "same_period_last_year": "vs samma period förra året",
+    "previous_period": "vs föregående period",
+    "none": None,
 }
 
 
@@ -40,6 +52,9 @@ def _period_spec(period: str) -> tuple[dict, dict]:
 async def dashboard(period: str = Query(DEFAULT_PERIOD,
                                         description="Nyckel ur PERIODS; okänt värde faller "
                                                     "tillbaka på standardfönstret."),
+                    basis: str = Query(DEFAULT_BASIS,
+                                       description="Jämförelsegrund: nyckel ur BASES. 'none' "
+                                                   "stänger av jämförelsen helt."),
                     tenant: ScopedTenant = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> DashboardResponse:
@@ -47,13 +62,14 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     assert supplier_id is not None  # get_supplier_scope guarantees this
 
     window, settings = _period_spec(period)
-    # `compare_to` is dropped for windows with no honest counterpart: "the same 90 days last
-    # year" is a comparison nobody asked for, and a delta chip against a window the user did not
-    # choose is worse than no chip at all.
+    basis = basis if basis in BASES else DEFAULT_BASIS
+    # One control, one meaning: the same basis reaches the KPI deltas, the trend overlay and the
+    # share tile, so no two numbers on screen can be measured against different windows.
+    compare: dict = {} if basis == "none" else {"compare_to": basis}
+    delta_label = BASES[basis]
+
     totals_args: dict = {"measures": ["net_sales_sek", "units", "avg_price_sek"],
-                         "time_range": window}
-    if settings["compare"]:
-        totals_args["compare_to"] = "same_period_last_year"
+                         "time_range": window, **compare}
 
     try:
         # One MCP session, four queries, run concurrently — the tiles are independent and the
@@ -66,9 +82,8 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                 "measures": ["net_sales_sek", "units", "avg_price_sek"],
                 "dimensions": [settings["grain"]],
                 "time_range": window,
-                # Same rule as the KPI row: a comparison only where the window has an honest
-                # counterpart. `propose_chart` overlays it on the trend line.
-                **({"compare_to": "same_period_last_year"} if settings["compare"] else {}),
+                # `propose_chart` overlays this on the trend line.
+                **compare,
             }),
             _call(mcp, supplier_id, "query_sales", {
                 "measures": ["net_sales_sek", "units"],
@@ -83,10 +98,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                 "time_range": window,
                 "order_by": {"measure": "net_sales_sek", "dir": "desc"},
             }),
-            _call(mcp, supplier_id, "query_market_share", {
-                "time_range": window,
-                **({"compare_to": "same_period_last_year"} if settings["compare"] else {}),
-            }),
+            _call(mcp, supplier_id, "query_market_share", {"time_range": window, **compare}),
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("dashboard failed")
@@ -105,7 +117,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     }
 
     return DashboardResponse(
-        kpis=_kpis(totals, share, trend),
+        kpis=_kpis(totals, share, trend, delta_label),
         cards=[
             _card(cached["trend"], "Försäljning per månad"),
             _card(cached["top_products"], "Topp 10 produkter"),
@@ -172,8 +184,9 @@ def _spark(trend: dict, key: str) -> list[float]:
     return values if len(values) >= 3 else []
 
 
-def _kpis(totals: dict, share: dict, trend: dict | None = None) -> list[Kpi]:
-    """The four headline numbers."""
+def _kpis(totals: dict, share: dict, trend: dict | None = None,
+          delta_label: str | None = BASES[DEFAULT_BASIS]) -> list[Kpi]:
+    """The four headline numbers. `delta_label` names the basis every delta is measured on."""
     trend = trend or {}
     kpis: list[Kpi] = []
 
@@ -181,7 +194,7 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None) -> list[Kpi]:
     if net is not None:
         kpis.append(Kpi(key="net_sales_sek", label="Försäljning", value=net, unit="SEK",
                         delta_pct=_first_number(totals, "net_sales_sek_delta_pct"),
-                        delta_label="vs samma period förra året",
+                        delta_label=delta_label,
                         spark=_spark(trend, "net_sales_sek")))
 
     rows = [r for r in (share.get("rows") or []) if not r.get("suppressed")]
@@ -196,7 +209,7 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None) -> list[Kpi]:
                 value=current, unit="%",
                 # Percentage points: the frontend renders a '%' KPI's delta as p.e.
                 delta_pct=None if previous is None else round(current - previous, 1),
-                delta_label="vs samma period förra året",
+                delta_label=delta_label,
                 # No sparkline: query_market_share aggregates over the whole window and has no
                 # month dimension, so there is no series to draw without a new tool shape.
                 rank_label=(f"#{best['rank']} av {best['n_brands']} varumärken "
@@ -206,14 +219,14 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None) -> list[Kpi]:
     if units is not None:
         kpis.append(Kpi(key="units", label="Sålda enheter", value=units, unit="st",
                         delta_pct=_first_number(totals, "units_delta_pct"),
-                        delta_label="vs samma period förra året",
+                        delta_label=delta_label,
                         spark=_spark(trend, "units")))
 
     avg_price = _first_number(totals, "avg_price_sek")
     if avg_price is not None:
         kpis.append(Kpi(key="avg_price_sek", label="Snittpris", value=avg_price, unit="SEK",
                         delta_pct=_first_number(totals, "avg_price_sek_delta_pct"),
-                        delta_label="vs samma period förra året",
+                        delta_label=delta_label,
                         spark=_spark(trend, "avg_price_sek")))
 
     return kpis

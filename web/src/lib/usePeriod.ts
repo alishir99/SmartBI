@@ -1,40 +1,62 @@
-/** The selected period, shared by every page that reads the dashboard. */
+/** The selected period and comparison basis, shared by every page that reads the dashboard. */
 
 import { useSyncExternalStore } from 'react'
-import { DEFAULT_PERIOD, PERIOD_OPTIONS } from './periods'
+import {
+  BASIS_OPTIONS,
+  DEFAULT_BASIS,
+  DEFAULT_PERIOD,
+  PERIOD_OPTIONS,
+  type PeriodOption,
+} from './periods'
 
-const STORAGE_KEY = 'solvigo.period'
+/** One persisted choice out of a fixed set, readable from any page. */
+function choiceStore(storageKey: string, options: PeriodOption[], fallback: string) {
+  const listeners = new Set<() => void>()
 
-function initial(): string {
+  let current = fallback
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored && PERIOD_OPTIONS.some((option) => option.key === stored)) return stored
+    const stored = localStorage.getItem(storageKey)
+    if (stored && options.some((option) => option.key === stored)) current = stored
   } catch {
     // Private mode or a blocked origin — the default is a fine answer.
   }
-  return DEFAULT_PERIOD
-}
 
-let current = initial()
-const listeners = new Set<() => void>()
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-export function setPeriod(period: string): void {
-  if (period === current) return
-  current = period
-  try {
-    localStorage.setItem(STORAGE_KEY, period)
-  } catch {
-    // Not being able to persist the choice must not stop it taking effect.
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
   }
-  listeners.forEach((listener) => listener())
+
+  const read = () => current
+
+  const set = (value: string): void => {
+    if (value === current) return
+    current = value
+    try {
+      localStorage.setItem(storageKey, value)
+    } catch {
+      // Not being able to persist the choice must not stop it taking effect.
+    }
+    listeners.forEach((listener) => listener())
+  }
+
+  return { subscribe, read, set, fallback }
 }
+
+const periodStore = choiceStore('solvigo.period', PERIOD_OPTIONS, DEFAULT_PERIOD)
+const basisStore = choiceStore('solvigo.basis', BASIS_OPTIONS, DEFAULT_BASIS)
+
+function useChoice(store: ReturnType<typeof choiceStore>): [string, (value: string) => void] {
+  const value = useSyncExternalStore(store.subscribe, store.read, () => store.fallback)
+  return [value, store.set]
+}
+
+export const setPeriod = periodStore.set
 
 export function usePeriod(): [string, (period: string) => void] {
-  const period = useSyncExternalStore(subscribe, () => current, () => DEFAULT_PERIOD)
-  return [period, setPeriod]
+  return useChoice(periodStore)
+}
+
+/** What every delta on the screen is measured against. */
+export function useCompareBasis(): [string, (basis: string) => void] {
+  return useChoice(basisStore)
 }

@@ -17,3 +17,15 @@ export const PERIOD_OPTIONS: PeriodOption[] = [
 export function periodLabel(key: string): string {
   return PERIOD_OPTIONS.find((option) => option.key === key)?.label ?? key
 }
+
+/**
+ * What every delta on the screen is measured against. "Versus last period" and "versus last
+ * year" answer different questions, and the product used to assume the second silently.
+ */
+export const DEFAULT_BASIS = 'same_period_last_year'
+
+export const BASIS_OPTIONS: PeriodOption[] = [
+  { key: 'same_period_last_year', label: 'vs förra året', short: 'Förra året' },
+  { key: 'previous_period', label: 'vs föregående period', short: 'Föregående' },
+  { key: 'none', label: 'Ingen jämförelse', short: 'Ingen' },
+]

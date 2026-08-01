@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react'
 import type { AnswerCard } from '../types'
 import { useDashboard } from '../lib/queries'
-import { usePeriod } from '../lib/usePeriod'
+import { useCompareBasis, usePeriod } from '../lib/usePeriod'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { useChatStore } from '../lib/chat'
 import { AnswerCardView } from '../components/AnswerCard'
@@ -29,7 +29,10 @@ type Props = {
 
 export function FocusedCardPage({ title, description, dimension, followUps, render }: Props) {
   const [period, setPeriod] = usePeriod()
-  const dashboard = useDashboard(period)
+  // No basis control here — these cards carry no deltas — but the same basis, so this page and
+  // Översikt share one cache entry instead of each fetching the dashboard separately.
+  const [basis] = useCompareBasis()
+  const dashboard = useDashboard(period, basis)
   const ask = useChatStore((state) => state.ask)
 
   if (dashboard.isPending) {

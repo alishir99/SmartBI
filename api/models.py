@@ -143,6 +143,11 @@ class DashboardResponse(BaseModel):
     cards: list[AnswerCard]
 
 
+class MoversResponse(BaseModel):
+    """Biggest risers and biggest fallers, in that order."""
+    cards: list[AnswerCard]
+
+
 # ------------------------------------------------------------------------------ chat
 
 class ChatTurn(BaseModel):

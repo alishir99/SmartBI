@@ -6,6 +6,7 @@ import type {
   ChatHistoryEntry,
   DashboardResponse,
   LoginResponse,
+  MoversResponse,
   ResultResponse,
   SaveCardRequest,
   ShareResponse,
@@ -81,6 +82,14 @@ export async function fetchDashboard(
 ): Promise<DashboardResponse> {
   const query = new URLSearchParams({ period, basis })
   return request<DashboardResponse>(`/api/dashboard?${query}`)
+}
+
+export async function fetchMovers(
+  period = DEFAULT_PERIOD,
+  basis = DEFAULT_BASIS,
+): Promise<MoversResponse> {
+  const query = new URLSearchParams({ period, basis })
+  return request<MoversResponse>(`/api/movers?${query}`)
 }
 
 export async function fetchResult(queryId: string): Promise<ResultResponse> {

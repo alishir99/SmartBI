@@ -7,6 +7,7 @@ import {
   deleteCard,
   fetchCards,
   fetchDashboard,
+  fetchMovers,
   fetchResult,
   saveCard,
   shareCard,
@@ -17,6 +18,7 @@ export const queryKeys = {
   // entry between them would show last year's figures under this week's label. The comparison
   // basis is part of it for the same reason — it changes every delta in the response.
   dashboard: (period: string, basis: string) => ['dashboard', period, basis] as const,
+  movers: (period: string, basis: string) => ['movers', period, basis] as const,
   cards: ['cards'] as const,
   result: (queryId: string) => ['result', queryId] as const,
 }
@@ -28,6 +30,15 @@ export function useDashboard(period: string = DEFAULT_PERIOD, basis: string = DE
     staleTime: 5 * 60 * 1000,
     // Keeps the previous window on screen while the next one loads, so switching period does
     // not blank the page and bounce the layout.
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useMovers(period: string = DEFAULT_PERIOD, basis: string = DEFAULT_BASIS) {
+  return useQuery({
+    queryKey: queryKeys.movers(period, basis),
+    queryFn: () => fetchMovers(period, basis),
+    staleTime: 5 * 60 * 1000,
     placeholderData: (previous) => previous,
   })
 }

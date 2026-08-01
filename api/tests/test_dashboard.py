@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-from api.result_cache import CachedResult
-from api.routes.dashboard import BASES, DEFAULT_BASIS, PERIODS, _card, _kpis
+from api.result_cache import CachedResult, ResultCache
+from api.routes.dashboard import (
+    BASES,
+    DEFAULT_BASIS,
+    MOVERS_LIMIT,
+    PERIODS,
+    _card,
+    _kpis,
+    _movers_card,
+)
 
 TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
                     "net_sales_sek_delta_pct": 12.5, "units_delta_pct": 3.0,
@@ -241,6 +249,63 @@ def test_the_default_basis_is_one_of_the_offered_bases():
     # Every period is now offered every basis; the gate that dropped the comparison on some
     # windows was there because the user had not chosen. Now they choose.
     assert all("compare" not in settings for settings in PERIODS.values())
+
+
+# ------------------------------------------------------------------------ the movers page
+
+MOVERS_PAYLOAD = {
+    "rows": [{"product": "Nordström TV N100", "net_sales_sek": 300.0,
+              "net_sales_sek_compare": 100.0, "net_sales_sek_delta_pct": 200.0},
+             {"product": "Nordström Soundbar S5", "net_sales_sek": 110.0,
+              "net_sales_sek_compare": 100.0, "net_sales_sek_delta_pct": 10.0}],
+    "row_count": 2,
+    "columns": [{"key": "product", "type": "text", "label": "Produkt"},
+                {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"},
+                {"key": "net_sales_sek_compare", "type": "number",
+                 "label": "Netto (jämförelse)", "unit": "SEK"},
+                {"key": "net_sales_sek_delta_pct", "type": "number",
+                 "label": "Netto (förändring)", "unit": "%"}],
+    "meta": {"tool": "query_sales", "source": "mv_sales_daily (rollup)",
+             "scope": "supplier:abcd",
+             "time_range": {"from": "2025-07-01", "to": "2026-06-30"},
+             "compare_range": {"from": "2024-07-01", "to": "2025-06-30"},
+             "coverage": {"from": "2024-07-01", "to": "2026-06-30"},
+             "executed_at": "2026-08-01T10:00:00Z"},
+}
+
+
+def movers_card(direction: str = "desc"):
+    return _movers_card(ResultCache(), 1, MOVERS_PAYLOAD, "Största uppgångar", direction)
+
+
+def test_the_percentage_is_the_axis_on_this_card_and_only_this_card():
+    """Everywhere else _delta_pct is kept off the value axis; here it is the only measure."""
+    card = movers_card()
+
+    assert card.chart is not None
+    assert card.chart.y == ["net_sales_sek_delta_pct"]
+    assert card.chart.x == "product"
+    assert card.chart.limit == MOVERS_LIMIT
+
+
+def test_the_direction_reaches_the_chart_so_fallers_lead_with_the_worst():
+    assert movers_card("asc").chart.sort == "asc"
+    assert movers_card("desc").chart.sort == "desc"
+
+
+def test_the_card_says_the_percentage_can_come_from_a_small_base():
+    """No invented threshold — what counts as too small is the reader's call, so say so."""
+    caveats = " ".join(movers_card().caveats)
+
+    assert "procent" in caveats
+    assert "Tabell" in caveats, "and point at where the kronor are"
+
+
+def test_the_kronor_are_still_readable_behind_the_percentage():
+    keys = [c.key for c in movers_card().columns]
+
+    assert "net_sales_sek" in keys
+    assert "net_sales_sek_compare" in keys
 
 
 # ------------------------------------------------------------------------- the tiles

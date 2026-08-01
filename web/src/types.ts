@@ -111,6 +111,11 @@ export type DashboardResponse = {
   cards: AnswerCard[]
 }
 
+/** Biggest risers and biggest fallers, in that order. */
+export type MoversResponse = {
+  cards: AnswerCard[]
+}
+
 export type ResultRow = Record<string, string | number | null>
 
 export type ResultResponse = {

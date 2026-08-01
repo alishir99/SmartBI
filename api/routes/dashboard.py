@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..agent import render
 from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
-from ..models import AnswerCard, DashboardResponse, Kpi
+from ..models import AnswerCard, ChartSpec, DashboardResponse, Kpi, MoversResponse
 from ..result_cache import ResultCache, from_tool_result
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,81 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
             _card(cached["top_products"], "Topp 10 produkter"),
             _card(cached["by_region"], "Försäljning per län"),
         ],
+    )
+
+
+MOVERS_LIMIT = 10
+
+# A large percentage from a small base is still a large percentage. The honest answer is to say
+# so rather than to invent a threshold: what counts as "too small to matter" is the reader's
+# call, and the kronor are one click away in the table view.
+_MOVERS_CAVEAT = ("Förändringen är i procent. En stor procentuell rörelse kan komma från en "
+                  "liten utgångsnivå — välj Tabell för att se kronorna bakom.")
+
+
+@router.get("/movers", response_model=MoversResponse)
+async def movers(period: str = Query(DEFAULT_PERIOD),
+                 basis: str = Query(DEFAULT_BASIS),
+                 tenant: ScopedTenant = Depends(get_supplier_scope),
+                 mcp: McpClient = Depends(get_mcp),
+                 cache: ResultCache = Depends(get_cache)) -> MoversResponse:
+    """Biggest risers and biggest fallers — the question a supplier opens a product page to ask.
+
+    Answerable only since the compiler learned to sort on the derived `_delta_pct` column; "vilka
+    produkter tappar mest" could not be expressed before that.
+    """
+    supplier_id = tenant.supplier_id
+    assert supplier_id is not None
+
+    window, _ = _period_spec(period)
+    if basis not in BASES or basis == "none":
+        # Movers are a comparison by definition; there is no such thing without a basis.
+        basis = DEFAULT_BASIS
+
+    def args(direction: str) -> dict:
+        return {
+            "measures": ["net_sales_sek"],
+            "dimensions": ["product"],
+            "time_range": window,
+            "compare_to": basis,
+            "order_by": {"field": "net_sales_sek_delta_pct", "dir": direction},
+            "limit": MOVERS_LIMIT,
+        }
+
+    try:
+        risers, fallers = await asyncio.gather(
+            _call(mcp, supplier_id, "query_sales", args("desc")),
+            _call(mcp, supplier_id, "query_sales", args("asc")),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("movers failed")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"Kunde inte hämta produktrörelser: {exc}") from exc
+
+    return MoversResponse(cards=[
+        _movers_card(cache, supplier_id, risers, "Största uppgångar", "desc"),
+        _movers_card(cache, supplier_id, fallers, "Största tapp", "asc"),
+    ])
+
+
+def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str,
+                 direction: str) -> AnswerCard:
+    """The one card `propose_chart` cannot pick: the percentage *is* the axis here.
+
+    Everywhere else `_delta_pct` is kept off the value axis, because a percentage next to kronor
+    is unreadable. On this card it is the only measure, so it has the axis to itself.
+    """
+    result = cache.put(from_tool_result(supplier_id=supplier_id, tool="query_sales",
+                                        tool_args={}, payload=payload))
+    return AnswerCard(
+        status="ok",
+        chart=ChartSpec(type="bar", x="product", y=["net_sales_sek_delta_pct"],
+                        sort=cast(Literal["asc", "desc"], direction),
+                        limit=MOVERS_LIMIT, title=title),
+        caveats=[_MOVERS_CAVEAT],
+        query_id=result.query_id,
+        columns=render.to_columns(result),
+        provenance=render.build_provenance(result),
     )
 
 

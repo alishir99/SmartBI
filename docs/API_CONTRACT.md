@@ -141,6 +141,15 @@ to compare against — the tile then reads "Ingen jämförelseperiod".
 Cards returned, in order: revenue trend by month (own vs category index), top 10 products,
 sales by region. Each is a full `AnswerCard` with `chart` and `query_id` set.
 
+```
+GET /api/movers?period=…&basis=…  →  { cards: AnswerCard[] }
+```
+
+Biggest risers then biggest fallers, ten each, sorted on the derived `net_sales_sek_delta_pct`
+column. This is the one place that column is on the value axis — everywhere else a percentage
+next to kronor is the bug the filter exists for. `basis=none` falls back to the default: a
+mover is a comparison by definition.
+
 ---
 
 ## Chat — SSE

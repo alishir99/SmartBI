@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import pytest
 
 from api.agent import loop as agent_loop
-from api.models import CardEvent, UsageEvent
+from api.models import CardEvent, StatusEvent, ToolResultEvent, UsageEvent
 from api.result_cache import ResultCache
 
 MARS = 3_450_900.50
@@ -310,3 +310,22 @@ async def test_no_tool_data_means_nothing_to_validate_against(monkeypatch):
     assert card.status == "clarify"
     assert client.messages.calls == 1
     assert card.narrative
+
+
+# ------------------------------------------------------------------ the visible status
+
+@pytest.mark.asyncio
+async def test_the_status_stops_claiming_to_fetch_once_the_tools_are_done(monkeypatch):
+    """'Hämtar försäljningssiffror…' sat on screen for ~25 s after the rows had landed."""
+    client = FakeClient([query_turn(), Response(f"Mars: {MARS:,.2f} kr.\n{envelope('ok')}")])
+    monkeypatch.setattr(agent_loop.settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(agent_loop, "_client", lambda: client)
+
+    events = [e async for e in
+              agent_loop.run_turn(question="Hur gick mars?", history=[], supplier_id=1,
+                                  mcp=FakeMcp(), cache=ResultCache())]
+
+    last_result = max(i for i, e in enumerate(events) if isinstance(e, ToolResultEvent))
+    after = [e.message for e in events[last_result:] if isinstance(e, StatusEvent)]
+    assert after, "the turn goes quiet after the last tool result"
+    assert not any("Hämtar" in message for message in after)

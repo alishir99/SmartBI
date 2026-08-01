@@ -209,6 +209,10 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         row_count=int(payload.get("row_count", 0) or 0))
 
                 messages.append({"role": "user", "content": tool_results})
+                # The fetch is over. Whatever comes next — another tool or the answer — the
+                # panel must stop claiming to be fetching, because composing is where most of
+                # a 40-second turn actually goes.
+                yield StatusEvent(message="Sammanställer svaret…")
 
             # ---------------------------------------------------------------- validate
             narrative, envelope = render.split_answer(_text_of(response))

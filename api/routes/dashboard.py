@@ -64,6 +64,9 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                 "measures": ["net_sales_sek"],
                 "dimensions": [settings["grain"]],
                 "time_range": window,
+                # Same rule as the KPI row: a comparison only where the window has an honest
+                # counterpart. `propose_chart` overlays it on the trend line.
+                **({"compare_to": "same_period_last_year"} if settings["compare"] else {}),
             }),
             _call(mcp, supplier_id, "query_sales", {
                 "measures": ["net_sales_sek", "units"],

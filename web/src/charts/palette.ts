@@ -39,6 +39,8 @@ export const MARK = {
   lineWidth: 2,
   dotRadius: 4,
   areaOpacity: 0.1,
+  /** The comparison period's stroke — read as "context" without needing a legend. */
+  compareDash: '5 4',
   /** 2px of surface between touching marks — white does the separating. */
   surfaceGap: 2,
 } as const

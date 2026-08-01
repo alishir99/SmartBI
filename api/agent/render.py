@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from collections.abc import Sequence
+from datetime import date
 from typing import Any, cast
 
 from ..models import (
@@ -75,8 +76,12 @@ def presentable_row(row: dict) -> dict:
 
 
 def _plottable(column: dict) -> bool:
-    # `_compare` covers the comparison period's own date column as well as its measures.
-    return _presentable(column) and not column.get("key", "").endswith("_compare")
+    # The comparison *date* column is not a dimension: reading it as one splits a 12-month line
+    # into twelve one-point series. The comparison *measure* is real data in the same unit as
+    # the current period, and putting it on the same axis is the point of `compare_to`.
+    key = column.get("key", "")
+    return _presentable(column) and not (
+        key.endswith("_compare") and column.get("type") != "number")
 
 
 def _dimensions(result: CachedResult) -> list[dict]:
@@ -108,9 +113,10 @@ def propose_chart(result: CachedResult, title: str | None = None,
                   subtitle: str | None = None) -> ChartSpec:
     """Pick a chart from the result's shape alone."""
     dimensions = _dimensions(result)
-    # Comparison columns are derived, not independent series — charting net_sales_sek and
-    # net_sales_sek_delta_pct on one axis would put a percentage next to kronor.
-    measures = [m for m in _measures(result)
+    plottable = _measures(result)
+    # The current period leads. `_delta_pct` never joins it — a percentage on a kronor axis is
+    # the bug the filter was written for — and `_compare` only joins it on a time axis, below.
+    measures = [m for m in plottable
                 if not m["key"].endswith(("_compare", "_delta_pct"))]
 
     title = title or _FALLBACK_TITLE
@@ -127,10 +133,16 @@ def propose_chart(result: CachedResult, title: str | None = None,
                          y=[m["key"] for m in measures], title=title, subtitle=subtitle)
 
     if first["type"] == "date":
-        # A time series with a second dimension becomes one line per series value.
-        return ChartSpec(type="line", x=first["key"], y=[measures[0]["key"]],
-                         series=rest[0]["key"] if rest else None,
-                         title=title, subtitle=subtitle)
+        # A time series with a second dimension becomes one line per series value. Overlaying
+        # the comparison there would double an already-crowded chart, so it stays single.
+        if rest:
+            return ChartSpec(type="line", x=first["key"], y=[measures[0]["key"]],
+                             series=rest[0]["key"], title=title, subtitle=subtitle)
+        compare = f"{measures[0]['key']}_compare"
+        y = [measures[0]["key"]]
+        if any(m["key"] == compare for m in plottable):
+            y.append(compare)
+        return ChartSpec(type="line", x=first["key"], y=y, title=title, subtitle=subtitle)
 
     if rest and len(result.rows) > 1:
         # Categorical split by categorical is part-of-whole.
@@ -176,11 +188,39 @@ def validate_chart(spec: ChartSpec, result: CachedResult) -> tuple[ChartSpec, li
     return spec, []
 
 
+_MONTH_SHORT = ("jan", "feb", "mar", "apr", "maj", "jun",
+                "jul", "aug", "sep", "okt", "nov", "dec")
+
+
+def _period_label(window: TimeWindow | None) -> str | None:
+    """`jul 2024–jun 2025`. What the comparison series is, rather than what the column is called."""
+    if window is None:
+        return None
+    try:
+        start, end = date.fromisoformat(window.from_), date.fromisoformat(window.to)
+    except ValueError:
+        return None
+    tail = f"{_MONTH_SHORT[end.month - 1]} {end.year}"
+    if (start.year, start.month) == (end.year, end.month):
+        return tail
+    return f"{_MONTH_SHORT[start.month - 1]} {start.year}–{tail}"
+
+
 def to_columns(result: CachedResult) -> list[Column]:
     """What the card's table view renders — the answer's columns, not the tool's."""
+    # "(jämförelse)" says a comparison exists; the legend has to say which one. Only the
+    # measure gets renamed — the comparison's date column already reads as a date.
+    period = _period_label(_window((result.meta or {}).get("compare_range")))
     return [Column(key=c["key"], type=c.get("type", "text"),
-                   label=c.get("label", c["key"]), unit=c.get("unit"))
+                   label=_label(c, period), unit=c.get("unit"))
             for c in presentable_columns(result)]
+
+
+def _label(column: dict, period: str | None) -> str:
+    label = column.get("label", column["key"])
+    if period and column.get("type") == "number" and column["key"].endswith("_compare"):
+        return label.replace("(jämförelse)", f"({period})")
+    return label
 
 
 def _window(raw: Any) -> TimeWindow | None:

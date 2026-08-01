@@ -167,6 +167,44 @@ describe('pivot', () => {
   })
 })
 
+describe('comparison overlay', () => {
+  const COMPARE: Column = {
+    key: 'net_sales_sek_compare',
+    type: 'number',
+    label: 'Nettoförsäljning (jul 2024–jun 2025)',
+    unit: 'SEK',
+  }
+  const trend = () =>
+    prepareChart(
+      spec({ type: 'line', x: 'month', y: ['net_sales_sek', 'net_sales_sek_compare'] }),
+      [MONTH, NET, COMPARE],
+      [
+        { month: '2026-01', net_sales_sek: 100, net_sales_sek_compare: 80 },
+        { month: '2026-02', net_sales_sek: 200, net_sales_sek_compare: 250 },
+      ],
+    )
+
+  it('draws the comparison muted so it reads as context, not as a second brand', () => {
+    const [current, compare] = trend().series
+    expect(current.color).toBe('var(--series-1)')
+    expect(current.muted).toBe(false)
+    expect(compare.color).toBe('var(--series-muted)')
+    expect(compare.muted).toBe(true)
+  })
+
+  it('does not let the comparison consume a categorical hue', () => {
+    // Without this the next real series would start at --series-3.
+    expect(trend().series.map((descriptor) => descriptor.color)).toEqual([
+      'var(--series-1)',
+      'var(--series-muted)',
+    ])
+  })
+
+  it('scales both series against one axis', () => {
+    expect(trend().scale?.unit).toBe('kr')
+  })
+})
+
 describe('axis scale', () => {
   it('picks one money scale for the whole chart from its largest value', () => {
     const prepared = prepareChart(

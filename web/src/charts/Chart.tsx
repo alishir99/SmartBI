@@ -155,7 +155,9 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
     return (
       <LineChart data={rows} margin={MARGIN}>
         {axes}
-        {series.map((descriptor) => (
+        {/* Recharts paints in child order, so the muted comparison is drawn first and the
+            current period stays on top wherever the two cross. */}
+        {[...series].sort((a, b) => Number(b.muted) - Number(a.muted)).map((descriptor) => (
           <Line
             key={descriptor.key}
             type="monotone"
@@ -163,8 +165,9 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
             name={descriptor.label}
             stroke={descriptor.color}
             strokeWidth={MARK.lineWidth}
+            strokeDasharray={descriptor.muted ? MARK.compareDash : undefined}
             // `fill` is explicit on both dots.
-            dot={rows.length <= 12
+            dot={rows.length <= 12 && !descriptor.muted
               ? { r: MARK.dotRadius, strokeWidth: 0, fill: descriptor.color }
               : false}
             activeDot={{ r: MARK.dotRadius + 1, strokeWidth: 2,

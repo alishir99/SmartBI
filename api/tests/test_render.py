@@ -89,14 +89,49 @@ def test_many_dimensions_fall_back_to_a_table():
     assert propose_chart(make(columns, [{}])).type == "table"
 
 
-def test_comparison_columns_are_not_charted_as_series():
-    """net_sales_sek and its _delta_pct must not share an axis — kronor next to percent."""
+def test_the_delta_percentage_never_shares_an_axis_with_kronor():
     columns = [MONTH, MEASURE,
                {"key": "net_sales_sek_compare", "type": "number", "label": "Jmf", "unit": "SEK"},
                {"key": "net_sales_sek_delta_pct", "type": "number", "label": "Förändring",
                 "unit": "%"}]
     spec = propose_chart(make(columns, [{"month": "2026-01-01", "net_sales_sek": 1.0}]))
+    assert spec.y == ["net_sales_sek", "net_sales_sek_compare"]
+
+
+def test_the_comparison_period_is_overlaid_on_the_trend():
+    """What the whole `compare_to` feature exists to show."""
+    columns = [MONTH, {"key": "month_compare", "type": "date", "label": "Månad (jämförelse)"},
+               MEASURE,
+               {"key": "net_sales_sek_compare", "type": "number", "label": "Jmf", "unit": "SEK"}]
+    spec = propose_chart(make(columns, [
+        {"month": "2026-01-01", "month_compare": "2025-01-01", "net_sales_sek": 1.0},
+        {"month": "2026-02-01", "month_compare": "2025-02-01", "net_sales_sek": 2.0}]))
+    assert spec.type == "line"
+    assert spec.y == ["net_sales_sek", "net_sales_sek_compare"]
+    # The comparison's own date column is still not a dimension: as a series it would break the
+    # single line into one point per month.
+    assert spec.series is None
+
+
+def test_a_comparison_is_not_overlaid_on_an_already_split_time_series():
+    columns = [MONTH, REGION, MEASURE,
+               {"key": "net_sales_sek_compare", "type": "number", "label": "Jmf", "unit": "SEK"}]
+    spec = propose_chart(make(columns, [
+        {"month": "2026-01-01", "region": "Stockholms län", "net_sales_sek": 1.0},
+        {"month": "2026-02-01", "region": "Skåne län", "net_sales_sek": 2.0}]))
+    assert spec.series == "region"
     assert spec.y == ["net_sales_sek"]
+
+
+def test_the_model_may_now_name_the_comparison_measure_on_the_axis():
+    """§2b: this rejection is what put validator vocabulary on a retailer's card."""
+    columns = [MONTH, MEASURE,
+               {"key": "net_sales_sek_compare", "type": "number", "label": "Jmf", "unit": "SEK"}]
+    result = make(columns, [{"month": "2026-01-01", "net_sales_sek": 1.0}])
+    override = ChartSpec(type="line", x="month",
+                         y=["net_sales_sek", "net_sales_sek_compare"], title="Jämförelse")
+    _, problems = validate_chart(override, result)
+    assert not problems
 
 
 # ------------------------------------------------------------------- override policy
@@ -252,16 +287,34 @@ def test_identifier_columns_are_dropped_whatever_they_hold():
     assert not any(c["key"].endswith("_id") for c in columns)
 
 
-def test_comparison_columns_are_kept_for_reading_even_though_they_are_not_plotted():
-    """`_compare` is real data — it just cannot share an axis with the current period."""
+def test_comparison_columns_are_kept_for_reading():
     result = make([MONTH, MEASURE, COMPARE],
                   [{"month": "2026-01-01", "net_sales_sek": 5.0,
                     "net_sales_sek_compare": 4.0}])
 
     assert [c.key for c in to_columns(result)] == ["month", "net_sales_sek",
                                                    "net_sales_sek_compare"]
-    # ...but the chart still leaves it off the axis.
-    assert propose_chart(result).y == ["net_sales_sek"]
+
+
+def test_a_comparison_column_is_labelled_with_the_period_it_came_from():
+    """"(jämförelse)" says a comparison exists; the legend has to say which one."""
+    result = make([MONTH, MEASURE,
+                   {"key": "net_sales_sek_compare", "type": "number", "unit": "SEK",
+                    "label": "Netto (jämförelse)"}],
+                  [{"month": "2026-01-01", "net_sales_sek": 5.0}],
+                  meta={**META, "compare_range": {"from": "2024-07-01", "to": "2025-06-30"}})
+
+    labels = {c.key: c.label for c in to_columns(result)}
+    assert labels["net_sales_sek_compare"] == "Netto (jul 2024–jun 2025)"
+
+
+def test_a_comparison_label_survives_a_missing_range():
+    result = make([MEASURE, {"key": "net_sales_sek_compare", "type": "number", "unit": "SEK",
+                             "label": "Netto (jämförelse)"}],
+                  [{"net_sales_sek": 5.0}])
+
+    labels = {c.key: c.label for c in to_columns(result)}
+    assert labels["net_sales_sek_compare"] == "Netto (jämförelse)"
 
 
 def test_a_row_carries_only_the_keys_the_columns_describe():

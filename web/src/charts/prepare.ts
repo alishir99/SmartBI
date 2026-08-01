@@ -9,6 +9,8 @@ export type SeriesDescriptor = {
   key: string
   label: string
   color: string
+  /** A comparison period: context behind the current series, not a competitor to it. */
+  muted?: boolean
 }
 
 export type PreparedChart = {
@@ -82,11 +84,18 @@ function direct(
   rows: ResultRow[],
   xColumn: Column | null,
 ): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale' | 'slices'> {
-  const series = measures.map((column, index) => ({
-    key: column.key,
-    label: column.label,
-    color: seriesColor(index),
-  }))
+  // The comparison period does not consume a categorical hue — otherwise "last year" arrives
+  // looking like a second brand.
+  let hue = 0
+  const series = measures.map((column) => {
+    const muted = column.key.endsWith('_compare')
+    return {
+      key: column.key,
+      label: column.label,
+      color: muted ? SERIES_MUTED : seriesColor(hue++),
+      muted,
+    }
+  })
 
   const ordered = order(rows, spec, xColumn, series[0]?.key ?? null)
   const { rows: limited, folded } = applyLimit(ordered, spec, series, xColumn)

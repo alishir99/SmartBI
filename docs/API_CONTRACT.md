@@ -59,6 +59,8 @@ type ChartSpec = {
   limit: number | null
   title: string
   subtitle: string | null
+  markers: string[]           // x values worth a line; server-owned, stripped off model specs
+  marker_label: string | null // what those lines mean, shown under the plot
 }
 
 type Provenance = {

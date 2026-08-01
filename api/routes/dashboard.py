@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date, timedelta
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -75,7 +76,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     try:
         # One MCP session, four queries, run concurrently — the tiles are independent and the
         # rollup makes each of them cheap.
-        totals, trend, top_products, by_region, share = await asyncio.gather(
+        totals, trend, top_products, by_region, share, capabilities = await asyncio.gather(
             _call(mcp, supplier_id, "query_sales", totals_args),
             _call(mcp, supplier_id, "query_sales", {
                 # All three headline measures, so the KPI sparklines cost no extra query. The
@@ -100,6 +101,8 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                 "order_by": {"measure": "net_sales_sek", "dir": "desc"},
             }),
             _call(mcp, supplier_id, "query_market_share", {"time_range": window, **compare}),
+            # Calendar only — a dimension read, not a trip to the fact table.
+            _call(mcp, supplier_id, "get_capabilities", {}),
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("dashboard failed")
@@ -120,7 +123,8 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     return DashboardResponse(
         kpis=_kpis(totals, share, trend, delta_label),
         cards=[
-            _card(cached["trend"], "Försäljning per månad"),
+            _card(cached["trend"], "Försäljning per månad",
+                  markers=campaign_markers(cached["trend"], capabilities)),
             _card(cached["top_products"], "Topp 10 produkter"),
             _card(cached["by_region"], "Försäljning per län"),
         ],
@@ -206,7 +210,53 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
     return await mcp.call(supplier_id, tool, args)
 
 
-def _card(result, title: str) -> AnswerCard:
+CAMPAIGN_MARKER_LABEL = ("Streckade linjer markerar perioder med kampanj — handlaren "
+                         "rabatterar tungt då.")
+
+
+def campaign_markers(result, capabilities: dict) -> list[str]:
+    """Which x values on this chart fall inside a campaign window.
+
+    November spikes every year and nothing on screen said why. The warehouse stores the
+    campaign's days but not its name, so a marker can say *that* a campaign ran and never what
+    it was called — which is still the difference between an unexplained spike and an
+    explained one.
+    """
+    windows = ((capabilities.get("time") or {}).get("campaigns") or [])
+    if not windows:
+        return []
+
+    axis = next((c["key"] for c in result.columns if c.get("type") == "date"
+                 and not c["key"].endswith("_compare")), None)
+    if axis is None:
+        return []
+
+    ranges = [(w["from"], w["to"]) for w in windows if w.get("from") and w.get("to")]
+    values = sorted(str(row[axis]) for row in result.rows if row.get(axis))
+    if not ranges or not values:
+        return []
+
+    # Every grain — day, week, month, quarter — labels its bucket with the bucket's first day,
+    # so a bucket runs until the next one begins. That makes this grain-agnostic: no branch per
+    # grain, and a campaign starting mid-month still lands in that month.
+    last = str((result.meta or {}).get("time_range", {}).get("to") or values[-1][:10])
+    marked = []
+    for index, value in enumerate(values):
+        starts = value[:10]
+        ends = _day_before(values[index + 1][:10]) if index + 1 < len(values) else last
+        if any(window_from <= ends and window_to >= starts for window_from, window_to in ranges):
+            marked.append(value)
+    return marked
+
+
+def _day_before(iso: str) -> str:
+    try:
+        return (date.fromisoformat(iso) - timedelta(days=1)).isoformat()
+    except ValueError:
+        return iso
+
+
+def _card(result, title: str, markers: list[str] | None = None) -> AnswerCard:
     """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
     (§2).
 
@@ -214,6 +264,9 @@ def _card(result, title: str) -> AnswerCard:
     tool actually ran. A literal here goes stale the moment the user picks another period.
     """
     chart = render.propose_chart(result, title=title)
+    if markers:
+        chart = chart.model_copy(update={"markers": markers,
+                                         "marker_label": CAMPAIGN_MARKER_LABEL})
     return AnswerCard(
         status="ok",
         chart=chart,

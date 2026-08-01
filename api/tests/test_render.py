@@ -144,6 +144,19 @@ def test_a_valid_override_is_honoured():
     assert spec.title == "Topp"
 
 
+def test_a_model_cannot_annotate_the_chart_itself():
+    """A marker the model invented is an unsourced claim drawn on top of verified rows."""
+    result = make([PRODUCT, MEASURE], [{"product": "A", "net_sales_sek": 1.0}])
+    override = ChartSpec(type="bar", x="product", y=["net_sales_sek"], title="Topp",
+                         markers=["A"], marker_label="Black Week")
+
+    spec, problems = validate_chart(override, result)
+
+    assert not problems, "the spec itself is fine — only the annotation is not the model's"
+    assert spec.markers == []
+    assert spec.marker_label is None
+
+
 def test_an_override_naming_a_missing_column_is_rejected():
     result = make([PRODUCT, MEASURE], [{"product": "A", "net_sales_sek": 1.0}])
     override = ChartSpec(type="bar", x="butik", y=["net_sales_sek"], title="Fel")

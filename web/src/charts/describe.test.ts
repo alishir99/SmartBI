@@ -14,6 +14,8 @@ const spec = (overrides: Partial<ChartSpec> = {}): ChartSpec => ({
   limit: null,
   title: 'Försäljning per produkt',
   subtitle: null,
+  markers: [],
+  marker_label: null,
   ...overrides,
 })
 

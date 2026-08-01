@@ -185,7 +185,9 @@ def validate_chart(spec: ChartSpec, result: CachedResult) -> tuple[ChartSpec, li
     if problems:
         fallback = propose_chart(result, title=spec.title, subtitle=spec.subtitle)
         return fallback, problems
-    return spec, []
+    # Annotations are the server's to make. A marker the model invented would be an unsourced
+    # claim drawn on top of verified rows, which is the one thing this pipeline exists to stop.
+    return spec.model_copy(update={"markers": [], "marker_label": None}), []
 
 
 _MONTH_SHORT = ("jan", "feb", "mar", "apr", "maj", "jun",

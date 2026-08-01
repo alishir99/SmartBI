@@ -11,6 +11,7 @@ from api.routes.dashboard import (
     _card,
     _kpis,
     _movers_card,
+    campaign_markers,
 )
 
 TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
@@ -249,6 +250,89 @@ def test_the_default_basis_is_one_of_the_offered_bases():
     # Every period is now offered every basis; the gate that dropped the comparison on some
     # windows was there because the user had not chosen. Now they choose.
     assert all("compare" not in settings for settings in PERIODS.values())
+
+
+# --------------------------------------------------------------- campaign annotations
+
+MONTHS = ["2025-10-01", "2025-11-01", "2025-12-01", "2026-01-01"]
+
+# Black Week and Mellandagsrea, as dim_date carries them: days, and an id with no name.
+CAPABILITIES = {"time": {"campaigns": [
+    {"campaign_id": 1, "from": "2025-11-21", "to": "2025-11-30"},
+    {"campaign_id": 2, "from": "2025-12-26", "to": "2025-12-31"},
+]}}
+
+
+def trend_result(values: list[str], until: str = "2026-01-31") -> CachedResult:
+    return CachedResult(
+        query_id="q_1", supplier_id=1, tool="query_sales", tool_args={},
+        columns=[{"key": "month", "type": "date", "label": "Månad"},
+                 {"key": "net_sales_sek", "type": "number", "label": "Netto"}],
+        rows=[{"month": value, "net_sales_sek": 1.0} for value in values],
+        row_count=len(values), truncated=False,
+        meta={"tool": "query_sales", "source": "mv_sales_daily", "scope": "supplier:abcd",
+              "time_range": {"from": values[0], "to": until},
+              "coverage": {"from": "2024-07-01", "to": "2026-06-30"},
+              "executed_at": "2026-08-01T10:00:00Z"})
+
+
+def test_a_campaign_inside_a_month_marks_that_month():
+    """November spikes every year and nothing on screen said why."""
+    assert campaign_markers(trend_result(MONTHS), CAPABILITIES) == ["2025-11-01", "2025-12-01"]
+
+
+def test_a_month_with_no_campaign_is_left_alone():
+    october = trend_result(["2025-10-01"], until="2025-10-31")
+
+    assert campaign_markers(october, CAPABILITIES) == []
+
+
+def test_the_bucket_is_read_from_the_data_not_assumed_to_be_a_month():
+    """Days, weeks, months and quarters all label the bucket with its first day, so the next
+    bucket's own value is what bounds this one — no branch per grain."""
+    quarters = ["2025-07-01", "2025-10-01", "2026-01-01"]
+
+    # Both campaigns fall inside Q4, and neither is in Q3 or Q1.
+    assert campaign_markers(trend_result(quarters), CAPABILITIES) == ["2025-10-01"]
+
+
+def test_the_last_bucket_runs_to_the_end_of_the_window_the_tool_ran():
+    """Its span has no next value to bound it, so `meta.time_range.to` does."""
+    november = trend_result(["2025-11-01"], until="2025-11-30")
+
+    assert campaign_markers(november, CAPABILITIES) == ["2025-11-01"]
+
+
+def test_no_campaigns_in_the_calendar_means_no_markers():
+    assert campaign_markers(trend_result(MONTHS), {"time": {"campaigns": []}}) == []
+    assert campaign_markers(trend_result(MONTHS), {}) == []
+
+
+def test_a_chart_with_no_date_axis_is_never_annotated():
+    result = CachedResult(
+        query_id="q_1", supplier_id=1, tool="query_sales", tool_args={},
+        columns=[{"key": "product", "type": "text", "label": "Produkt"}],
+        rows=[{"product": "A"}], row_count=1, truncated=False,
+        meta={"time_range": {"from": "2025-11-01", "to": "2025-11-30"}})
+
+    assert campaign_markers(result, CAPABILITIES) == []
+
+
+def test_the_marked_card_says_what_the_lines_mean():
+    """A line nobody can read is decoration."""
+    card = _card(trend_result(MONTHS), "Försäljning per månad",
+                 markers=campaign_markers(trend_result(MONTHS), CAPABILITIES))
+
+    assert card.chart.markers == ["2025-11-01", "2025-12-01"]
+    assert card.chart.marker_label is not None
+    assert "kampanj" in card.chart.marker_label.lower()
+
+
+def test_an_unmarked_card_carries_no_label():
+    card = _card(trend_result(["2025-10-01"]), "Försäljning per månad", markers=[])
+
+    assert card.chart.markers == []
+    assert card.chart.marker_label is None
 
 
 # ------------------------------------------------------------------------ the movers page

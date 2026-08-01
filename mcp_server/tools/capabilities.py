@@ -30,6 +30,13 @@ async def get_capabilities(tenant: TenantContext) -> dict:
             "ORDER BY level, name")
         regions = await connection.fetch(
             "SELECT DISTINCT region FROM dim_store ORDER BY region")
+        # Calendar, not sales: dim_date is ~730 rows and carries no tenant data, so this is a
+        # dimension read like the four above rather than a trip to the fact table. Each
+        # campaign_id is one contiguous run of days, so MIN/MAX is the window.
+        campaigns = await connection.fetch(
+            "SELECT campaign_id, MIN(date) AS starts, MAX(date) AS ends "
+            "  FROM dim_date WHERE campaign_id IS NOT NULL "
+            " GROUP BY campaign_id ORDER BY starts")
 
     return {
         "supplier": {
@@ -66,6 +73,14 @@ async def get_capabilities(tenant: TenantContext) -> dict:
             "note": "Relativa perioder räknas från sista datumet i datan, inte från dagens "
                     "datum. Det finns ingen data efter coverage.to.",
             "compare_to": ["previous_period", "same_period_last_year"],
+            # The warehouse stores the campaign's id and its days, not its name — so this says
+            # when a campaign ran, and never what it was called.
+            "campaigns": [{"campaign_id": r["campaign_id"],
+                           "from": r["starts"].isoformat(),
+                           "to": r["ends"].isoformat()} for r in campaigns],
+            "campaigns_note": "Kampanjperioder ur kalendern. Handlaren rabatterar tungt under "
+                              "dessa dagar, vilket förklarar toppar som annars ser oförklarade "
+                              "ut. Namnen finns inte i datan.",
         },
         "units": {
             "currency": "SEK",

@@ -38,6 +38,10 @@ export type ChartSpec = {
   limit: number | null
   title: string
   subtitle: string | null
+  /** Server-owned x values worth a line on the axis, e.g. months a campaign ran in. */
+  markers: string[]
+  /** One sentence saying what the markers mean; shown under the plot when there are any. */
+  marker_label: string | null
 }
 
 export type DateRange = { from: string; to: string }

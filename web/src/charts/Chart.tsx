@@ -15,6 +15,7 @@ import {
   LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,7 +23,7 @@ import {
 } from 'recharts'
 import type { TooltipProps } from 'recharts'
 import type { ChartSpec, Column, ResultRow } from '../types'
-import { CHART_INK, MARK } from './palette'
+import { CHART_INK, MARK, SERIES_MUTED } from './palette'
 import { axisCategoryLabel, prepareChart, type PreparedChart } from './prepare'
 import { ChartTooltip } from './ChartTooltip'
 import { DataTable } from './DataTable'
@@ -85,6 +86,11 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
         </ResponsiveContainer>
       </div>
       <Legend prepared={prepared} />
+      {/* An annotation nobody can read is decoration. The line is only worth drawing if the
+          chart also says what it means. */}
+      {spec.markers.length > 0 && spec.marker_label && !sideways && (
+        <p className="mt-2 text-2xs text-ink-muted">{spec.marker_label}</p>
+      )}
       {prepared.folded && (
         <p className="mt-2 text-2xs text-ink-muted">
           Mindre poster är summerade till “Övrigt”.
@@ -181,7 +187,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
     )
   }
 
-  const axes = buildAxes(prepared, sideways)
+  const axes = buildAxes(prepared, sideways, sideways ? [] : spec.markers)
 
   if (spec.type === 'line') {
     return (
@@ -277,7 +283,7 @@ function sidewaysHeight(rowCount: number): number {
  * An array, not a fragment: Recharts scans its *direct* children for axes, grid and tooltip, and
  * a fragment hides them from that scan — the chart then silently renders with no axes at all.
  */
-function buildAxes(prepared: PreparedChart, sideways: boolean) {
+function buildAxes(prepared: PreparedChart, sideways: boolean, markers: string[] = []) {
   const categoryKey = prepared.xColumn?.key
   const tooltip = (
     <Tooltip
@@ -330,6 +336,18 @@ function buildAxes(prepared: PreparedChart, sideways: boolean) {
       tickFormatter={(value: number) => yLabel(prepared, value)}
     />,
     tooltip,
+    // Behind the marks and in front of the grid: an annotation, not a series. Drawn only on a
+    // vertical axis, because a marker on a ranked sideways bar names a category, not a moment.
+    ...markers.map((value) => (
+      <ReferenceLine
+        key={`marker-${value}`}
+        x={value}
+        stroke={SERIES_MUTED}
+        strokeDasharray={MARK.compareDash}
+        strokeWidth={1}
+        ifOverflow="hidden"
+      />
+    )),
   ]
 }
 

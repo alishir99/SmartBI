@@ -56,6 +56,11 @@ class ChartSpec(BaseModel):
     limit: int | None = None
     title: str
     subtitle: str | None = None
+    # Server-owned: x values worth a line on the axis, and one sentence saying what they mean.
+    # `validate_chart` drops whatever a model puts here — an annotation the model invented is
+    # exactly the kind of claim the rest of this pipeline exists to prevent.
+    markers: list[str] = Field(default_factory=list)
+    marker_label: str | None = None
 
 
 class TimeWindow(BaseModel):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from .. import db
-from ..semantic.compiler import Params, resolve_time_range
+from ..semantic.compiler import Params, resolve_time_range, shift_range
 from ..tenant import TenantContext
 from .sales import _jsonable, scope_label
 
@@ -78,12 +78,7 @@ def _snap_to_whole_months(window: tuple[date, date]) -> tuple[date, date]:
     return first, last
 
 
-async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
-    coverage = await db.coverage()
-    requested = resolve_time_range(spec, coverage)
-    window = _snap_to_whole_months(requested)
-    snapped = window != requested
-
+def _build(window: tuple[date, date], spec: dict) -> tuple[str, list]:
     params = Params()
     params.add(window[0])          # $1
     params.add(window[1])          # $2
@@ -102,12 +97,33 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
     if regions := (spec.get("region") or None):
         region_clause = f" AND region = ANY({params.add(list(regions))}::text[])"
 
-    sql = SQL.format(category_clause=category_clause, region_clause=region_clause)
+    return SQL.format(category_clause=category_clause,
+                      region_clause=region_clause), params.values
 
+
+async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
+    coverage = await db.coverage()
+    requested = resolve_time_range(spec, coverage)
+    window = _snap_to_whole_months(requested)
+    snapped = window != requested
+
+    # A share that cannot move is the one number this product most needs to be able to move:
+    # absolute sales rising while category share falls is the finding a supplier is here for.
+    compare_to = spec.get("compare_to")
+    compare_window = (_snap_to_whole_months(shift_range(window, compare_to))
+                      if compare_to else None)
+
+    sql, params = _build(window, spec)
     async with db.tenant_connection(tenant.supplier_id) as connection:
-        records = await connection.fetch(sql, *params.values)
+        records = await connection.fetch(sql, *params)
+        previous: list = []
+        if compare_window is not None:
+            compare_sql, compare_params = _build(compare_window, spec)
+            previous = await connection.fetch(compare_sql, *compare_params)
 
     rows = [_row(dict(record.items())) for record in records]
+    if compare_window is not None:
+        _attach_comparison(rows, [_row(dict(r.items())) for r in previous])
 
     return {
         "rows": rows,
@@ -127,6 +143,9 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
                 "requested_to": requested[1].isoformat(),
                 "snapped_to_whole_months": snapped,
             },
+            **({"compare_range": {"from": compare_window[0].isoformat(),
+                                  "to": compare_window[1].isoformat()}}
+               if compare_window is not None else {}),
             **({"note": (
                 f"Marknadsandel mäts per hel kalendermånad. Det begärda intervallet "
                 f"{requested[0].isoformat()}–{requested[1].isoformat()} har utökats till "
@@ -137,6 +156,26 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
             "executed_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     }
+
+
+def _attach_comparison(rows: list[dict], previous: list[dict]) -> None:
+    """Pair each slice with itself a period earlier, on the same brand and category."""
+    by_slice = {(r["brand"], r["category_id"]): r for r in previous}
+    for row in rows:
+        earlier = by_slice.get((row["brand"], row["category_id"]))
+        # Suppression is per window: a slice thin in either one stays withheld in both, or the
+        # comparison becomes a way to read a total that was deliberately not returned.
+        if earlier is None or row["suppressed"] or earlier["suppressed"]:
+            continue
+        row["own_net_sek_compare"] = earlier["own_net_sek"]
+        # The category total too: a caller weighting several subcategories into one figure
+        # needs the same denominator for both windows, or the two are not comparable.
+        row["category_net_sek_compare"] = earlier["category_net_sek"]
+        row["share_pct_compare"] = earlier["share_pct"]
+        if row["share_pct"] is not None and earlier["share_pct"] is not None:
+            # Percentage points, not percent of a percent — a share moving 29,5 → 30,7 has
+            # risen 1,2 p.e., and calling that "+4 %" is how a share tile misleads.
+            row["share_pct_delta_pe"] = round(row["share_pct"] - earlier["share_pct"], 2)
 
 
 def _row(record: dict) -> dict:

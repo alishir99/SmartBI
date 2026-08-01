@@ -7,6 +7,7 @@ import pytest
 from mcp_server.tools.market_share import (
     MIN_BRANDS,
     MIN_TRANSACTIONS,
+    _attach_comparison,
     _row,
     _snap_to_whole_months,
 )
@@ -114,3 +115,43 @@ def test_zero_category_total_yields_none_not_a_division_error():
     row = _row(_record(category_net_sek=0))
     assert row["share_pct"] is None
     assert row["leader_share_pct"] is None
+
+
+# ------------------------------------------------------------------------- comparison
+
+def test_the_comparison_is_paired_per_brand_and_category():
+    rows = [_row(_record()), _row(_record(brand="Nordström Video", category_id=12))]
+    _attach_comparison(rows, [
+        _row(_record(brand="Nordström Video", category_id=12, own_net_sek=100.0)),
+        _row(_record(own_net_sek=200.0)),
+    ])
+
+    assert rows[0]["own_net_sek_compare"] == 200.0
+    assert rows[1]["own_net_sek_compare"] == 100.0
+
+
+def test_the_share_delta_is_in_percentage_points():
+    """29,5 → 25,0 is −4,5 p.e. Calling it −15 % is how a share tile misleads."""
+    rows = [_row(_record())]                       # 250/1000 = 25,0 %
+    _attach_comparison(rows, [_row(_record(own_net_sek=295.0))])   # 29,5 %
+
+    assert rows[0]["share_pct_compare"] == 29.5
+    assert rows[0]["share_pct_delta_pe"] == -4.5
+
+
+@pytest.mark.parametrize("thin", ["current", "previous"])
+def test_a_slice_thin_in_either_window_gets_no_comparison(thin):
+    """Otherwise the comparison becomes a way to read a total deliberately withheld."""
+    rows = [_row(_record(**({"n_brands": MIN_BRANDS - 1} if thin == "current" else {})))]
+    _attach_comparison(rows, [
+        _row(_record(**({"n_brands": MIN_BRANDS - 1} if thin == "previous" else {})))])
+
+    assert "share_pct_compare" not in rows[0]
+    assert "share_pct_delta_pe" not in rows[0]
+
+
+def test_a_slice_absent_from_the_previous_window_gets_no_comparison():
+    rows = [_row(_record())]
+    _attach_comparison(rows, [])
+
+    assert "own_net_sek_compare" not in rows[0]

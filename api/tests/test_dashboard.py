@@ -90,6 +90,62 @@ def test_no_share_rows_drops_the_tile():
     assert share_kpi(_kpis(TOTALS, NO_SHARE)) is None
 
 
+# ------------------------------------------------------------- the share tile's comparison
+
+def compared(row: dict, own: float, category: float) -> dict:
+    return row | {"own_net_sek_compare": own, "category_net_sek_compare": category}
+
+
+def test_the_share_tile_moves_in_percentage_points():
+    """The one number a supplier most needs to see move, and the one that could not."""
+    share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                               own=250.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.value == 30.0
+    # 30,0 − 25,0. The tile's unit is '%', which the frontend renders as p.e.
+    assert kpi.delta_pct == 5.0
+    assert kpi.unit == "%"
+
+
+def test_the_comparison_denominator_is_deduplicated_too():
+    """D3 again: without this the two windows disagree by roughly nine points."""
+    share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                               own=200.0, category=1000.0),
+                      compared(share_row("Nordvik", 10, own=200.0, category=1000.0),
+                               own=200.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    # 400 / 1000 = 40 %, not 400 / 2000 = 20 %; current is 500 / 1000 = 50 %.
+    assert kpi.value == 50.0
+    assert kpi.delta_pct == 10.0
+
+
+def test_a_partially_compared_result_shows_no_delta_rather_than_a_mixed_one():
+    """Summing rows that carry a comparison with rows that do not puts two periods in one
+    figure — no delta is the honest answer."""
+    share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                               own=250.0, category=1000.0),
+                      share_row("Bruksbo", 20, own=100.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.value == 20.0
+    assert kpi.delta_pct is None
+
+
+def test_a_window_with_no_comparison_keeps_the_tile():
+    """`all_time` has no honest counterpart; the share still has to be shown."""
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0)]}
+
+    kpi = share_kpi(_kpis(TOTALS, share))
+
+    assert kpi.value == 30.0
+    assert kpi.delta_pct is None
+
+
 # ------------------------------------------------------------------------ the other tiles
 
 def test_the_remaining_kpis_pass_through_the_tools_own_deltas():

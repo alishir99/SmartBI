@@ -81,7 +81,10 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                 "time_range": window,
                 "order_by": {"measure": "net_sales_sek", "dir": "desc"},
             }),
-            _call(mcp, supplier_id, "query_market_share", {"time_range": window}),
+            _call(mcp, supplier_id, "query_market_share", {
+                "time_range": window,
+                **({"compare_to": "same_period_last_year"} if settings["compare"] else {}),
+            }),
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("dashboard failed")
@@ -138,6 +141,23 @@ def _first_number(payload: dict, key: str) -> float | None:
     return float(value) if value is not None else None
 
 
+def _weighted_share(rows: list[dict], own_key: str, category_key: str) -> float | None:
+    """Own sales over the category total, weighted across subcategories.
+
+    An unweighted mean would let a tiny subcategory with a high share dominate the tile. The
+    denominator is deduplicated by `category_id` because the tool's grain is brand ×
+    subcategory: a supplier with two brands in one subcategory gets that total back twice.
+    """
+    # A window every row does not carry is not a window: mixing rows that have a comparison
+    # with rows that do not would put two different periods in one figure.
+    if any(row.get(own_key) is None or row.get(category_key) is None for row in rows):
+        return None
+    own = sum(float(row[own_key]) for row in rows)
+    category = sum({row.get("category_id"): float(row[category_key])
+                    for row in rows}.values())
+    return round(100 * own / category, 1) if category else None
+
+
 def _kpis(totals: dict, share: dict) -> list[Kpi]:
     """The four headline numbers."""
     kpis: list[Kpi] = []
@@ -148,20 +168,19 @@ def _kpis(totals: dict, share: dict) -> list[Kpi]:
                         delta_pct=_first_number(totals, "net_sales_sek_delta_pct"),
                         delta_label="vs samma period förra året"))
 
-    # Category share is weighted by own sales across subcategories rather than averaged: an
-    # unweighted mean would let a tiny subcategory with a high share dominate the tile.
     rows = [r for r in (share.get("rows") or []) if not r.get("suppressed")]
     if rows:
-        own = sum(float(r.get("own_net_sek") or 0) for r in rows)
-        # The tool's grain is brand × subcategory, so a supplier with two brands in the same
-        # subcategory gets that subcategory's total back twice.
-        category = sum({r.get("category_id"): float(r.get("category_net_sek") or 0)
-                        for r in rows}.values())
-        if category:
+        current = _weighted_share(rows, "own_net_sek", "category_net_sek")
+        if current is not None:
             best = min(rows, key=lambda r: r.get("rank") or 99)
+            previous = _weighted_share(rows, "own_net_sek_compare",
+                                       "category_net_sek_compare")
             kpis.append(Kpi(
                 key="category_share_pct", label="Andel av kategori",
-                value=round(100 * own / category, 1), unit="%",
+                value=current, unit="%",
+                # Percentage points: the frontend renders a '%' KPI's delta as p.e.
+                delta_pct=None if previous is None else round(current - previous, 1),
+                delta_label="vs samma period förra året",
                 rank_label=(f"#{best['rank']} av {best['n_brands']} varumärken "
                             f"i {best['subcategory']}")))
 

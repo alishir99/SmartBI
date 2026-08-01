@@ -123,11 +123,14 @@ type Kpi = {
   label: string              // "Försäljning", "Andel av kategori", ...
   value: number
   unit: "SEK" | "st" | "%"
-  delta_pct: number | null   // vs same period last year
+  delta_pct: number | null   // vs same period last year; percentage *points* when unit is "%"
   delta_label: string | null // "vs föregående år"
   rank_label: string | null  // "#2 av 6 varumärken"
 }
 ```
+
+`delta_pct` is null for windows with no honest counterpart (`last_7_days`, `last_30_days`,
+`last_90_days`, `all_time`) — the tile then reads "Ingen jämförelseperiod".
 
 Cards returned, in order: revenue trend by month (own vs category index), top 10 products,
 sales by region. Each is a full `AnswerCard` with `chart` and `query_id` set.

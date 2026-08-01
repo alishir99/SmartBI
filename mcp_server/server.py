@@ -121,16 +121,20 @@ async def query_sales(ctx: Context,
     description="Egen marknadsandel och placering per underkategori: egen försäljning, "
                 "kategorins totala försäljning, andel i procent, placering och antal "
                 "varumärken. Konkurrenter namnges aldrig och itemiseras aldrig. Tunna urval "
-                "utelämnas helt (k-anonymitet) och returnerar då suppressed=true med skäl.")
+                "utelämnas helt (k-anonymitet) och returnerar då suppressed=true med skäl. "
+                "Med compare_to följer 'share_pct_compare' och 'share_pct_delta_pe' med — "
+                "förändringen i procentenheter, inte i procent av en procent.")
 async def query_market_share(ctx: Context,
                              category_ids: list[int] | None = None,
                              region: list[str] | None = None,
-                             time_range: TimeRange | None = None) -> dict:
+                             time_range: TimeRange | None = None,
+                             compare_to: CompareTo | None = None) -> dict:
     tenant = tenant_from(ctx)
     spec = {
         "category_ids": category_ids,
         "region": region,
         "time_range": _time_range(time_range),
+        "compare_to": compare_to,
     }
     try:
         return await market_share_tool.query_market_share(tenant, spec)

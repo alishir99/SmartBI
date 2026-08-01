@@ -92,8 +92,12 @@ class Settings(BaseSettings):
     # made of stay in the database, and the log carries only the keys needed to find them.
     # Turning this on puts question text and rejected figures back in, for a local debug run.
     log_sensitive: bool = False
-    log_max_bytes: int = 20 * 1024 * 1024
-    log_backup_count: int = 5
+    # Rotated on TIME, not on size. Size-based rotation bounds the disk and nothing else:
+    # "keep the last 120 MB" is two hours on a busy day and six months on a quiet one, so the
+    # question this log exists to answer — what happened last Tuesday — has no answer. Daily
+    # files with a retention in days give a window you can actually state, and a filename you
+    # can reason about.
+    log_retention_days: int = 14
 
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

@@ -34,14 +34,14 @@ import time
 import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from .config import settings
 
 __all__ = ["ContextVar", "JsonFormatter", "TextFormatter", "bind", "configure",
-           "fingerprint", "new_turn_id", "redacted", "safe_extra", "timed"]
+           "Path", "fingerprint", "new_turn_id", "redacted", "safe_extra", "timed"]
 
 # No mutable default: every reader goes through `_ctx()`, so the empty case is a fresh
 # dict rather than one shared across every request that never bound anything.
@@ -105,13 +105,17 @@ def configure() -> None:
     root.addHandler(stream)
 
     if settings.log_file:
-        # Rotating rather than a plain file: an unbounded log is an outage that arrives
-        # weeks after the change that caused it.
+        # Midnight UTC, not local: a container's timezone is not a fact anyone should have to
+        # know to read a filename, and a DST shift would otherwise produce a 23-hour file.
         path = Path(settings.log_file)
         path.parent.mkdir(parents=True, exist_ok=True)
-        rotating = RotatingFileHandler(path, maxBytes=settings.log_max_bytes,
-                                       backupCount=settings.log_backup_count,
-                                       encoding="utf-8")
+        rotating = TimedRotatingFileHandler(
+            path, when="midnight", utc=True,
+            backupCount=settings.log_retention_days, encoding="utf-8")
+        # Default naming gives `api.jsonl.2026-07-31`, which no tool recognises as JSON and
+        # which sorts oddly. `api-2026-07-31.jsonl` keeps the suffix where it belongs.
+        rotating.namer = lambda name: str(
+            path.with_name(f"{path.stem}-{name.rsplit('.', 1)[-1]}{path.suffix}"))
         rotating.setFormatter(JsonFormatter())      # the file is always machine-readable
         root.addHandler(rotating)
 

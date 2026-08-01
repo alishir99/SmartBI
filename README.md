@@ -106,6 +106,16 @@ Varje rad är ett JSON-objekt och varje turn har ett eget `turn_id`, så en hel 
 följa från början till slut. Loggen skrivs till stdout (`docker compose logs api`) och till
 `./logs/api.jsonl`, som överlever en omstart.
 
+Filändelsen är `.jsonl` därför att innehållet *är* JSON Lines — ett objekt per rad. `.log`
+hade antytt fritext, och `jq` och varje logg-shipper läser `.jsonl` direkt.
+
+**Rotation sker på tid, inte på storlek.** Vid midnatt UTC byter filen namn till
+`api-2026-07-31.jsonl` och en ny `api.jsonl` börjar; `LOG_RETENTION_DAYS` (14) styr hur många
+som sparas, resten raderas. Storleksrotation begränsar bara disken: "de senaste 120 MB" är
+två timmar en tung dag och ett halvår en lugn, och då går frågan loggen finns för — *vad hände
+i tisdags* — inte att besvara. UTC och inte lokal tid, eftersom en containers tidszon inte ska
+behöva vara känd för att läsa ett filnamn, och en sommartidsväxling annars ger en 23-timmarsfil.
+
 ```bash
 # Allt som hände i en viss turn
 jq 'select(.turn_id=="666c25eb2c19")' logs/api.jsonl

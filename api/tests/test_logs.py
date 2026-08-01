@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from api import logs
 
@@ -133,3 +134,52 @@ def test_the_default_is_closed():
     """A privacy default that has to be remembered is a privacy default that fails."""
     from api.config import Settings
     assert Settings().log_sensitive is False
+
+
+# ------------------------------------------------------------------------- rotation
+
+def configured(tmp_path, monkeypatch, **overrides):
+    for key, value in {"log_file": str(tmp_path / "api.jsonl"), "log_format": "json",
+                       "log_retention_days": 3, **overrides}.items():
+        monkeypatch.setattr(logs.settings, key, value)
+    logs.configure()
+    return next(h for h in logging.getLogger().handlers if hasattr(h, "doRollover"))
+
+
+def test_the_file_rotates_daily_not_by_size(tmp_path, monkeypatch):
+    """Size-based rotation bounds the disk and nothing else: "the last 120 MB" is two hours
+    on a busy day and six months on a quiet one, so "what happened last Tuesday" has no
+    answer. This log exists to answer exactly that."""
+    handler = configured(tmp_path, monkeypatch)
+    assert handler.when == "MIDNIGHT"
+    assert handler.utc is True, "a container's timezone should not decide the filename"
+    assert handler.backupCount == 3
+
+
+def test_a_rotated_file_keeps_its_extension(tmp_path, monkeypatch):
+    """The stdlib default is `api.jsonl.2026-07-31`, which no tool recognises as JSON."""
+    handler = configured(tmp_path, monkeypatch)
+    logging.getLogger("api").info("", extra={"event": "before"})
+    # As a midnight would: just past due. Not 0 — the handler derives the rotated file's
+    # date by subtracting one interval, and a negative timestamp is an OSError on Windows.
+    handler.rolloverAt = time.time() - 1
+    logging.getLogger("api").info("", extra={"event": "after"})
+
+    rotated = [p.name for p in tmp_path.iterdir() if p.name != "api.jsonl"]
+    assert rotated, "nothing rotated"
+    assert all(name.endswith(".jsonl") for name in rotated), rotated
+    assert all(name.startswith("api-") for name in rotated), rotated
+
+
+def test_retention_still_deletes_despite_the_custom_namer(tmp_path, monkeypatch):
+    """The trap this pins: `getFilesToDelete` finds old files by pattern, and renaming them
+    can silently orphan every one — retention that quietly keeps everything for ever is
+    worse than no retention, because nobody looks again."""
+    handler = configured(tmp_path, monkeypatch, log_retention_days=2)
+    for day in range(25, 30):
+        (tmp_path / f"api-2026-07-{day}.jsonl").write_text("{}\n", encoding="utf-8")
+
+    doomed = [logs.Path(p).name for p in handler.getFilesToDelete()]
+    assert len(doomed) == 3, doomed
+    assert "api-2026-07-25.jsonl" in doomed, "the oldest must go first"
+    assert "api-2026-07-29.jsonl" not in doomed, "the newest must be kept"

@@ -99,12 +99,9 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     return DashboardResponse(
         kpis=_kpis(totals, share),
         cards=[
-            _card(cached["trend"], "Försäljning per månad",
-                  "senaste 12 månaderna · nettoförsäljning, exkl. moms"),
-            _card(cached["top_products"], "Topp 10 produkter",
-                  "senaste 12 månaderna · nettoförsäljning, exkl. moms"),
-            _card(cached["by_region"], "Försäljning per län",
-                  "senaste 12 månaderna · nettoförsäljning, exkl. moms"),
+            _card(cached["trend"], "Försäljning per månad"),
+            _card(cached["top_products"], "Topp 10 produkter"),
+            _card(cached["by_region"], "Försäljning per län"),
         ],
     )
 
@@ -113,10 +110,14 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
     return await mcp.call(supplier_id, tool, args)
 
 
-def _card(result, title: str, subtitle: str) -> AnswerCard:
+def _card(result, title: str) -> AnswerCard:
     """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
-    (§2)."""
-    chart = render.propose_chart(result, title=title, subtitle=subtitle)
+    (§2).
+
+    No subtitle: the card falls back to the window in `provenance.time_range`, which is what the
+    tool actually ran. A literal here goes stale the moment the user picks another period.
+    """
+    chart = render.propose_chart(result, title=title)
     return AnswerCard(
         status="ok",
         chart=chart,

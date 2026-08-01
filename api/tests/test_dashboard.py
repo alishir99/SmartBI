@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from api.routes.dashboard import _kpis
+from api.result_cache import CachedResult
+from api.routes.dashboard import _card, _kpis
 
 TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
                     "net_sales_sek_delta_pct": 12.5, "units_delta_pct": 3.0,
@@ -111,3 +112,28 @@ def test_a_missing_measure_drops_only_its_own_tile():
 
 def test_an_empty_totals_payload_yields_no_kpis():
     assert _kpis({"rows": []}, NO_SHARE) == []
+
+
+# ------------------------------------------------------------------------- the tiles
+
+def test_a_tile_carries_no_hardcoded_period_subtitle():
+    """The subtitle must come from the window the tool ran, which the card derives from
+    provenance. A literal here read 'senaste 12 månaderna' under every period filter."""
+    result = CachedResult(
+        query_id="q_1", supplier_id=1, tool="query_sales", tool_args={},
+        columns=[{"key": "month", "type": "date", "label": "Månad"},
+                 {"key": "net_sales_sek", "type": "number", "label": "Netto"}],
+        rows=[{"month": "2024-07-01", "net_sales_sek": 1.0},
+              {"month": "2024-08-01", "net_sales_sek": 2.0}],
+        row_count=2, truncated=False,
+        meta={"tool": "query_sales", "source": "mv_sales_daily", "scope": "supplier:abcd",
+              "time_range": {"from": "2024-07-01", "to": "2026-04-30"},
+              "coverage": {"from": "2024-07-01", "to": "2026-06-30"},
+              "executed_at": "2026-08-01T10:00:00Z"})
+
+    card = _card(result, "Försäljning per månad")
+
+    assert card.chart is not None
+    assert card.chart.subtitle is None
+    assert card.provenance is not None
+    assert card.provenance.time_range.to == "2026-04-30"

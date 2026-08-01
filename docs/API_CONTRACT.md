@@ -157,12 +157,21 @@ type ChatEvent =
   | { type: "tool_call"; tool: string; args: object }         // shown as a progress chip
   | { type: "tool_result"; tool: string; row_count: number }
   | { type: "token";    text: string }                        // narrative, streamed
+  | { type: "preview";  card: AnswerCard }                    // chart only; not terminal
   | { type: "card";     card: AnswerCard }                    // terminal on success
   | { type: "error";    message: string }                     // terminal on failure
 ```
 
 Streaming the *tool calls* is a trust feature, not a latency feature — the user watches the
 system go to the database.
+
+`preview` carries a card with the chart and an empty narrative, emitted as soon as a row
+tool returns — seconds before the prose is written and validated. It may arrive more than
+once in a turn; each one replaces the last, and the terminal `card` replaces them all. The
+chart was never the untrusted half — it is drawn from the cached rows via
+`/api/result/{query_id}`, not from the model — so showing it early costs nothing in trust.
+The prose is still withheld until it has been validated. A stream that ends on a `preview`
+ended early and is an error, not an answer.
 
 ---
 

@@ -179,8 +179,9 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
         </p>
       )}
 
-      {/* The streamed prose is a preview; once the card lands it owns the narrative. */}
-      {!turn.card && turn.streamedText && (
+      {/* The streamed prose is a preview; once the card lands it owns the narrative. The
+          chart-only preview card carries no narrative, so it does not yet own it. */}
+      {(!turn.card || turn.cardIsPreview) && turn.streamedText && (
         <p className="text-sm leading-relaxed text-ink">{turn.streamedText}</p>
       )}
 

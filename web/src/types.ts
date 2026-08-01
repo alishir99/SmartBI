@@ -126,6 +126,8 @@ export type ChatEvent =
   | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; row_count: number }
   | { type: 'token'; text: string }
+  /** The chart, as soon as its rows land. Not terminal — a `card` follows and replaces it. */
+  | { type: 'preview'; card: AnswerCard }
   | { type: 'card'; card: AnswerCard }
   | { type: 'error'; message: string }
 

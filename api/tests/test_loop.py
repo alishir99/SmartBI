@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import pytest
 
 from api.agent import loop as agent_loop
-from api.models import CardEvent, StatusEvent, ToolResultEvent, UsageEvent
+from api.models import CardEvent, PreviewEvent, StatusEvent, ToolResultEvent, UsageEvent
 from api.result_cache import ResultCache
 
 MARS = 3_450_900.50
@@ -240,6 +240,44 @@ def test_a_missing_or_malformed_query_id_never_raises(envelope_value):
 
 def test_no_results_means_no_card_source():
     assert agent_loop._result_for({"query_id": "q_a"}, []) is None
+
+
+# ------------------------------------------------------- the chart arrives before the prose
+
+@pytest.mark.asyncio
+async def test_the_chart_is_emitted_as_soon_as_its_rows_land(monkeypatch):
+    """Mean latency is 26 s; the chart is ready long before the prose has been validated."""
+    truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
+    _, events = await usage_of(monkeypatch, [query_turn(), Response(truth)])
+
+    kinds = [type(e).__name__ for e in events]
+    preview = next(e for e in events if isinstance(e, PreviewEvent))
+
+    # Before the model was asked to compose, and before the final card.
+    assert kinds.index("PreviewEvent") < kinds.index("CardEvent")
+    assert preview.card.chart is not None
+    assert preview.card.query_id is not None
+
+
+@pytest.mark.asyncio
+async def test_the_preview_carries_the_chart_but_never_the_prose(monkeypatch):
+    """The prose is the part that can be wrong, and it stays withheld until validated."""
+    truth = f"Mars gav 3 450 900,50 kr.\n{envelope('ok')}"
+    _, events = await usage_of(monkeypatch, [query_turn(), Response(truth)])
+
+    preview = next(e for e in events if isinstance(e, PreviewEvent))
+
+    assert preview.card.narrative == ""
+    assert preview.card.insights == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_rows_emits_no_preview(monkeypatch):
+    """cannot_answer has nothing to chart, so there is nothing to show early."""
+    _, events = await usage_of(monkeypatch, [
+        Response(f"Marginal finns inte i datan.\n{envelope('cannot_answer')}")])
+
+    assert not any(isinstance(e, PreviewEvent) for e in events)
 
 
 # ------------------------------------------------------------------- cost accounting

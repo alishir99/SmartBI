@@ -192,6 +192,17 @@ class TokenEvent(BaseModel):
     text: str
 
 
+class PreviewEvent(BaseModel):
+    """The chart, as soon as its rows land and seconds before the prose is written.
+
+    The chart was never the untrusted half — it is drawn from the cached rows, not from the
+    model — so showing it early costs nothing in trust. The prose is still withheld until it
+    has been validated, which is the part that can be wrong. Not terminal: a `card` follows.
+    """
+    type: Literal["preview"] = "preview"
+    card: AnswerCard
+
+
 class CardEvent(BaseModel):
     type: Literal["card"] = "card"
     card: AnswerCard

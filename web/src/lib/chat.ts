@@ -21,6 +21,8 @@ export type ChatTurn = {
   /** Narrative streamed token by token; the card's own narrative wins once it lands. */
   streamedText: string
   card: AnswerCard | null
+  /** True while `card` is the chart-only preview and the prose is still being written. */
+  cardIsPreview: boolean
   error: string | null
 }
 
@@ -64,6 +66,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chips: [],
       streamedText: '',
       card: null,
+      cardIsPreview: false,
       error: null,
     }
 
@@ -83,7 +86,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       await streamChat(trimmed, history, (event: ChatEvent) => handle(event, patch), abort.signal)
       patch((current) =>
-        current.card
+        // A preview is not an answer: a stream that ends on one ended early.
+        current.card && !current.cardIsPreview
           ? { ...current, status: 'done', statusMessage: null }
           : {
               ...current,
@@ -160,8 +164,18 @@ function handle(event: ChatEvent, patch: (update: (current: ChatTurn) => ChatTur
       }))
       break
 
+    // The status line stays: the turn is still working, and the prose is still coming.
+    case 'preview':
+      patch((current) => ({ ...current, card: event.card, cardIsPreview: true }))
+      break
+
     case 'card':
-      patch((current) => ({ ...current, card: event.card, statusMessage: null }))
+      patch((current) => ({
+        ...current,
+        card: event.card,
+        cardIsPreview: false,
+        statusMessage: null,
+      }))
       break
 
     case 'error':

@@ -15,6 +15,7 @@ from ..mcp_client import McpClient, McpToolError
 from ..models import (
     CardEvent,
     ErrorEvent,
+    PreviewEvent,
     StatusEvent,
     TokenEvent,
     ToolCallEvent,
@@ -207,6 +208,14 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     yield ToolResultEvent(
                         tool=use.name,
                         row_count=int(payload.get("row_count", 0) or 0))
+
+                    if use.name in ROW_TOOLS and cached.rows:
+                        # Measured latency is mean 26 s, p95 54 s, and until now the user saw
+                        # nothing but a status line for all of it. The chart is ready here; the
+                        # prose is not. `_result_for` makes the same guess when the envelope
+                        # names no query_id, and the final card corrects it either way.
+                        yield PreviewEvent(card=render.build_card(
+                            result=cached, narrative="", envelope={}, produced=produced))
 
                 messages.append({"role": "user", "content": tool_results})
                 # The fetch is over. Whatever comes next — another tool or the answer — the

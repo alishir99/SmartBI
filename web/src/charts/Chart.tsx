@@ -26,6 +26,7 @@ import { CHART_INK, MARK } from './palette'
 import { axisCategoryLabel, prepareChart, type PreparedChart } from './prepare'
 import { ChartTooltip } from './ChartTooltip'
 import { DataTable } from './DataTable'
+import { pointQuestion } from '../lib/questions'
 import { formatCell, formatKpiValue, formatMoneyOnScale, formatNumber } from '../lib/format'
 
 type Props = {
@@ -33,18 +34,30 @@ type Props = {
   columns: Column[]
   rows: ResultRow[]
   height?: number
+  /**
+   * Clicking a mark asks about the value under it. Mouse-only by nature, so the same questions
+   * are reachable from the table view's first column, which is real buttons.
+   */
+  onAsk?: (question: string) => void
 }
 
 const AXIS_TICK = { fill: CHART_INK.axisText, fontSize: 11 }
 const MARGIN = { top: 4, right: 8, bottom: 0, left: 0 }
 
-export function Chart({ spec, columns, rows, height = 280 }: Props) {
+export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
   if (rows.length === 0) return <EmptyPlot height={height} />
 
   const prepared = prepareChart(spec, columns, rows)
 
   if (spec.type === 'table') {
-    return <DataTable columns={prepared.columns} rows={prepared.rows} caption={spec.title} />
+    return (
+      <DataTable
+        columns={prepared.columns}
+        rows={prepared.rows}
+        caption={spec.title}
+        onAsk={onAsk}
+      />
+    )
   }
   if (spec.type === 'kpi') {
     return <KpiPlot prepared={prepared} />
@@ -68,7 +81,7 @@ export function Chart({ spec, columns, rows, height = 280 }: Props) {
       {prepared.scale && <p className="mb-1 text-2xs text-ink-muted">{prepared.scale.unit}</p>}
       <div style={{ height: plotHeight }} role="img" aria-label={description}>
         <ResponsiveContainer width="100%" height="100%">
-          {plot(spec, prepared, sideways)}
+          {plot(spec, prepared, sideways, onAsk && markClick(prepared, onAsk))}
         </ResponsiveContainer>
       </div>
       <Legend prepared={prepared} />
@@ -119,8 +132,27 @@ export function describeChart(spec: ChartSpec, prepared: PreparedChart): string 
   return `${parts.join(', ')}. Välj Tabell för att läsa samma siffror som text.`
 }
 
+type MarkClick = { onClick: (state: { activeLabel?: string | number }) => void; className: string }
+
+/**
+ * One handler on the chart rather than one per mark: Recharts reports which category the click
+ * landed in, which is the same answer for a bar, a point and a stacked segment.
+ */
+function markClick(prepared: PreparedChart, onAsk: (question: string) => void): MarkClick {
+  return {
+    onClick: (state) => {
+      const label = state?.activeLabel
+      if (label !== undefined && label !== null && label !== '') {
+        onAsk(pointQuestion(prepared.xColumn, String(label)))
+      }
+    },
+    className: 'cursor-pointer',
+  }
+}
+
 /** Recharts wants a single element child, so each type returns one complete chart. */
-function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
+function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
+              click?: MarkClick) {
   const { rows, series } = prepared
   const stacked = spec.type === 'stacked_bar'
 
@@ -153,7 +185,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
 
   if (spec.type === 'line') {
     return (
-      <LineChart data={rows} margin={MARGIN}>
+      <LineChart data={rows} margin={MARGIN} {...click}>
         {axes}
         {/* Recharts paints in child order, so the muted comparison is drawn first and the
             current period stays on top wherever the two cross. */}
@@ -181,7 +213,7 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
 
   if (spec.type === 'area') {
     return (
-      <AreaChart data={rows} margin={MARGIN}>
+      <AreaChart data={rows} margin={MARGIN} {...click}>
         {axes}
         {series.map((descriptor) => (
           <Area
@@ -201,7 +233,8 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean) {
   }
 
   return (
-    <BarChart data={rows} margin={MARGIN} layout={sideways ? 'vertical' : 'horizontal'}>
+    <BarChart data={rows} margin={MARGIN} layout={sideways ? 'vertical' : 'horizontal'}
+              {...click}>
       {axes}
       {series.map((descriptor) => (
         <Bar

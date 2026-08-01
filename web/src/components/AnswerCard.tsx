@@ -13,7 +13,10 @@ import { IconEmptyChart, IconInfo, IconQuestion, IconShield } from './Icons'
 
 type Props = {
   card: Card
-  /** Lets suggestion and candidate chips put a new question into the chat. */
+  /**
+   * Puts a new question into the chat. Used by the suggestion and candidate chips, and by the
+   * chart marks and table rows — every number on the card is the start of a question.
+   */
   onAsk?: (question: string) => void
   onDelete?: (cardId: string) => void
   savable?: boolean
@@ -88,12 +91,14 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
                 columns={result.data.columns}
                 rows={result.data.rows}
                 height={height}
+                onAsk={onAsk}
               />
             ) : (
               <DataTable
                 columns={result.data.columns}
                 rows={result.data.rows}
                 caption={card.chart.title}
+                onAsk={onAsk}
               />
             ))}
           {result.data?.truncated && (

@@ -2,17 +2,32 @@
 
 import type { Kpi } from '../types'
 import { formatDelta, formatKpiValue } from '../lib/format'
+import { kpiQuestion } from '../lib/questions'
 import { IconArrowDown, IconArrowUp, IconMinus } from './Icons'
 
-export function KpiTile({ kpi }: { kpi: Kpi }) {
+export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) => void }) {
   const delta = formatDelta(kpi.delta_pct, kpi.delta_label, kpi.unit)
+  const question = kpiQuestion(kpi)
 
   return (
     <div className="rounded-tile bg-surface p-5 shadow-card ring-hairline sm:p-6">
       <p className="text-xs font-medium text-ink-secondary">{kpi.label}</p>
-      <p className="tabular mt-3 text-2xl font-semibold tracking-tight text-ink">
-        {formatKpiValue(kpi.value, kpi.unit)}
-      </p>
+      {/* The number is the control: click it and the chat opens on the question it raises.
+          A real button, so it is reachable by keyboard as well as by mouse. */}
+      {onAsk ? (
+        <button
+          type="button"
+          onClick={() => onAsk(question)}
+          aria-label={question}
+          className="tabular mt-3 block text-2xl font-semibold tracking-tight text-ink underline-offset-4 transition-colors duration-200 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          {formatKpiValue(kpi.value, kpi.unit)}
+        </button>
+      ) : (
+        <p className="tabular mt-3 text-2xl font-semibold tracking-tight text-ink">
+          {formatKpiValue(kpi.value, kpi.unit)}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         {delta ? (

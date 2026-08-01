@@ -1,15 +1,19 @@
 import type { Column, ResultRow } from '../types'
 import { formatCell } from '../lib/format'
+import { pointQuestion } from '../lib/questions'
 
 /** The table view every chart can fall back to. */
 export function DataTable({
   columns,
   rows,
   caption,
+  onAsk,
 }: {
   columns: Column[]
   rows: ResultRow[]
   caption?: string
+  /** Makes the first column ask about its row — the keyboard path to the chart's click. */
+  onAsk?: (question: string) => void
 }) {
   return (
     <div className="quiet-scroll -mx-1 overflow-x-auto px-1">
@@ -45,7 +49,11 @@ export function DataTable({
                       : 'tabular text-right text-ink-secondary'
                   }`}
                 >
-                  {formatCell(row[column.key] ?? null, column)}
+                  {index === 0 && onAsk ? (
+                    <AskCell column={column} value={row[column.key] ?? null} onAsk={onAsk} />
+                  ) : (
+                    formatCell(row[column.key] ?? null, column)
+                  )}
                 </td>
               ))}
             </tr>
@@ -53,5 +61,29 @@ export function DataTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+function AskCell({
+  column,
+  value,
+  onAsk,
+}: {
+  column: Column
+  value: string | number | null
+  onAsk: (question: string) => void
+}) {
+  const text = formatCell(value, column)
+  if (value === null || value === '') return <>{text}</>
+  const question = pointQuestion(column, String(value))
+  return (
+    <button
+      type="button"
+      onClick={() => onAsk(question)}
+      aria-label={question}
+      className="text-left underline-offset-4 transition-colors duration-200 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+    >
+      {text}
+    </button>
   )
 }

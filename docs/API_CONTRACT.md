@@ -126,6 +126,7 @@ type Kpi = {
   delta_pct: number | null   // vs same period last year; percentage *points* when unit is "%"
   delta_label: string | null // "vs föregående år"
   rank_label: string | null  // "#2 av 6 varumärken"
+  spark: number[]            // the measure over the period's own grain, oldest first; [] if none
 }
 ```
 

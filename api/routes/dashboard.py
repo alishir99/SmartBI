@@ -61,7 +61,9 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
         totals, trend, top_products, by_region, share = await asyncio.gather(
             _call(mcp, supplier_id, "query_sales", totals_args),
             _call(mcp, supplier_id, "query_sales", {
-                "measures": ["net_sales_sek"],
+                # All three headline measures, so the KPI sparklines cost no extra query. The
+                # trend card charts the first of them; `propose_chart` picks measures[0].
+                "measures": ["net_sales_sek", "units", "avg_price_sek"],
                 "dimensions": [settings["grain"]],
                 "time_range": window,
                 # Same rule as the KPI row: a comparison only where the window has an honest
@@ -103,7 +105,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     }
 
     return DashboardResponse(
-        kpis=_kpis(totals, share),
+        kpis=_kpis(totals, share, trend),
         cards=[
             _card(cached["trend"], "Försäljning per månad"),
             _card(cached["top_products"], "Topp 10 produkter"),
@@ -158,15 +160,29 @@ def _weighted_share(rows: list[dict], own_key: str, category_key: str) -> float 
     return round(100 * own / category, 1) if category else None
 
 
-def _kpis(totals: dict, share: dict) -> list[Kpi]:
+def _spark(trend: dict, key: str) -> list[float]:
+    """The measure over the trend's own grain, oldest first.
+
+    Two points are a line, not a shape, so anything shorter is dropped rather than drawn. A
+    period that exists only in the comparison window carries no current value, and is a gap
+    rather than a zero.
+    """
+    values = [float(row[key]) for row in (trend.get("rows") or [])
+              if row.get(key) is not None]
+    return values if len(values) >= 3 else []
+
+
+def _kpis(totals: dict, share: dict, trend: dict | None = None) -> list[Kpi]:
     """The four headline numbers."""
+    trend = trend or {}
     kpis: list[Kpi] = []
 
     net = _first_number(totals, "net_sales_sek")
     if net is not None:
         kpis.append(Kpi(key="net_sales_sek", label="Försäljning", value=net, unit="SEK",
                         delta_pct=_first_number(totals, "net_sales_sek_delta_pct"),
-                        delta_label="vs samma period förra året"))
+                        delta_label="vs samma period förra året",
+                        spark=_spark(trend, "net_sales_sek")))
 
     rows = [r for r in (share.get("rows") or []) if not r.get("suppressed")]
     if rows:
@@ -181,6 +197,8 @@ def _kpis(totals: dict, share: dict) -> list[Kpi]:
                 # Percentage points: the frontend renders a '%' KPI's delta as p.e.
                 delta_pct=None if previous is None else round(current - previous, 1),
                 delta_label="vs samma period förra året",
+                # No sparkline: query_market_share aggregates over the whole window and has no
+                # month dimension, so there is no series to draw without a new tool shape.
                 rank_label=(f"#{best['rank']} av {best['n_brands']} varumärken "
                             f"i {best['subcategory']}")))
 
@@ -188,12 +206,14 @@ def _kpis(totals: dict, share: dict) -> list[Kpi]:
     if units is not None:
         kpis.append(Kpi(key="units", label="Sålda enheter", value=units, unit="st",
                         delta_pct=_first_number(totals, "units_delta_pct"),
-                        delta_label="vs samma period förra året"))
+                        delta_label="vs samma period förra året",
+                        spark=_spark(trend, "units")))
 
     avg_price = _first_number(totals, "avg_price_sek")
     if avg_price is not None:
         kpis.append(Kpi(key="avg_price_sek", label="Snittpris", value=avg_price, unit="SEK",
                         delta_pct=_first_number(totals, "avg_price_sek_delta_pct"),
-                        delta_label="vs samma period förra året"))
+                        delta_label="vs samma period förra året",
+                        spark=_spark(trend, "avg_price_sek")))
 
     return kpis

@@ -132,6 +132,10 @@ class Kpi(BaseModel):
     delta_pct: float | None = None
     delta_label: str | None = None
     rank_label: str | None = None
+    # The measure over the window's own grain, oldest first. An arrow gives direction; this
+    # gives shape — steady growth, one good month, or a trend that has just turned. It carries
+    # no axis and no labels, so it is a shape and never a reading.
+    spark: list[float] = Field(default_factory=list)
 
 
 class DashboardResponse(BaseModel):

@@ -170,6 +170,49 @@ def test_an_empty_totals_payload_yields_no_kpis():
     assert _kpis({"rows": []}, NO_SHARE) == []
 
 
+# --------------------------------------------------------------------------- sparklines
+
+TREND = {"rows": [{"month": "2026-01-01", "net_sales_sek": 10.0, "units": 1,
+                   "avg_price_sek": 10.0},
+                  {"month": "2026-02-01", "net_sales_sek": 30.0, "units": 3,
+                   "avg_price_sek": 10.0},
+                  {"month": "2026-03-01", "net_sales_sek": 20.0, "units": 2,
+                   "avg_price_sek": 10.0}]}
+
+
+def test_each_measure_gets_its_own_series_in_row_order():
+    kpis = {k.key: k for k in _kpis(TOTALS, NO_SHARE, TREND)}
+
+    assert kpis["net_sales_sek"].spark == [10.0, 30.0, 20.0]
+    assert kpis["units"].spark == [1.0, 3.0, 2.0]
+
+
+def test_a_period_missing_from_the_current_window_is_a_gap_not_a_zero():
+    """Under compare_to the outer join yields rows that exist only in the earlier window."""
+    trend = {"rows": TREND["rows"] + [{"month": None, "net_sales_sek": None, "units": None}]}
+
+    kpis = {k.key: k for k in _kpis(TOTALS, NO_SHARE, trend)}
+
+    assert kpis["net_sales_sek"].spark == [10.0, 30.0, 20.0]
+
+
+def test_two_points_are_a_line_not_a_shape_and_are_dropped():
+    trend = {"rows": TREND["rows"][:2]}
+
+    assert _kpis(TOTALS, NO_SHARE, trend)[0].spark == []
+
+
+def test_no_trend_leaves_every_tile_without_a_sparkline():
+    assert all(k.spark == [] for k in _kpis(TOTALS, NO_SHARE))
+
+
+def test_the_share_tile_carries_no_sparkline():
+    """query_market_share has no month dimension, so there is no series to draw."""
+    share = {"rows": [share_row("Bruksbo", 10, own=300.0, category=1000.0)]}
+
+    assert share_kpi(_kpis(TOTALS, share, TREND)).spark == []
+
+
 # ------------------------------------------------------------------------- the tiles
 
 def test_a_tile_carries_no_hardcoded_period_subtitle():

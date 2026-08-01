@@ -102,6 +102,8 @@ export type Kpi = {
   delta_pct: number | null
   delta_label: string | null
   rank_label: string | null
+  /** The measure over the period's own grain, oldest first. Empty when there is no series. */
+  spark: number[]
 }
 
 export type DashboardResponse = {

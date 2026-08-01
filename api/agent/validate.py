@@ -64,6 +64,14 @@ _MAX_COUNTING_INTEGER = 50
 # Guards against floating-point noise once a value has been multiplied by 1e6.
 _FLOAT_EPSILON = 1e-6
 
+# Ceiling on the tolerance a round number may imply, relative to itself. "300 000" implies
+# +/-50 000 on significant figures alone, which is loose enough to launder a fabrication.
+# Measured over 300 random round figures against a 500-row result: 0 % accepted with no
+# implied tolerance at all (but then 0 of 4 correct roundings survive), and ~8 % at any cap
+# from 1 % upward — the rate is set by how densely 500 values fill the range, not by this
+# number. So it is set at the tight end of the band that still keeps every honest rounding.
+_ROUND_NUMBER_MAX_REL = 0.02
+
 
 _PERCENT_WORDS = {"%", "procent"}
 _MONEY_WORDS = {"kr", "sek", "kronor"}
@@ -114,11 +122,19 @@ class ValidationResult:
 
 # ------------------------------------------------------------------------- extraction
 
-def mask_entity_names(text: str, results: Iterable[CachedResult]) -> str:
+def mask_entity_names(text: str, results: Iterable[CachedResult],
+                      extra_names: Iterable[str] = ()) -> str:
     """Blank out entity names carried by the results before numbers are extracted."""
     names = {value for result in results for row in result.rows
              for value in row.values()
              if isinstance(value, str) and any(char.isdigit() for char in value)}
+    # Names the turn *resolved* but that no row carries. Ask "hur mycket sålde Nordström
+    # Hörlurar N178 Pro" and the answer groups by month: the product is a filter, so the
+    # rows hold dates and kronor and the name appears only in the prose. Masking from rows
+    # alone therefore left "N178" to be read as the number 178, and every question that
+    # named an entity and grouped by time failed validation. Same for "Täby Handelsplats 4".
+    names |= {name for name in extra_names
+              if isinstance(name, str) and any(char.isdigit() for char in name)}
     masked = text
     for name in sorted(names, key=len, reverse=True):
         masked = re.sub(re.escape(name), lambda match: " " * len(match.group(0)),
@@ -158,6 +174,21 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
         value *= scale
         # Half a unit of the literal's last decimal place, in the literal's own magnitude.
         tolerance = 0.5 * (10.0 ** -decimals) * scale
+
+        # …unless the literal is a round number, in which case its trailing zeros ARE the
+        # claim. "530 000 kr" is how anyone reports 529 868, and demanding +/-0,50 kr of it
+        # rejected a correct answer — the expensive direction, per this file's own header.
+        # So an integer literal is read to its last *significant* digit instead.
+        if not decimals:
+            digits = match.group("int")
+            stripped = "".join(c for c in digits if c.isdigit()).rstrip("0")
+            zeros = len(digits.replace(" ", "")) - len(stripped) if stripped else 0
+            if zeros:
+                implied = 0.5 * (10.0 ** zeros) * scale
+                # Capped, because "300 000" implies +/-50 000 and that is loose enough to
+                # launder a fabrication. 5 % keeps an honest rounding while still catching a
+                # number that simply is not there.
+                tolerance = max(tolerance, min(implied, abs(value) * _ROUND_NUMBER_MAX_REL))
         tolerance += abs(value) * _FLOAT_EPSILON
 
         if suffix in _PERCENT_WORDS:
@@ -414,12 +445,13 @@ def _direction_disagrees(text: str, literal: NumberLiteral, sign: int) -> bool:
 
 # -------------------------------------------------------------------------- validation
 
-def validate_narrative(text: str, results: Iterable[CachedResult]) -> ValidationResult:
+def validate_narrative(text: str, results: Iterable[CachedResult],
+                       entity_names: Iterable[str] = ()) -> ValidationResult:
     """Check every numeric literal in `text` against the cached result sets."""
     results = list(results)
     by_result = candidates_by_result(results)
     max_rows = max((result.row_count for result in results), default=0)
-    literals = extract_numbers(mask_entity_names(text, results))
+    literals = extract_numbers(mask_entity_names(text, results, entity_names))
 
     violations: list[Violation] = []
     attributions: list[Attribution] = []

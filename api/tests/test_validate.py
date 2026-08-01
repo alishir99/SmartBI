@@ -354,3 +354,74 @@ def test_a_superlative_about_an_entity_not_in_the_result_stays_silent():
 def test_mentioning_a_product_without_a_superlative_is_not_a_winner_claim():
     assert validate_narrative(
         "Vidar Hörlurar V191 Studio sålde för 4 251 150,76 kr.", [TOP_THREE]).ok
+
+
+# --------------------------------------- names the turn resolved but no row carries
+
+def test_a_resolved_name_is_masked_even_when_no_row_carries_it():
+    """The regression that failed five golden cases at once.
+
+    Ask "hur mycket sålde Nordström Hörlurar N178 Pro" and the answer groups by month: the
+    product is a *filter*, so the rows hold dates and kronor and the name appears only in
+    the prose. Masking from rows alone therefore left "N178" to be read as the number 178,
+    and every question that named an entity and grouped by time had its answer suppressed.
+    """
+    by_month = result([{"month": "2026-01-01", "net_sales_sek": 3_120_450.25}])
+
+    assert not validate_narrative(
+        "Nordström Hörlurar N178 Pro sålde för 3 120 450,25 kr.", [by_month]).ok
+
+    check = validate_narrative(
+        "Nordström Hörlurar N178 Pro sålde för 3 120 450,25 kr.", [by_month],
+        ["Nordström Hörlurar N178 Pro"])
+    assert check.ok, check.violations
+
+
+def test_a_resolved_store_name_ending_in_a_digit_is_masked():
+    """"Täby Handelsplats 4" put a bare "4" in the prose, which then had to be found in the
+    result. The trailing digit is part of the name, not a count."""
+    by_month = result([{"month": "2026-01-01", "net_sales_sek": 500_000.00}])
+    check = validate_narrative(
+        "Täby Handelsplats 4 omsatte 500 000,00 kr.", [by_month], ["Täby Handelsplats 4"])
+    assert check.ok, check.violations
+
+
+def test_masking_a_resolved_name_still_does_not_excuse_a_fabricated_figure():
+    """The mask must not become a hole: only the name is blanked, never a number beside it."""
+    by_month = result([{"month": "2026-01-01", "net_sales_sek": 3_120_450.25}])
+    check = validate_narrative(
+        "Nordström Hörlurar N178 Pro sålde för 9 999 999,00 kr.", [by_month],
+        ["Nordström Hörlurar N178 Pro"])
+    assert not check.ok
+    assert check.violations[0].literal == "9 999 999,00 kr"
+
+
+# ------------------------------------------------- round numbers carry their own precision
+
+ROUNDED = result(
+    [{"month": "2024-12-01", "net_sales_sek": 529_867.69},
+     {"month": "2025-01-01", "net_sales_sek": 300_169.82},
+     {"month": "2025-02-01", "net_sales_sek": 231_060.87}])
+
+
+@pytest.mark.parametrize("prose", [
+    "Toppmånaden gav 530 000 kr.",
+    "Januari gav 300 000 kronor.",
+    "Februari låg på 230 000 kr.",
+])
+def test_a_correct_rounding_is_not_a_fabrication(prose):
+    """"530 000 kr" is how anyone reports 529 868, and the tolerance rule — half the last
+    decimal place — demanded +/-0,50 kr of it. Two golden cases had their prose suppressed
+    for being accurate, which is the expensive direction of this trade."""
+    assert validate_narrative(prose, [ROUNDED]).ok
+
+
+def test_a_round_number_that_is_simply_wrong_is_still_caught():
+    """The loosening is bounded: trailing zeros widen the window, they do not remove it."""
+    assert not validate_narrative("Toppmånaden gav 900 000 kr.", [ROUNDED]).ok
+
+
+def test_full_precision_still_gets_full_precision():
+    """A literal with no trailing zeros claims every digit, and is held to all of them."""
+    assert validate_narrative("Toppmånaden gav 529 867,69 kr.", [ROUNDED]).ok
+    assert not validate_narrative("Toppmånaden gav 529 999,00 kr.", [ROUNDED]).ok

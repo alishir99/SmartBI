@@ -102,6 +102,10 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
     # Every result this turn produced, in order.
     produced: list[CachedResult] = []
+    # Labels resolve_entities handed back. They are not rows, so nothing caches them, but the
+    # model quotes them in the prose and Swedish SKUs carry model numbers — see
+    # mask_entity_names.
+    resolved: list[str] = []
     calls = 0
     rounds = 0
     usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
@@ -175,6 +179,9 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         continue
 
                     content = payload
+                    if use.name == "resolve_entities":
+                        resolved += [str(m.get("label")) for m in payload.get("matches") or []
+                                     if m.get("label")]
                     if use.name in ROW_TOOLS:
                         cached = cache.put(from_tool_result(
                             supplier_id=supplier_id, tool=use.name,
@@ -208,7 +215,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             # Validation is gated on tool data existing, not on the model's own status field.
             if produced:
                 yield StatusEvent(message="Kontrollerar siffrorna mot datan…")
-                check = validate_narrative(narrative, produced)
+                check = validate_narrative(narrative, produced, resolved)
 
                 if not check.ok:
                     logger.warning("numeric validation failed", extra={
@@ -235,7 +242,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     result = _result_for(envelope, produced)
 
                     # One retry only.
-                    check = validate_narrative(narrative, produced)
+                    check = validate_narrative(narrative, produced, resolved)
                     if not check.ok:
                         status = "validation_failed"
 

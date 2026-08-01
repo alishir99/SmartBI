@@ -1,6 +1,13 @@
 /** The frame: navigation on the left, content in the middle, chat on the right. */
 
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { navigate, type Route } from '../lib/router'
 import { useAuthStore } from '../lib/auth'
 import { useChatStore } from '../lib/chat'
@@ -30,8 +37,42 @@ const NAV: NavItem[] = [
 /** Tailwind's default `xl`, where the chat rail becomes permanent. */
 const RAIL_BREAKPOINT = '(min-width: 1280px)'
 
+/** The rail's width in px: default 26rem, narrow enough to still read, wide enough for a chart. */
+const RAIL_DEFAULT = 416
+const RAIL_MIN = 320
+const RAIL_MAX = 720
+const RAIL_KEY = 'solvigo.rail'
+
+function clampRail(px: number): number {
+  return Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)))
+}
+
+function useRailWidth(): [number, (px: number) => void] {
+  const [width, set] = useState(() => {
+    try {
+      return clampRail(Number(localStorage.getItem(RAIL_KEY)) || RAIL_DEFAULT)
+    } catch {
+      // Private mode or a blocked origin — the default is a fine answer.
+      return RAIL_DEFAULT
+    }
+  })
+  return [
+    width,
+    (px: number) => {
+      const next = clampRail(px)
+      set(next)
+      try {
+        localStorage.setItem(RAIL_KEY, String(next))
+      } catch {
+        // Not being able to persist the choice must not stop it taking effect.
+      }
+    },
+  ]
+}
+
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false)
+  const [railWidth, setRailWidth] = useRailWidth()
   const turnCount = useChatStore((state) => state.turns.length)
   const seenTurns = useRef(turnCount)
 
@@ -54,10 +95,12 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   }, [chatOpen])
 
   return (
-    <div className="flex min-h-screen bg-page">
+    // `--rail` rather than an inline width: the rail only exists from xl up, and keeping the
+    // breakpoint in the class list is what stops the custom width leaking into the slide-over.
+    <div className="flex min-h-screen bg-page" style={{ '--rail': `${railWidth}px` } as CSSProperties}>
       <Sidebar route={route} />
 
-      <div className="min-w-0 flex-1 xl:mr-[26rem]">
+      <div className="min-w-0 flex-1 xl:mr-[var(--rail)]">
         <MobileBar route={route} />
         <main id="main" tabIndex={-1} className="px-5 py-6 outline-none sm:px-8 sm:py-8">
           {children}
@@ -65,7 +108,8 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       </div>
 
       {/* Permanent rail from xl up. */}
-      <aside className="fixed right-0 top-0 hidden h-screen w-[26rem] border-l border-hairline xl:block">
+      <aside className="fixed right-0 top-0 hidden h-screen w-[var(--rail)] border-l border-hairline xl:block">
+        <RailHandle width={railWidth} onResize={setRailWidth} />
         <ChatPanel />
       </aside>
 
@@ -98,6 +142,40 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         Fråga datan
       </Button>
     </div>
+  )
+}
+
+/**
+ * The drag edge between the page and the chat rail — the ARIA window-splitter pattern, so it
+ * works from the keyboard too rather than being a mouse-only affordance.
+ */
+function RailHandle({ width, onResize }: { width: number; onResize: (px: number) => void }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Ändra chattens bredd"
+      aria-valuenow={width}
+      aria-valuemin={RAIL_MIN}
+      aria-valuemax={RAIL_MAX}
+      tabIndex={0}
+      // Dragging leftwards widens the rail, so the width is the distance from the right edge.
+      onPointerDown={(event) => {
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+        onResize(window.innerWidth - event.clientX)
+      }}
+      onKeyDown={(event) => {
+        const step = event.key === 'ArrowLeft' ? 24 : event.key === 'ArrowRight' ? -24 : 0
+        if (!step) return
+        event.preventDefault()
+        onResize(width + step)
+      }}
+      className="absolute left-0 top-0 z-10 h-full w-2 -translate-x-1/2 cursor-col-resize touch-none transition-colors duration-200 hover:bg-accent/40 focus-visible:bg-accent/60 focus-visible:outline-none"
+    />
   )
 }
 

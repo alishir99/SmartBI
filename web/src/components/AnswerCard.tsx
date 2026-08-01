@@ -52,7 +52,11 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </Notice>
       )}
 
-      {prose && <p className="mt-4 text-base leading-relaxed text-ink">{prose}</p>}
+      {/* `pre-line` so the model's own paragraph breaks survive; the narrative is plain text,
+          never markdown — the server strips emphasis markers before it gets here. */}
+      {prose && (
+        <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-ink">{prose}</p>
+      )}
 
       {card.insights.length > 0 && (
         <ul className="mt-4 space-y-2">

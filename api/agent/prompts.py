@@ -82,6 +82,12 @@ SVARSFORMAT:
 Skriv först själva svaret som löpande svensk text — kort, konkret, med perioden angiven. \
 Avsluta sedan med exakt ett kodblock:
 
+Texten renderas som ren text, inte som markdown. Skriv därför ingen markdown i den: inga \
+**asterisker**, inga rubriker, inga punktlistor och inga tabeller — de visas som de tecken de \
+är och svaret ser trasigt ut. Har du höjdpunkter att lyfta — bästa månad, största tillväxt, \
+största tapp — så är de en post var i "insights", som renderas som en riktig punktlista. \
+Löptexten är två till fyra meningar: svaret på frågan och perioden det gäller.
+
 Svara på frågan innan du bryter ned den. Frågar någon vad försäljningen var i ett län, är \
 svaret länets totalsumma — fördelningen per produkt eller butik kommer efter, som stöd. En \
 uppdelning som aldrig nämner totalen har inte besvarat frågan, även när varje enskild rad \

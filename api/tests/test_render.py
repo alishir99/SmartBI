@@ -8,6 +8,7 @@ from api.agent.render import (
     presentable_row,
     propose_chart,
     split_answer,
+    strip_markdown,
     to_columns,
     validate_chart,
 )
@@ -129,7 +130,18 @@ def test_a_malformed_override_does_not_lose_the_answer():
                       envelope={"chart": {"type": "sunburst", "title": "Nej"}})
     assert card.chart is not None and card.chart.type == "bar"
     assert card.narrative == "Svar."
-    assert any("ogiltigt" in c for c in card.caveats)
+    assert card.caveats == ["Visar som stapeldiagram — den föreslagna vyn passade inte datan."]
+
+
+def test_a_rejected_override_keeps_validator_vocabulary_off_the_card():
+    """`chart.y`, 'id eller en flagga' and friends belong in the log, not on a card."""
+    result = make([PRODUCT, MEASURE], [{"product": "A", "net_sales_sek": 1.0}])
+    card = build_card(result=result, narrative="Svar.",
+                      envelope={"chart": {"type": "bar", "x": "product", "y": ["product"],
+                                          "title": "Bakvänt"}})
+    joined = " ".join(card.caveats)
+    assert "chart." not in joined and "mätvärde" not in joined
+    assert "passade inte datan" in joined
 
 
 # ------------------------------------------------------------------ answer envelope
@@ -153,6 +165,20 @@ def test_a_missing_block_still_yields_the_prose():
     narrative, envelope = split_answer("Bara text, inget block.")
     assert narrative == "Bara text, inget block."
     assert envelope == {}
+
+
+def test_markdown_emphasis_is_stripped_from_the_prose():
+    """The card renders text, not markdown — a literal ** reads as broken."""
+    narrative, _ = split_answer(
+        'Totalt: **49 360 103 kronor**, mot __43 656 312__ kronor.\n'
+        '```json\n{"status": "ok"}\n```')
+    assert "*" not in narrative and "_" not in narrative
+    assert "49 360 103 kronor" in narrative
+
+
+def test_stripping_leaves_lone_markers_alone():
+    """Unpaired markers are punctuation in someone's product name, not formatting."""
+    assert strip_markdown("Modell A**") == "Modell A**"
 
 
 def test_malformed_json_does_not_raise():

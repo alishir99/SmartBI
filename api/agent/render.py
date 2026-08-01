@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Sequence
 from typing import Any, cast
@@ -20,20 +21,32 @@ from ..models import (
 from ..result_cache import CachedResult
 from .validate import Attribution
 
+logger = logging.getLogger(__name__)
+
 # The model is told to end with exactly one ```json block.
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
 _FALLBACK_TITLE = "Resultat"
+
+# The card renders the narrative as text, not as markdown. The prompt says so; this is the
+# belt-and-braces, because a stray ** reads as broken to the user and glues itself to the
+# number the validator is trying to match.
+_EMPHASIS = re.compile(r"(\*\*|__)(\S.*?\S|\S)\1", re.DOTALL)
+
+
+def strip_markdown(text: str) -> str:
+    """Drop emphasis markers the model was told not to emit."""
+    return _EMPHASIS.sub(r"\2", text)
 
 
 def split_answer(text: str) -> tuple[str, dict[str, Any]]:
     """Separate the Swedish prose from the JSON envelope."""
     blocks = list(_JSON_BLOCK.finditer(text))
     if not blocks:
-        return text.strip(), {}
+        return strip_markdown(text.strip()), {}
 
     last = blocks[-1]
-    narrative = (text[: last.start()] + text[last.end():]).strip()
+    narrative = strip_markdown((text[: last.start()] + text[last.end():]).strip())
     try:
         envelope = json.loads(last.group(1))
     except json.JSONDecodeError:
@@ -223,7 +236,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
                status: str = "ok", produced: Sequence[CachedResult] = (),
                attributions: Sequence[Attribution] = ()) -> AnswerCard:
     """Assemble the card."""
-    caveats = [str(c) for c in (envelope.get("caveats") or [])]
+    caveats = [strip_markdown(str(c)) for c in (envelope.get("caveats") or [])]
     claims = [Claim(literal=a.literal, query_id=a.query_id) for a in attributions]
 
     if result is None:
@@ -233,7 +246,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
             status = "cannot_answer"
         return AnswerCard(
             status=cast(CardStatus, status), narrative=narrative,
-            insights=[str(i) for i in (envelope.get("insights") or [])],
+            insights=[strip_markdown(str(i)) for i in (envelope.get("insights") or [])],
             caveats=caveats,
             sources=build_sources(produced, None),
             claims=claims,
@@ -245,14 +258,19 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
     if isinstance(envelope.get("chart"), dict):
         try:
             override = ChartSpec.model_validate(envelope["chart"])
-        except Exception:  # noqa: BLE001 — a bad spec must not lose a good answer
-            caveats.append("Diagramförslaget från modellen var ogiltigt; "
-                           "servern valde diagramtyp utifrån resultatets form.")
+        except Exception as exc:  # noqa: BLE001 — a bad spec must not lose a good answer
+            logger.info("", extra={"event": "chart.override", "reason": "schema",
+                                   "problems": [str(exc)[:300]], "chart_type": chart.type})
+            caveats.append(_override_caveat(chart))
         else:
             chart, problems = validate_chart(override, result)
             if problems:
-                caveats.append("Diagramförslaget avvisades (" + "; ".join(problems)
-                               + "); servern valde utifrån resultatets form istället.")
+                # `problems` is validator vocabulary — column keys, axis rules. It belongs in
+                # the log, where someone can act on it, not on a retailer's card.
+                logger.info("", extra={"event": "chart.override", "reason": "invalid",
+                                       "problems": problems, "proposed_type": override.type,
+                                       "chart_type": chart.type})
+                caveats.append(_override_caveat(chart))
 
     if status == "validation_failed":
         caveats.insert(0, "Svarstexten kunde inte verifieras mot datan och har därför "
@@ -262,7 +280,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
         status=cast(CardStatus, status),
         narrative="" if status == "validation_failed" else narrative,
         insights=([] if status == "validation_failed"
-                  else [str(i) for i in (envelope.get("insights") or [])]),
+                  else [strip_markdown(str(i)) for i in (envelope.get("insights") or [])]),
         caveats=caveats,
         chart=chart,
         query_id=result.query_id,
@@ -273,6 +291,19 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
         claims=[] if status == "validation_failed" else claims,
         suggestions=[str(s) for s in (envelope.get("suggestions") or [])],
     )
+
+
+_CHART_WORD = {"line": "linjediagram", "bar": "stapeldiagram",
+               "stacked_bar": "staplat stapeldiagram", "area": "ytdiagram",
+               "pie": "cirkeldiagram", "table": "tabell"}
+
+
+def _override_caveat(chart: ChartSpec) -> str:
+    """What the user is told when the server picked the chart instead of the model."""
+    if chart.type == "kpi":
+        return "Resultatet är ett enda tal — den föreslagna vyn passade inte datan."
+    word = _CHART_WORD.get(chart.type, "diagram")
+    return f"Visar som {word} — den föreslagna vyn passade inte datan."
 
 
 def _title(envelope: dict[str, Any]) -> str | None:

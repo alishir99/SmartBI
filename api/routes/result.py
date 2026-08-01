@@ -8,9 +8,9 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
-from ..agent.render import presentable_columns, presentable_row
+from ..agent.render import presentable_row, to_columns
 from ..deps import ScopedTenant, get_cache, get_supplier_scope
-from ..models import Column, ResultPage
+from ..models import ResultPage
 from ..result_cache import ResultCache
 
 router = APIRouter(prefix="/api", tags=["result"])
@@ -35,13 +35,11 @@ async def get_result(query_id: str,
                      cache: ResultCache = Depends(get_cache)) -> ResultPage:
     result = _lookup(query_id, tenant, cache)
     page = result.rows[offset:offset + limit]
-    # The same filter the card and the chart use.
-    columns = presentable_columns(result)
     return ResultPage(
         query_id=result.query_id,
-        columns=[Column(key=c["key"], type=c.get("type", "text"),
-                        label=c.get("label", c["key"]), unit=c.get("unit"))
-                 for c in columns],
+        # `to_columns`, not a second copy of it: this is where the chart reads its legend, so a
+        # label built differently here is a label that disagrees with the card's own table.
+        columns=to_columns(result),
         rows=[presentable_row(row) for row in page],
         row_count=result.row_count,
         truncated=offset + len(page) < len(result.rows),
@@ -54,16 +52,16 @@ async def export_csv(query_id: str,
                      cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     result = _lookup(query_id, tenant, cache)
     # An export is the most likely thing to be forwarded to someone who never saw the app, so it
-    # is the worst place for internal columns — same filter as the table view.
-    columns = presentable_columns(result)
-    keys = [c["key"] for c in columns]
+    # is the worst place for internal columns, and the worst place for a header that says
+    # "(jämförelse)" without saying which period. Same columns as the table view.
+    columns = to_columns(result)
 
     buffer = io.StringIO()
     # Semicolon delimiter and comma decimals: what Excel in a sv-SE locale expects.
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-    writer.writerow([c.get("label", c["key"]) for c in columns])
+    writer.writerow([c.label for c in columns])
     for row in result.rows:
-        writer.writerow([_sv(row.get(key)) for key in keys])
+        writer.writerow([_sv(row.get(c.key)) for c in columns])
 
     filename = f"solvigo-{result.tool}-{query_id}.csv"
     return StreamingResponse(

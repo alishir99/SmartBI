@@ -124,7 +124,10 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
         kpis=_kpis(totals, share, trend, delta_label),
         cards=[
             _card(cached["trend"], "Försäljning per månad",
-                  markers=campaign_markers(cached["trend"], capabilities)),
+                  markers=campaign_markers(cached["trend"], capabilities),
+                  # One control, one meaning: if the tiles cannot honestly show the comparison,
+                  # the chart must not draw it either.
+                  overlay=comparison_is_covered(totals)),
             _card(cached["top_products"], "Topp 10 produkter"),
             _card(cached["by_region"], "Försäljning per län"),
         ],
@@ -256,7 +259,8 @@ def _day_before(iso: str) -> str:
         return iso
 
 
-def _card(result, title: str, markers: list[str] | None = None) -> AnswerCard:
+def _card(result, title: str, markers: list[str] | None = None,
+          overlay: bool = True) -> AnswerCard:
     """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
     (§2).
 
@@ -264,6 +268,9 @@ def _card(result, title: str, markers: list[str] | None = None) -> AnswerCard:
     tool actually ran. A literal here goes stale the moment the user picks another period.
     """
     chart = render.propose_chart(result, title=title)
+    if not overlay:
+        chart = chart.model_copy(update={
+            "y": [key for key in chart.y if not key.endswith("_compare")]})
     if markers:
         chart = chart.model_copy(update={"markers": markers,
                                          "marker_label": CAMPAIGN_MARKER_LABEL})
@@ -313,16 +320,41 @@ def _spark(trend: dict, key: str) -> list[float]:
     return values if len(values) >= 3 else []
 
 
+def comparison_is_covered(totals: dict) -> bool:
+    """Is the comparison window actually inside the data?
+
+    `all_time` against "samma period förra året" reaches back a year before the warehouse
+    begins, so half the comparison is missing and the tile reads +113 % for a business that
+    did not double. The user chose the basis, but they cannot see that the window they chose
+    falls off the end of the data, so this one is ours to catch rather than theirs.
+    """
+    meta = totals.get("meta") or {}
+    compare = meta.get("compare_range") or {}
+    coverage = meta.get("coverage") or {}
+    if not compare.get("from") or not coverage.get("from"):
+        # No comparison was asked for, or no coverage to check it against.
+        return True
+    return str(compare["from"]) >= str(coverage["from"])
+
+
 def _kpis(totals: dict, share: dict, trend: dict | None = None,
           delta_label: str | None = BASES[DEFAULT_BASIS]) -> list[Kpi]:
     """The four headline numbers. `delta_label` names the basis every delta is measured on."""
     trend = trend or {}
     kpis: list[Kpi] = []
 
+    # A delta measured against a window the data does not cover is worse than no delta: it is
+    # a number, so it will be read as one.
+    covered = comparison_is_covered(totals)
+    delta_label = delta_label if covered else None
+
+    def delta(key: str) -> float | None:
+        return _first_number(totals, key) if covered else None
+
     net = _first_number(totals, "net_sales_sek")
     if net is not None:
         kpis.append(Kpi(key="net_sales_sek", label="Försäljning", value=net, unit="SEK",
-                        delta_pct=_first_number(totals, "net_sales_sek_delta_pct"),
+                        delta_pct=delta("net_sales_sek_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "net_sales_sek")))
 
@@ -332,7 +364,7 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
         if current is not None:
             best = min(rows, key=lambda r: r.get("rank") or 99)
             previous = _weighted_share(rows, "own_net_sek_compare",
-                                       "category_net_sek_compare")
+                                       "category_net_sek_compare") if covered else None
             kpis.append(Kpi(
                 key="category_share_pct", label="Andel av kategori",
                 value=current, unit="%",
@@ -347,14 +379,14 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
     units = _first_number(totals, "units")
     if units is not None:
         kpis.append(Kpi(key="units", label="Sålda enheter", value=units, unit="st",
-                        delta_pct=_first_number(totals, "units_delta_pct"),
+                        delta_pct=delta("units_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "units")))
 
     avg_price = _first_number(totals, "avg_price_sek")
     if avg_price is not None:
         kpis.append(Kpi(key="avg_price_sek", label="Snittpris", value=avg_price, unit="SEK",
-                        delta_pct=_first_number(totals, "avg_price_sek_delta_pct"),
+                        delta_pct=delta("avg_price_sek_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "avg_price_sek")))
 

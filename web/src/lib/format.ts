@@ -227,6 +227,25 @@ export function formatTimestamp(iso: string): string {
 
 // --- generic dispatch -------------------------------------------------------
 
+/** `K3 2025`. */
+export function formatQuarter(value: string): string {
+  const p = parseYm(value)
+  if (!p) return value
+  return `K${Math.floor((p.month - 1) / 3) + 1} ${p.year}`
+}
+
+/**
+ * Every date bucket comes back as its first day, so `2025-07-01` is a month under a `month`
+ * grouping and a genuine day under a `day` one: the value alone cannot say which. The column
+ * key can, because it is the dimension key the compiler grouped by, which the API contract
+ * fixes. Without this the trend axis reads "2025-07-01" where it means "jul 2025".
+ */
+const DATE_GRAIN: Record<string, (value: string) => string> = {
+  month: formatMonth,
+  quarter: formatQuarter,
+  week: formatIsoWeek,
+}
+
 /** Format a raw cell according to its column definition. */
 export function formatCell(value: string | number | null, column: Column): string {
   if (value === null || value === undefined || value === '') return '–'
@@ -234,7 +253,9 @@ export function formatCell(value: string | number | null, column: Column): strin
     const s = String(value)
     if (/^\d{4}-W\d{1,2}$/.test(s)) return formatIsoWeek(s)
     if (/^\d{4}-\d{2}$/.test(s)) return formatMonth(s)
-    return formatDateIso(s)
+    // `month_compare` is the same grain as `month`.
+    const grain = DATE_GRAIN[column.key.replace(/_compare$/, '')]
+    return grain ? grain(s) : formatDateIso(s)
   }
   if (column.type === 'number' && typeof value === 'number') {
     switch (column.unit) {

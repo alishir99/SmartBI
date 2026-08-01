@@ -8,7 +8,9 @@ from api.models import (
     AnswerCard,
     CardEvent,
     ChatRequest,
+    Provenance,
     StatusEvent,
+    TimeWindow,
     ToolCallEvent,
     UsageEvent,
 )
@@ -20,8 +22,16 @@ class FakeTenant:
     supplier_id = 1
 
 
+WINDOW = {"from": "2025-07-01", "to": "2026-06-30"}
+
+
 def card() -> AnswerCard:
-    return AnswerCard(title="Mars", status="ok", narrative="Allt väl.", query_id="q_1")
+    return AnswerCard(
+        title="Mars", status="ok", narrative="Allt väl.", query_id="q_1",
+        provenance=Provenance(tool="query_sales", source="mv_sales_daily", scope="supplier:1",
+                              time_range=TimeWindow(**WINDOW), coverage=TimeWindow(**WINDOW),
+                              row_count=3, truncated=False,
+                              executed_at="2026-08-01T10:00:00Z"))
 
 
 async def fake_turn(**_kwargs):
@@ -54,6 +64,25 @@ async def test_usage_is_recorded_but_never_streamed(monkeypatch):
     assert recorded["row_counts"]["cache_read_tokens"] == 1900
     assert recorded["row_counts"]["llm_calls"] == 2
     assert recorded["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_the_stream_spells_time_windows_the_way_every_other_route_does(monkeypatch):
+    """`from` is a Python keyword, so the field is `from_`. Every other producer of an
+    AnswerCard goes through a FastAPI response_model, which serialises by alias; this stream
+    does not, and without `by_alias` the client reads undefined for the start of every
+    window."""
+    async def ignore(**_kwargs):
+        pass
+
+    monkeypatch.setattr(chat_route, "run_turn", fake_turn)
+    monkeypatch.setattr(chat_route.db, "record_turn", ignore)
+
+    wire = "".join([frame async for frame in chat_route._stream(
+        ChatRequest(question="Hur gick mars?"), FakeTenant(), mcp=None, cache=None)])
+
+    assert '"from":"2025-07-01"' in wire.replace(" ", "")
+    assert "from_" not in wire
 
 
 @pytest.mark.asyncio

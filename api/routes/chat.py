@@ -77,7 +77,11 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
             elif isinstance(event, ErrorEvent):
                 status = "error"
 
-            yield f"data: {event.model_dump_json()}\n\n"
+            # `by_alias` is load-bearing: TimeWindow's field is `from_`, because `from` is a
+            # Python keyword, and without this the wire carries `from_` while every other
+            # producer of an AnswerCard - all of which go through a FastAPI response_model -
+            # carries `from`. The client then reads undefined for the start of every window.
+            yield f"data: {event.model_dump_json(by_alias=True)}\n\n"
     except Exception as exc:  # noqa: BLE001 — the client is waiting on this stream
         logger.exception("chat stream failed")
         yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"

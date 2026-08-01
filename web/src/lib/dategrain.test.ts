@@ -1,0 +1,38 @@
+/**
+ * Every date bucket comes back as its first day, so the value alone cannot say whether
+ * `2025-07-01` is a month or a day. The column key can.
+ */
+
+import { describe, expect, it } from 'vitest'
+import type { Column } from '../types'
+import { formatCell } from './format'
+
+const date = (key: string): Column => ({ key, type: 'date', label: key })
+
+describe('date grain', () => {
+  it('reads a month bucket as a month, not as its first day', () => {
+    // The trend axis read "2025-07-01" where it meant "jul 2025".
+    expect(formatCell('2025-07-01', date('month'))).toBe('jul 2025')
+  })
+
+  it('reads a quarter bucket as a quarter', () => {
+    expect(formatCell('2025-07-01', date('quarter'))).toBe('K3 2025')
+    expect(formatCell('2026-01-01', date('quarter'))).toBe('K1 2026')
+  })
+
+  it('reads a week bucket as an ISO week', () => {
+    expect(formatCell('2026-04-02', date('week'))).toContain('v.')
+  })
+
+  it('leaves a day as a date, because that is what it is', () => {
+    expect(formatCell('2025-07-01', date('day'))).toBe('2025-07-01')
+  })
+
+  it('treats a comparison column as the same grain as the column it pairs with', () => {
+    expect(formatCell('2024-07-01', date('month_compare'))).toBe('jul 2024')
+  })
+
+  it('still reads a bare 2026-01 as a month, whatever the column is called', () => {
+    expect(formatCell('2026-01', date('nagot_annat'))).toBe('jan 2026')
+  })
+})

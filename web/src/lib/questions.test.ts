@@ -57,6 +57,10 @@ describe('pointQuestion', () => {
     expect(pointQuestion(MONTH, '2025-11')).toBe('Vad hände i nov 2025?')
   })
 
+  it('asks about the month, not about its first day', () => {
+    expect(pointQuestion(MONTH, '2025-11-01')).toBe('Vad hände i nov 2025?')
+  })
+
   it('asks about the thing, for a category', () => {
     expect(pointQuestion(PRODUCT, 'Nordström TV N100')).toBe(
       'Berätta mer om Nordström TV N100.',

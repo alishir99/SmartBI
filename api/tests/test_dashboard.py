@@ -12,6 +12,7 @@ from api.routes.dashboard import (
     _kpis,
     _movers_card,
     campaign_markers,
+    comparison_is_covered,
 )
 
 TOTALS = {"rows": [{"net_sales_sek": 1_000_000.0, "units": 500, "avg_price_sek": 2000.0,
@@ -243,6 +244,54 @@ def test_no_comparison_leaves_every_tile_without_a_label():
     kpis = _kpis(TOTALS, NO_SHARE, TREND, BASES["none"])
 
     assert all(k.delta_label is None for k in kpis)
+
+
+COVERAGE = {"from": "2024-07-01", "to": "2026-06-30"}
+
+
+def totals(compare_from: str | None) -> dict:
+    meta = {"coverage": COVERAGE,
+            **({"compare_range": {"from": compare_from, "to": "2025-06-30"}}
+               if compare_from else {})}
+    return {**TOTALS, "meta": meta}
+
+
+def test_a_comparison_window_the_data_does_not_reach_shows_no_delta():
+    """`all_time` vs last year reaches a year before the warehouse begins, and the tile read
+    +113 % for a business that did not double."""
+    kpis = _kpis(totals("2023-07-01"), NO_SHARE, TREND)
+
+    assert all(k.delta_pct is None for k in kpis)
+    assert all(k.delta_label is None for k in kpis)
+
+
+def test_a_covered_comparison_window_keeps_its_deltas():
+    assert _kpis(totals("2024-07-01"), NO_SHARE, TREND)[0].delta_pct == 12.5
+
+
+def test_the_share_tile_follows_the_same_coverage_rule():
+    share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
+                               own=250.0, category=1000.0)]}
+
+    assert share_kpi(_kpis(totals("2023-07-01"), share, TREND)).delta_pct is None
+    assert share_kpi(_kpis(totals("2024-07-01"), share, TREND)).delta_pct == 5.0
+
+
+def test_no_comparison_at_all_is_not_an_uncovered_one():
+    """basis=none asks for no window, so there is nothing to be outside coverage."""
+    assert comparison_is_covered(totals(None)) is True
+
+
+def test_the_chart_drops_the_overlay_when_the_tiles_drop_the_delta():
+    """One control, one meaning: no mixed state on screen."""
+    result = trend_result(MONTHS)
+    result.columns.append({"key": "net_sales_sek_compare", "type": "number",
+                           "label": "Netto (jämförelse)", "unit": "SEK"})
+    for row in result.rows:
+        row["net_sales_sek_compare"] = 0.5
+
+    assert _card(result, "Trend").chart.y == ["net_sales_sek", "net_sales_sek_compare"]
+    assert _card(result, "Trend", overlay=False).chart.y == ["net_sales_sek"]
 
 
 def test_the_default_basis_is_one_of_the_offered_bases():

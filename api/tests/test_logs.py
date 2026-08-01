@@ -95,3 +95,41 @@ def test_the_text_formatter_stays_readable():
     record.event = "startup"
     line = logs.TextFormatter().format(record)
     assert "startup" in line and "ready" in line and "\n" not in line
+
+
+# ------------------------------------------------------------------ the trust boundary
+
+def test_free_text_is_reduced_to_a_length_and_a_fingerprint(monkeypatch):
+    """The log is a wider trust boundary than the database. `audit_turn` sits behind RLS
+    with a tenant policy; stdout goes to an aggregator far more people can read, gets pasted
+    into tickets, and outlives the row. So the question stays in the database and the log
+    carries only enough to find it again."""
+    monkeypatch.setattr(logs.settings, "log_sensitive", False)
+    out = logs.redacted("Hur går det för våra hörlurar?", "question")
+
+    assert "question" not in out
+    assert out["question_chars"] == 30
+    assert len(out["question_sha"]) == 12
+
+
+def test_the_fingerprint_is_stable_so_repeats_can_still_be_correlated():
+    assert logs.fingerprint("samma fråga") == logs.fingerprint("samma fråga")
+    assert logs.fingerprint("samma fråga") != logs.fingerprint("annan fråga")
+
+
+def test_sensitive_mode_puts_the_text_back(monkeypatch):
+    """Deliberate, for a local debug run — which is how the two false-reject classes were
+    diagnosed in the first place."""
+    monkeypatch.setattr(logs.settings, "log_sensitive", True)
+    assert logs.redacted("Hur går det?", "question") == {"question": "Hur går det?"}
+
+
+def test_redacting_nothing_adds_nothing(monkeypatch):
+    monkeypatch.setattr(logs.settings, "log_sensitive", False)
+    assert logs.redacted(None, "question") == {}
+
+
+def test_the_default_is_closed():
+    """A privacy default that has to be remembered is a privacy default that fails."""
+    from api.config import Settings
+    assert Settings().log_sensitive is False

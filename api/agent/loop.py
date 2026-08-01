@@ -166,7 +166,8 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         payload = await mcp.call_on(session, use.name, args)
                     except McpToolError as exc:
                         logger.warning("", extra={
-                            "event": "tool.error", "tool": use.name, "tool_args": args,
+                            "event": "tool.error", "tool": use.name,
+                            "arg_keys": sorted(args),
                             "ms": int((time.monotonic() - call_started) * 1000),
                             "error": str(exc)[:300]})
                         # A tool error is usually a spec validation failure, and the message
@@ -196,7 +197,9 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         "content": _dumps(content),
                     })
                     logger.info("", extra={
-                        "event": "tool.call", "tool": use.name, "tool_args": args,
+                        "event": "tool.call", "tool": use.name,
+                        **({"tool_args": args} if settings.log_sensitive
+                           else {"arg_keys": sorted(args)}),
                         "ms": int((time.monotonic() - call_started) * 1000),
                         "row_count": int(payload.get("row_count", 0) or 0),
                         "source": (payload.get("meta") or {}).get("source"),
@@ -221,9 +224,16 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     logger.warning("numeric validation failed", extra={
                         "event": "validate.rejected",
                         "reasons": sorted({v.reason for v in check.violations}),
-                        "literals": [v.literal for v in check.violations],
+                        "rejected": len(check.violations),
                         "checked": check.checked,
-                        "attributed": len(check.attributions)})
+                        "attributed": len(check.attributions),
+                        # The literal is a figure derived from this tenant's rows — for a
+                        # wrong_direction or not_the_argmax rejection it is a REAL value,
+                        # since matching the data is why it was flagged. The reason and the
+                        # counts carry the diagnosis; the values only come along when someone
+                        # deliberately asks for them.
+                        **({"literals": [v.literal for v in check.violations]}
+                           if settings.log_sensitive else {})})
                     yield StatusEvent(message="Skriver om svaret…")
                     messages.append({"role": "assistant", "content": _text_of(response)})
                     messages.append({"role": "user",

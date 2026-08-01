@@ -126,14 +126,29 @@ validate.rejected reasons ["not_in_result"|"wrong_direction"|"not_the_argmax"], 
 turn.end          status, ms, tools, input_tokens, output_tokens, llm_calls
 ```
 
-**Vad som medvetet inte loggas:** inga resultatrader. Produkten bygger på att en leverantör
-inte kan se en annans siffror, och en loggfil som citerar rader vore samma läcka via en
-omväg. Radantal, kolumnnamn och verktygsargument loggas — argumenten är id:n och datum som
-anroparen själv skickade in. Frågetexten loggas, eftersom `audit_turn` redan sparar den
-medvetet (§11.2) och att felsöka ett dåligt svar utan att veta vad som frågades är gissning.
+### Vad som medvetet inte loggas
 
-`audit_turn` är kvar och gör något annat: den är affärsloggen — en rad per turn, i databasen,
-för fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som det blev.
+**Loggen är en bredare förtroendegräns än databasen.** `audit_turn` ligger bakom Postgres RLS
+med en tenant-policy; stdout går till en aggregator som fler personer läser, klistras in i
+ärenden och överlever raden. Därför stannar *värdena* i databasen och loggen bär bara det som
+behövs för att hitta tillbaka:
+
+| Fält | Loggas | Varför |
+|---|---|---|
+| resultatrader | aldrig | En loggfil som citerar rader är samma läcka via en omväg. |
+| frågetext | längd + `sha` (12 tecken) | Fingeravtrycket räcker för att se att samma fråga återkommer och för att joina mot `audit_turn`. Texten själv är fri text — den kan innehålla vad som helst en användare skriver. |
+| avvisade tal | nej, bara `reasons` + antal | Vid `wrong_direction` och `not_the_argmax` är literalen ett *verkligt* värde ur tenantens data — att den matchade datan är ju skälet till att den flaggades. |
+| verktygsargument | bara nycklarna | Värdena namnger produkter, län och perioder som just den leverantören frågade om. |
+| `supplier_id`, `user_id` | ja | Pseudonyma heltal, och hela poängen med att kunna filtrera. Omfattas av retention. |
+| `query_id` | ja | En cache-nyckel, inte en behörighet: `/api/result/{query_id}` är tenant-scopat och svarar 404 över gränsen. |
+| radantal, latens, tokens | ja | Ren metadata. |
+
+`LOG_SENSITIVE=true` lägger tillbaka frågetext, avvisade tal och argumentvärden — för en
+lokal felsökningskörning. Den är avstängd som standard, eftersom ett integritetsskydd man
+måste komma ihåg att slå på är ett integritetsskydd som fallerar.
+
+`audit_turn` gör något annat och finns kvar: affärsloggen — en rad per turn, i databasen, för
+fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som det blev.
 
 ---
 

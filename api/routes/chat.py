@@ -49,8 +49,8 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                   cache: ResultCache) -> AsyncIterator[str]:
     logs.bind(turn_id=logs.new_turn_id(), supplier_id=tenant.supplier_id,
               user_id=tenant.user_id)
-    logger.info("", extra={"event": "turn.start", "question": body.question,
-                           "history_turns": len(body.history)})
+    logger.info("", extra={"event": "turn.start", "history_turns": len(body.history),
+                           **logs.redacted(body.question, "question")})
     started = time.monotonic()
     tool_calls: list[dict] = []
     status = "error"

@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     # docker and Cloud Run both collect stdout, and a file inside a container is a file
     # nobody reads. Set it when running the API directly.
     log_file: str = ""
+    # Opt-in, and off in every environment that is not a laptop. The log is a WIDER trust
+    # boundary than the database: `audit_turn` sits behind Postgres RLS with a tenant policy,
+    # while stdout goes to an aggregator that far more people can read, gets copied into
+    # tickets and survives longer than the row does. So the values a supplier's answer is
+    # made of stay in the database, and the log carries only the keys needed to find them.
+    # Turning this on puts question text and rejected figures back in, for a local debug run.
+    log_sensitive: bool = False
     log_max_bytes: int = 20 * 1024 * 1024
     log_backup_count: int = 5
 

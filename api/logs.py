@@ -27,6 +27,7 @@ debugging a bad answer without knowing what was asked is guesswork.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -40,7 +41,7 @@ from typing import Any
 from .config import settings
 
 __all__ = ["ContextVar", "JsonFormatter", "TextFormatter", "bind", "configure",
-           "new_turn_id", "safe_extra", "timed"]
+           "fingerprint", "new_turn_id", "redacted", "safe_extra", "timed"]
 
 # No mutable default: every reader goes through `_ctx()`, so the empty case is a fresh
 # dict rather than one shared across every request that never bound anything.
@@ -134,6 +135,26 @@ def safe_extra(event: str, **fields: Any) -> dict[str, Any]:
     for key, value in fields.items():
         out[f"{key}_" if key in RESERVED else key] = value
     return out
+
+
+def fingerprint(text: str) -> str:
+    """A stable short hash of free text, for correlating without storing it.
+
+    Enough to answer "is this the same question as the one that failed an hour ago" and to
+    join a log line to its `audit_turn` row, without putting the text itself somewhere it
+    outlives its retention policy.
+    """
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def redacted(text: str | None, field: str = "text") -> dict[str, Any]:
+    """Free text as loggable metadata: length and fingerprint, or the text itself when
+    `log_sensitive` is on."""
+    if text is None:
+        return {}
+    if settings.log_sensitive:
+        return {field: text}
+    return {f"{field}_chars": len(text), f"{field}_sha": fingerprint(text)}
 
 
 def bind(**fields: Any) -> None:

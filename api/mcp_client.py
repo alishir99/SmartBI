@@ -71,6 +71,9 @@ class McpClient:
         self.url = url or settings.mcp_url
         self.internal_token = internal_token or settings.internal_token
         # Tool descriptors are the same for every tenant, so they are fetched once.
+        # ponytail: cached for the process lifetime with no invalidation, so a tool-schema
+        # change needs an API restart. A TTL is the fix if the MCP server ever deploys
+        # independently of this one; in one compose stack they restart together anyway.
         self._tools: list[dict[str, Any]] | None = None
 
     def _headers(self, supplier_id: int) -> dict[str, str]:

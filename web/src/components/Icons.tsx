@@ -194,6 +194,23 @@ export const IconEmptyChart = (p: IconProps) => (
   </Svg>
 )
 
+/** The model. */
+export const IconSparkle = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 2.75 9.4 6.6 13.25 8 9.4 9.4 8 13.25 6.6 9.4 2.75 8 6.6 6.6 8 2.75Z" />
+    <path d="M14.5 12.25l.7 1.55 1.55.7-1.55.7-.7 1.55-.7-1.55-1.55-.7 1.55-.7.7-1.55Z" />
+  </Svg>
+)
+
+/** The MCP boundary: the contract the model has to go through to reach any data. */
+export const IconPlug = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7.5 2.75v3.5M12.5 2.75v3.5" />
+    <path d="M5 6.25h10v2.5a5 5 0 0 1-10 0v-2.5Z" />
+    <path d="M10 13.75v3.5" />
+  </Svg>
+)
+
 /** A small indeterminate spinner for in-flight tool chips. */
 export function Spinner({ className = 'h-3.5 w-3.5' }: IconProps) {
   return (

@@ -22,26 +22,21 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 DEFAULT_PERIOD = "last_12_months"
 
 PERIODS: dict[str, dict] = {
-    "last_7_days":     {"label": "Senaste veckan",     "grain": "day"},
-    "last_30_days":    {"label": "Senaste 30 dagarna", "grain": "day"},
-    "last_90_days":    {"label": "Senaste kvartalet",  "grain": "week"},
-    "last_month":      {"label": "Förra månaden",      "grain": "day"},
-    "ytd":             {"label": "Hittills i år",      "grain": "month"},
-    "last_12_months":  {"label": "Senaste 12 mån",     "grain": "month"},
-    "all_time":        {"label": "Hela perioden",      "grain": "quarter"},
+    "last_7_days":     {"label": "Senaste veckan",     "grain": "day",     "noun": "dag"},
+    "last_30_days":    {"label": "Senaste 30 dagarna", "grain": "day",     "noun": "dag"},
+    "last_90_days":    {"label": "Senaste kvartalet",  "grain": "week",    "noun": "vecka"},
+    "last_month":      {"label": "Förra månaden",      "grain": "day",     "noun": "dag"},
+    "ytd":             {"label": "Hittills i år",      "grain": "month",   "noun": "månad"},
+    "last_12_months":  {"label": "Senaste 12 mån",     "grain": "month",   "noun": "månad"},
+    "all_time":        {"label": "Hela perioden",      "grain": "quarter", "noun": "kvartal"},
 }
 
-# "Versus last period" and "versus last year" answer different questions — seasonality makes the
-# first misleading for a retailer in November and the second misleading after a range change.
-# The product used to assume the second silently, and dropped it entirely on the windows where
-# it made no sense. It is now a control the user sets, with one meaning across the whole screen.
-DEFAULT_BASIS = "same_period_last_year"
-
-BASES: dict[str, str | None] = {
-    "same_period_last_year": "vs samma period förra året",
-    "previous_period": "vs föregående period",
-    "none": None,
-}
+# The comparison follows the filter: whatever window is selected, the deltas and the overlay are
+# measured against the window immediately before it. That used to be a control the user set, but
+# a comparison basis that can disagree with the period filter is a second thing to keep in your
+# head for no gain — every delta on screen is now "vs the period before this one", always.
+COMPARE_TO = "previous_period"
+DELTA_LABEL = "vs föregående period"
 
 
 def _period_spec(period: str) -> tuple[dict, dict]:
@@ -54,9 +49,6 @@ def _period_spec(period: str) -> tuple[dict, dict]:
 async def dashboard(period: str = Query(DEFAULT_PERIOD,
                                         description="Nyckel ur PERIODS; okänt värde faller "
                                                     "tillbaka på standardfönstret."),
-                    basis: str = Query(DEFAULT_BASIS,
-                                       description="Jämförelsegrund: nyckel ur BASES. 'none' "
-                                                   "stänger av jämförelsen helt."),
                     tenant: ScopedTenant = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> DashboardResponse:
@@ -64,11 +56,10 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     assert supplier_id is not None  # get_supplier_scope guarantees this
 
     window, settings = _period_spec(period)
-    basis = basis if basis in BASES else DEFAULT_BASIS
-    # One control, one meaning: the same basis reaches the KPI deltas, the trend overlay and the
-    # share tile, so no two numbers on screen can be measured against different windows.
-    compare: dict = {} if basis == "none" else {"compare_to": basis}
-    delta_label = BASES[basis]
+    # One window, one comparison: the same `compare_to` reaches the KPI deltas, the trend
+    # overlay and the share tile, so no two numbers on screen are measured against different
+    # periods.
+    compare: dict = {"compare_to": COMPARE_TO}
 
     totals_args: dict = {"measures": ["net_sales_sek", "units", "avg_price_sek"],
                          "time_range": window, **compare}
@@ -109,6 +100,10 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"Kunde inte hämta dashboarddata: {exc}") from exc
 
+    # Before caching, so the average is part of the frozen result the chart, the table view and
+    # the CSV export all read.
+    average = add_moving_average(trend, "net_sales_sek")
+
     payloads: dict[str, tuple[str, dict, dict]] = {
         "trend": ("query_sales", {}, trend),
         "top_products": ("query_sales", {}, top_products),
@@ -121,13 +116,14 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     }
 
     return DashboardResponse(
-        kpis=_kpis(totals, share, trend, delta_label),
+        kpis=_kpis(totals, share, trend),
         cards=[
-            _card(cached["trend"], "Försäljning per månad",
-                  markers=campaign_markers(cached["trend"], capabilities),
-                  # One control, one meaning: if the tiles cannot honestly show the comparison,
-                  # the chart must not draw it either.
-                  overlay=comparison_is_covered(totals)),
+            _trend_card(cached["trend"], f"Försäljning per {settings['noun']}",
+                        average=average,
+                        markers=campaign_markers(cached["trend"], capabilities),
+                        # One window, one comparison: if the tiles cannot honestly show it, the
+                        # chart must not draw it either.
+                        overlay=comparison_is_covered(totals)),
             _card(cached["top_products"], "Topp 10 produkter"),
             _card(cached["by_region"], "Försäljning per län"),
         ],
@@ -145,7 +141,6 @@ _MOVERS_CAVEAT = ("Förändringen är i procent. En stor procentuell rörelse ka
 
 @router.get("/movers", response_model=MoversResponse)
 async def movers(period: str = Query(DEFAULT_PERIOD),
-                 basis: str = Query(DEFAULT_BASIS),
                  tenant: ScopedTenant = Depends(get_supplier_scope),
                  mcp: McpClient = Depends(get_mcp),
                  cache: ResultCache = Depends(get_cache)) -> MoversResponse:
@@ -158,16 +153,13 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
     assert supplier_id is not None
 
     window, _ = _period_spec(period)
-    if basis not in BASES or basis == "none":
-        # Movers are a comparison by definition; there is no such thing without a basis.
-        basis = DEFAULT_BASIS
 
     def args(direction: str) -> dict:
         return {
             "measures": ["net_sales_sek"],
             "dimensions": ["product"],
             "time_range": window,
-            "compare_to": basis,
+            "compare_to": COMPARE_TO,
             "order_by": {"field": "net_sales_sek_delta_pct", "dir": direction},
             "limit": MOVERS_LIMIT,
         }
@@ -216,6 +208,72 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
 CAMPAIGN_MARKER_LABEL = ("Streckade linjer markerar perioder med kampanj — handlaren "
                          "rabatterar tungt då.")
 
+# Three buckets: long enough to take the spike out of a single month, short enough that a real
+# turn still shows up inside a twelve-point window.
+MA_WINDOW = 3
+
+
+def _date_axis(columns: list[dict]) -> str | None:
+    """The time axis — the date column that is not the comparison window's echo."""
+    return next((c["key"] for c in columns
+                 if c.get("type") == "date" and not c["key"].endswith("_compare")), None)
+
+
+def add_moving_average(payload: dict, measure: str) -> str | None:
+    """Add a trailing `MA_WINDOW`-bucket mean of `measure` to a time series, in place.
+
+    A bar per period says what each period did; the line says which way the run of them is
+    going, which is what a spiky monthly series makes hard to read by eye. Returns the new
+    column's key, or None when the series is too short for an average to say anything.
+    """
+    columns = payload.get("columns") or []
+    rows = payload.get("rows") or []
+    axis = _date_axis(columns)
+    if axis is None or len(rows) <= MA_WINDOW:
+        return None
+
+    # The average is only an average if the buckets are in time order, and the sparklines read
+    # the same rows expecting oldest first.
+    rows.sort(key=lambda row: str(row.get(axis) or ""))
+    key = f"{measure}_ma"
+    values = [row.get(measure) for row in rows]
+    for index, row in enumerate(rows):
+        window = values[max(0, index - MA_WINDOW + 1):index + 1]
+        # A short or gappy window would draw a line that is not the average it claims to be.
+        row[key] = (round(sum(window) / MA_WINDOW, 2)
+                    if len(window) == MA_WINDOW and None not in window else None)
+
+    unit = next((c.get("unit") for c in columns if c.get("key") == measure), None)
+    columns.append({"key": key, "type": "number",
+                    "label": f"Glidande medel ({MA_WINDOW} perioder)", "unit": unit})
+    payload["columns"] = columns
+    return key
+
+
+def _trend_card(result, title: str, average: str | None, markers: list[str],
+                overlay: bool) -> AnswerCard:
+    """Both windows as bars, with the moving average as the only line over them.
+
+    `propose_chart` draws two lines here, which reads as two trends running side by side. Bars
+    read as what this actually is — the same buckets, one window apart — and leaving the line
+    to the average makes it the shape the eye follows.
+    """
+    measure, compare = "net_sales_sek", "net_sales_sek_compare"
+    y = [measure]
+    if overlay and any(c["key"] == compare for c in result.columns):
+        y.append(compare)
+    if average:
+        y.append(average)
+    return AnswerCard(
+        status="ok",
+        chart=ChartSpec(type="bar", x=_date_axis(result.columns), y=y, title=title,
+                        markers=markers,
+                        marker_label=CAMPAIGN_MARKER_LABEL if markers else None),
+        query_id=result.query_id,
+        columns=render.to_columns(result),
+        provenance=render.build_provenance(result),
+    )
+
 
 def campaign_markers(result, capabilities: dict) -> list[str]:
     """Which x values on this chart fall inside a campaign window.
@@ -229,8 +287,7 @@ def campaign_markers(result, capabilities: dict) -> list[str]:
     if not windows:
         return []
 
-    axis = next((c["key"] for c in result.columns if c.get("type") == "date"
-                 and not c["key"].endswith("_compare")), None)
+    axis = _date_axis(result.columns)
     if axis is None:
         return []
 
@@ -259,24 +316,16 @@ def _day_before(iso: str) -> str:
         return iso
 
 
-def _card(result, title: str, markers: list[str] | None = None,
-          overlay: bool = True) -> AnswerCard:
+def _card(result, title: str) -> AnswerCard:
     """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
     (§2).
 
     No subtitle: the card falls back to the window in `provenance.time_range`, which is what the
     tool actually ran. A literal here goes stale the moment the user picks another period.
     """
-    chart = render.propose_chart(result, title=title)
-    if not overlay:
-        chart = chart.model_copy(update={
-            "y": [key for key in chart.y if not key.endswith("_compare")]})
-    if markers:
-        chart = chart.model_copy(update={"markers": markers,
-                                         "marker_label": CAMPAIGN_MARKER_LABEL})
     return AnswerCard(
         status="ok",
-        chart=chart,
+        chart=render.propose_chart(result, title=title),
         query_id=result.query_id,
         columns=render.to_columns(result),
         provenance=render.build_provenance(result),
@@ -323,10 +372,9 @@ def _spark(trend: dict, key: str) -> list[float]:
 def comparison_is_covered(totals: dict) -> bool:
     """Is the comparison window actually inside the data?
 
-    `all_time` against "samma period förra året" reaches back a year before the warehouse
-    begins, so half the comparison is missing and the tile reads +113 % for a business that
-    did not double. The user chose the basis, but they cannot see that the window they chose
-    falls off the end of the data, so this one is ours to catch rather than theirs.
+    The period before `all_time` is entirely before the warehouse begins, so the comparison is
+    empty or half-missing and the tile reads +113 % for a business that did not double. Nothing
+    on screen shows that the window falls off the end of the data, so this one is ours to catch.
     """
     meta = totals.get("meta") or {}
     compare = meta.get("compare_range") or {}
@@ -338,8 +386,8 @@ def comparison_is_covered(totals: dict) -> bool:
 
 
 def _kpis(totals: dict, share: dict, trend: dict | None = None,
-          delta_label: str | None = BASES[DEFAULT_BASIS]) -> list[Kpi]:
-    """The four headline numbers. `delta_label` names the basis every delta is measured on."""
+          delta_label: str | None = DELTA_LABEL) -> list[Kpi]:
+    """The four headline numbers. `delta_label` names the window every delta is measured on."""
     trend = trend or {}
     kpis: list[Kpi] = []
 

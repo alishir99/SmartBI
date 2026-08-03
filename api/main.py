@@ -79,6 +79,14 @@ async def request_context(request: Request, call_next):
     return response
 
 
+# The API serves JSON, SSE and one CSV — no scripts, no styles, no frames, no images. So the
+# policy can be the strictest one there is. It matters because the session token lives in
+# `localStorage` (SSE over fetch needs an Authorization header, which an httpOnly cookie cannot
+# carry), and that trade means any injected script is a session takeover: narrowing the script
+# surface to nothing is the other half of the answer.
+_CSP = ("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -86,6 +94,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Content-Security-Policy", _CSP)
     return response
 
 

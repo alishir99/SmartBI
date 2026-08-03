@@ -24,8 +24,10 @@ describe('date grain', () => {
     expect(formatCell('2026-04-02', date('week'))).toContain('v.')
   })
 
-  it('leaves a day as a date, because that is what it is', () => {
-    expect(formatCell('2025-07-01', date('day'))).toBe('2025-07-01')
+  it('reads a day as a day, without the year', () => {
+    // The day grain only ever covers a recent window of days or weeks, and the card's period
+    // line already states which — so the axis says "1 jul", not "2025-07-01".
+    expect(formatCell('2025-07-01', date('day'))).toBe('1 jul')
   })
 
   it('treats a comparison column as the same grain as the column it pairs with', () => {

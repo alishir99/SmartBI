@@ -6,8 +6,8 @@
 
 import type { Provenance } from '../types'
 import { useMovers } from '../lib/queries'
-import { useCompareBasis, usePeriod } from '../lib/usePeriod'
-import { BasisFilter, PeriodFilter } from '../components/PeriodFilter'
+import { usePeriod } from '../lib/usePeriod'
+import { PeriodFilter } from '../components/PeriodFilter'
 import { useChatStore } from '../lib/chat'
 import { AnswerCardView } from '../components/AnswerCard'
 import { PageHeader } from '../components/PageHeader'
@@ -21,24 +21,25 @@ const FOLLOW_UPS = [
   'Vilken produkt har högst snittpris?',
 ]
 
+/**
+ * `auto-fit` rather than `xl:grid-cols-2`: the chat rail is draggable, so a viewport breakpoint
+ * says nothing about how much width these two cards actually have. Below the track's minimum
+ * they stack instead of squeezing a ten-row ranking into 200 px.
+ */
+const CARD_GRID = 'grid gap-6 grid-cols-[repeat(auto-fit,minmax(min(26rem,100%),1fr))]'
+
 export function ProductsPage() {
   const [period, setPeriod] = usePeriod()
-  // "Ingen jämförelse" has no meaning here — movers are a comparison by definition, and the
-  // server falls back to the default for that reason. The control still picks which comparison.
-  const [basis, setBasis] = useCompareBasis()
-  const movers = useMovers(period, basis)
+  const movers = useMovers(period)
   const ask = useChatStore((state) => state.ask)
 
   const header = (provenance: Provenance | null = null) => (
     <PageHeader
       title="Produkter"
-      description="Vad som rör sig mest — upp och ned — mot jämförelseperioden."
+      description="Vad som rör sig mest upp och ned mot föregående period."
       provenance={provenance}
     >
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <PeriodFilter value={period} onChange={setPeriod} busy={movers.isFetching} />
-        <BasisFilter value={basis} onChange={setBasis} busy={movers.isFetching} />
-      </div>
+      <PeriodFilter value={period} onChange={setPeriod} busy={movers.isFetching} />
     </PageHeader>
   )
 
@@ -46,7 +47,7 @@ export function ProductsPage() {
     return (
       <>
         {header()}
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className={CARD_GRID}>
           <CardSkeleton height={340} />
           <CardSkeleton height={340} />
         </div>
@@ -64,9 +65,9 @@ export function ProductsPage() {
     <>
       {header(cards[0]?.provenance ?? null)}
 
-      {/* Side by side above xl, stacked below: two ranked lists of ten each need the full
-          width on a laptop. */}
-      <div className="grid gap-6 xl:grid-cols-2">
+      {/* Side by side when there is room, stacked when there is not: two ranked lists of ten
+          each need the width. */}
+      <div className={CARD_GRID}>
         {cards.map((card) => (
           <AnswerCardView
             key={card.query_id}

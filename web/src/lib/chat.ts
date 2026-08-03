@@ -148,7 +148,7 @@ function handle(event: ChatEvent, patch: (update: (current: ChatTurn) => ChatTur
         const chips = [...current.chips]
         for (let i = chips.length - 1; i >= 0; i -= 1) {
           if (chips[i].tool === event.tool && !chips[i].done) {
-            chips[i] = { ...chips[i], done: true, rowCount: event.row_count }
+            chips[i] = { ...chips[i], done: true, rowCount: event.row_count ?? null }
             break
           }
         }

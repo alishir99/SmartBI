@@ -113,16 +113,17 @@ utelämnats. Diagrammet nedan kommer direkt från databasen."*
 ## Dashboard — deterministic, no LLM
 
 ```
-GET /api/dashboard?period=…&basis=…  →  { kpis: Kpi[], cards: AnswerCard[] }
+GET /api/dashboard?period=…  →  { kpis: Kpi[], cards: AnswerCard[] }
 ```
 
 Goes through the same MCP tools as the chat, server-side, with no model involved. Same
 numbers, same provenance, guaranteed.
 
-`period` is a key from `PERIODS`; `basis` is `same_period_last_year` (default),
-`previous_period` or `none`. The basis reaches the KPI deltas, the trend overlay and the
-share tile together, so no two numbers on the screen are measured against different windows.
-Unknown values for either fall back to the default rather than erroring.
+`period` is a key from `PERIODS`; an unknown value falls back to the default rather than
+erroring. The comparison follows the filter and is not separately selectable: every delta is
+measured against the window immediately before the selected one (`compare_to:
+previous_period`). It reaches the KPI deltas, the trend overlay and the share tile together,
+so no two numbers on the screen are measured against different windows.
 
 ```ts
 type Kpi = {
@@ -130,27 +131,29 @@ type Kpi = {
   label: string              // "Försäljning", "Andel av kategori", ...
   value: number
   unit: "SEK" | "st" | "%"
-  delta_pct: number | null   // on the requested basis; percentage *points* when unit is "%"
-  delta_label: string | null // "vs samma period förra året"; null when basis is "none"
+  delta_pct: number | null   // vs the previous window; percentage *points* when unit is "%"
+  delta_label: string | null // "vs föregående period"; null when there is nothing to compare
   rank_label: string | null  // "#2 av 6 varumärken"
   spark: number[]            // the measure over the period's own grain, oldest first; [] if none
 }
 ```
 
-`delta_pct` is null when the basis is `none`, and when the comparison window returned nothing
-to compare against — the tile then reads "Ingen jämförelseperiod".
+`delta_pct` is null when the comparison window returned nothing to compare against, or falls
+outside the data's coverage — the tile then reads "Ingen jämförelseperiod".
 
-Cards returned, in order: revenue trend by month (own vs category index), top 10 products,
-sales by region. Each is a full `AnswerCard` with `chart` and `query_id` set.
+Cards returned, in order: the sales trend over the period's own grain, top 10 products, sales
+by region. Each is a full `AnswerCard` with `chart` and `query_id` set. The trend card's title
+follows the grain ("Försäljning per månad", "…per vecka"), and it carries a derived
+`net_sales_sek_ma` column — a trailing three-bucket mean drawn as a line over the bars.
 
 ```
-GET /api/movers?period=…&basis=…  →  { cards: AnswerCard[] }
+GET /api/movers?period=…  →  { cards: AnswerCard[] }
 ```
 
 Biggest risers then biggest fallers, ten each, sorted on the derived `net_sales_sek_delta_pct`
 column. This is the one place that column is on the value axis — everywhere else a percentage
-next to kronor is the bug the filter exists for. `basis=none` falls back to the default: a
-mover is a comparison by definition.
+next to kronor is the bug the filter exists for. The comparison is the window before the
+selected one, as everywhere else.
 
 ---
 

@@ -11,7 +11,12 @@ export type SeriesDescriptor = {
   color: string
   /** A comparison period: context behind the current series, not a competitor to it. */
   muted?: boolean
+  /** A derived average: drawn as a line even on a bar chart, because it is a shape, not a bar. */
+  line?: boolean
 }
+
+/** The server's suffix for a derived moving average, in the same unit as the measure. */
+const AVERAGE_SUFFIX = '_ma'
 
 export type PreparedChart = {
   rows: ResultRow[]
@@ -25,6 +30,8 @@ export type PreparedChart = {
   columns: Column[]
   /** True when a tail of small categories was folded into "Övrigt". */
   folded: boolean
+  /** Rows the chart is not drawing. Zero unless `spec.limit` cut a ranked categorical axis. */
+  hidden: number
   /** One descriptor per pie slice, in row order; empty for every other chart type. */
   slices: SeriesDescriptor[]
 }
@@ -94,17 +101,19 @@ function direct(
       label: column.label,
       color: muted ? SERIES_MUTED : seriesColor(hue++),
       muted,
+      line: column.key.endsWith(AVERAGE_SUFFIX),
     }
   })
 
   const ordered = order(rows, spec, xColumn, series[0]?.key ?? null)
-  const { rows: limited, folded } = applyLimit(ordered, spec, series, xColumn)
+  const { rows: limited, folded, hidden } = applyLimit(ordered, spec, series, xColumn)
 
   return {
     rows: limited,
     series,
     columns: [...(xColumn ? [xColumn] : []), ...measures],
     folded,
+    hidden,
   }
 }
 
@@ -166,6 +175,7 @@ function pivot(
       ...names.map((name) => ({ key: name, type: 'number' as const, label: name, unit })),
     ],
     folded,
+    hidden: 0,
   }
 }
 
@@ -195,21 +205,26 @@ function applyLimit(
   spec: ChartSpec,
   series: SeriesDescriptor[],
   xColumn: Column | null,
-): { rows: ResultRow[]; folded: boolean } {
+): { rows: ResultRow[]; folded: boolean; hidden: number } {
   const limit = spec.limit
   if (!limit || limit <= 0 || rows.length <= limit || xColumn?.type === 'date') {
-    return { rows, folded: false }
+    return { rows, folded: false, hidden: 0 }
   }
 
   const head = rows.slice(0, limit)
-  if (spec.type !== 'pie' || !xColumn) return { rows: head, folded: false }
+  // A bar chart cannot fold its tail into "Övrigt" — the sum of the categories it dropped is not
+  // a category. So it drops them, and the count is reported instead: rows disappearing unnoticed
+  // from the half of the card presented as the trustworthy half is the wrong place to be quiet.
+  if (spec.type !== 'pie' || !xColumn) {
+    return { rows: head, folded: false, hidden: rows.length - head.length }
+  }
 
   const tail = rows.slice(limit)
   const other: ResultRow = { [xColumn.key]: OTHER_LABEL }
   for (const descriptor of series) {
     other[descriptor.key] = tail.reduce((sum, row) => sum + numeric(row[descriptor.key]), 0)
   }
-  return { rows: [...head, other], folded: true }
+  return { rows: [...head, other], folded: true, hidden: 0 }
 }
 
 function maxAbs(rows: ResultRow[], series: SeriesDescriptor[]): number {

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from api.result_cache import CachedResult, ResultCache
 from api.routes.dashboard import (
-    BASES,
-    DEFAULT_BASIS,
+    COMPARE_TO,
+    MA_WINDOW,
     MOVERS_LIMIT,
     PERIODS,
     _card,
     _kpis,
     _movers_card,
+    _trend_card,
+    add_moving_average,
     campaign_markers,
     comparison_is_covered,
 )
@@ -223,27 +225,21 @@ def test_the_share_tile_carries_no_sparkline():
     assert share_kpi(_kpis(TOTALS, share, TREND)).spark == []
 
 
-# --------------------------------------------------------------- the comparison basis
+# --------------------------------------------------------------- the comparison window
 
-def test_every_basis_but_none_is_a_compare_to_the_compiler_implements():
-    """A basis the compiler does not know would fail the whole dashboard, not one tile."""
-    assert set(BASES) - {"none"} == {"previous_period", "same_period_last_year"}
+def test_the_comparison_is_one_the_compiler_implements():
+    """A `compare_to` the compiler does not know would fail the whole dashboard, not one tile."""
+    assert COMPARE_TO == "previous_period"
 
 
-def test_every_tile_names_the_basis_it_was_measured_on():
-    """One control, one meaning: no two deltas on screen may carry different labels."""
+def test_every_tile_names_the_window_it_was_measured_on():
+    """One window, one comparison: no two deltas on screen may carry different labels."""
     share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
                                own=250.0, category=1000.0)]}
 
-    kpis = _kpis(TOTALS, share, TREND, BASES["previous_period"])
+    kpis = _kpis(TOTALS, share, TREND)
 
     assert {k.delta_label for k in kpis} == {"vs föregående period"}
-
-
-def test_no_comparison_leaves_every_tile_without_a_label():
-    kpis = _kpis(TOTALS, NO_SHARE, TREND, BASES["none"])
-
-    assert all(k.delta_label is None for k in kpis)
 
 
 COVERAGE = {"from": "2024-07-01", "to": "2026-06-30"}
@@ -278,27 +274,93 @@ def test_the_share_tile_follows_the_same_coverage_rule():
 
 
 def test_no_comparison_at_all_is_not_an_uncovered_one():
-    """basis=none asks for no window, so there is nothing to be outside coverage."""
+    """A tool result with no compare_range asked for no window, so nothing is outside coverage."""
     assert comparison_is_covered(totals(None)) is True
 
 
 def test_the_chart_drops_the_overlay_when_the_tiles_drop_the_delta():
-    """One control, one meaning: no mixed state on screen."""
+    """One window, one comparison: no mixed state on screen."""
     result = trend_result(MONTHS)
     result.columns.append({"key": "net_sales_sek_compare", "type": "number",
                            "label": "Netto (jämförelse)", "unit": "SEK"})
     for row in result.rows:
         row["net_sales_sek_compare"] = 0.5
 
-    assert _card(result, "Trend").chart.y == ["net_sales_sek", "net_sales_sek_compare"]
-    assert _card(result, "Trend", overlay=False).chart.y == ["net_sales_sek"]
+    def y(overlay: bool) -> list[str]:
+        return _trend_card(result, "Trend", average=None, markers=[], overlay=overlay).chart.y
+
+    assert y(True) == ["net_sales_sek", "net_sales_sek_compare"]
+    assert y(False) == ["net_sales_sek"]
 
 
-def test_the_default_basis_is_one_of_the_offered_bases():
-    assert DEFAULT_BASIS in BASES
-    # Every period is now offered every basis; the gate that dropped the comparison on some
-    # windows was there because the user had not chosen. Now they choose.
-    assert all("compare" not in settings for settings in PERIODS.values())
+def test_every_period_carries_the_grain_and_the_noun_its_title_is_built_from():
+    """The trend card's title follows the filter — a literal 'per månad' goes stale on day 1."""
+    assert all({"grain", "noun", "label"} <= set(settings) for settings in PERIODS.values())
+
+
+# ------------------------------------------------------------------ the moving average
+
+def series(values: list[float | None]) -> dict:
+    return {"columns": [{"key": "month", "type": "date", "label": "Månad"},
+                        {"key": "net_sales_sek", "type": "number", "label": "Netto",
+                         "unit": "SEK"}],
+            "rows": [{"month": f"2026-{index + 1:02d}-01", "net_sales_sek": value}
+                     for index, value in enumerate(values)]}
+
+
+def test_the_average_is_the_trailing_mean_over_the_window():
+    payload = series([10.0, 20.0, 30.0, 40.0])
+
+    key = add_moving_average(payload, "net_sales_sek")
+
+    assert key == "net_sales_sek_ma"
+    # The first MA_WINDOW - 1 buckets have no full window behind them.
+    assert [row[key] for row in payload["rows"]] == [None, None, 20.0, 30.0]
+
+
+def test_a_gap_in_the_window_yields_no_average_rather_than_a_wrong_one():
+    payload = series([10.0, None, 30.0, 40.0])
+
+    key = add_moving_average(payload, "net_sales_sek")
+
+    assert [row[key] for row in payload["rows"]] == [None, None, None, None]
+
+
+def test_a_series_too_short_to_average_gets_no_column():
+    payload = series([10.0] * MA_WINDOW)
+
+    assert add_moving_average(payload, "net_sales_sek") is None
+    assert [c["key"] for c in payload["columns"]] == ["month", "net_sales_sek"]
+
+
+def test_the_buckets_are_put_in_time_order_first():
+    """The rows also feed the sparklines, which read them oldest first."""
+    payload = series([10.0, 20.0, 30.0, 40.0])
+    payload["rows"].reverse()
+
+    add_moving_average(payload, "net_sales_sek")
+
+    assert [row["month"] for row in payload["rows"]] == sorted(
+        row["month"] for row in payload["rows"])
+
+
+def test_the_average_shares_the_measures_unit_so_it_can_share_the_axis():
+    payload = series([10.0, 20.0, 30.0, 40.0])
+
+    key = add_moving_average(payload, "net_sales_sek")
+
+    assert payload["columns"][-1] == {"key": key, "type": "number",
+                                      "label": f"Glidande medel ({MA_WINDOW} perioder)",
+                                      "unit": "SEK"}
+
+
+def test_the_trend_card_draws_bars_with_the_average_on_the_same_axis():
+    card = _trend_card(trend_result(MONTHS), "Försäljning per månad",
+                       average="net_sales_sek_ma", markers=[], overlay=True)
+
+    assert card.chart.type == "bar"
+    assert card.chart.x == "month"
+    assert card.chart.y == ["net_sales_sek", "net_sales_sek_ma"]
 
 
 # --------------------------------------------------------------- campaign annotations
@@ -369,8 +431,9 @@ def test_a_chart_with_no_date_axis_is_never_annotated():
 
 def test_the_marked_card_says_what_the_lines_mean():
     """A line nobody can read is decoration."""
-    card = _card(trend_result(MONTHS), "Försäljning per månad",
-                 markers=campaign_markers(trend_result(MONTHS), CAPABILITIES))
+    card = _trend_card(trend_result(MONTHS), "Försäljning per månad", average=None,
+                       markers=campaign_markers(trend_result(MONTHS), CAPABILITIES),
+                       overlay=True)
 
     assert card.chart.markers == ["2025-11-01", "2025-12-01"]
     assert card.chart.marker_label is not None
@@ -378,7 +441,8 @@ def test_the_marked_card_says_what_the_lines_mean():
 
 
 def test_an_unmarked_card_carries_no_label():
-    card = _card(trend_result(["2025-10-01"]), "Försäljning per månad", markers=[])
+    card = _trend_card(trend_result(["2025-10-01"]), "Försäljning per månad", average=None,
+                       markers=[], overlay=True)
 
     assert card.chart.markers == []
     assert card.chart.marker_label is None

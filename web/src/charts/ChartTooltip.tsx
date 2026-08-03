@@ -20,7 +20,10 @@ export function ChartTooltip({ active, payload, label, columns, labelFormatter }
   const heading = typeof label === 'string' ? (labelFormatter?.(label) ?? label) : String(label ?? '')
 
   return (
-    <div className="pointer-events-none min-w-[11rem] max-w-[18rem] rounded-xl bg-surface px-3.5 py-3 shadow-pop ring-hairline">
+    // No min-width, and a cap narrow enough to sit inside a squeezed plot: recharts keeps the
+    // tooltip inside the chart's box, but a tooltip wider than the chart has nowhere to go and
+    // spills over the card — behind the chat rail, where it cannot be read.
+    <div className="pointer-events-none max-w-[15rem] rounded-xl bg-surface px-3.5 py-3 shadow-pop ring-hairline">
       {heading && (
         <p className="mb-2 text-xs font-medium leading-tight text-ink-secondary">{heading}</p>
       )}

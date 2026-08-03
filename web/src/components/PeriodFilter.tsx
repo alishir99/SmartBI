@@ -1,6 +1,6 @@
-/** The period switcher, and the comparison-basis switcher built from the same control. */
+/** The period switcher. Everything on screen is compared to the window before the one it picks. */
 
-import { BASIS_OPTIONS, PERIOD_OPTIONS, type PeriodOption } from '../lib/periods'
+import { PERIOD_OPTIONS, type PeriodOption } from '../lib/periods'
 
 type Props = {
   value: string
@@ -49,9 +49,4 @@ export function PeriodFilter({
       })}
     </div>
   )
-}
-
-/** What every delta on the screen is measured against — one control, one meaning. */
-export function BasisFilter(props: Omit<Props, 'options' | 'label'>) {
-  return <PeriodFilter {...props} options={BASIS_OPTIONS} label="Jämförelsegrund" />
 }

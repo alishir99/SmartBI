@@ -296,3 +296,50 @@ describe('pie slices', () => {
     }
   })
 })
+
+describe('the moving average', () => {
+  const AVERAGE: Column = {
+    key: 'net_sales_sek_ma',
+    type: 'number',
+    label: 'Glidande medel (3 perioder)',
+    unit: 'SEK',
+  }
+  const COMPARE: Column = {
+    key: 'net_sales_sek_compare',
+    type: 'number',
+    label: 'Nettoförsäljning (jämförelse)',
+    unit: 'SEK',
+  }
+
+  const trend = () =>
+    prepareChart(
+      spec({ type: 'bar', x: 'month', y: [NET.key, COMPARE.key, AVERAGE.key] }),
+      [MONTH, NET, COMPARE, AVERAGE],
+      [
+        { month: '2026-01-01', net_sales_sek: 10, net_sales_sek_compare: 8, net_sales_sek_ma: null },
+        { month: '2026-02-01', net_sales_sek: 30, net_sales_sek_compare: 9, net_sales_sek_ma: 20 },
+      ],
+    )
+
+  it('marks the derived average as a line so the bars do not swallow it', () => {
+    const byKey = Object.fromEntries(trend().series.map((s) => [s.key, s]))
+
+    expect(byKey[AVERAGE.key].line).toBe(true)
+    expect(byKey[NET.key].line).toBe(false)
+    expect(byKey[COMPARE.key].line).toBe(false)
+  })
+
+  it('leaves the average a categorical hue and the comparison the muted one', () => {
+    const byKey = Object.fromEntries(trend().series.map((s) => [s.key, s]))
+
+    expect(byKey[COMPARE.key].color).toBe('var(--series-muted)')
+    expect(byKey[AVERAGE.key].color).not.toBe(byKey[NET.key].color)
+    expect(byKey[AVERAGE.key].color).not.toBe('var(--series-muted)')
+  })
+
+  it('describes the average so the tooltip can name it', () => {
+    // Without its column the tooltip falls back to the raw key, which is the internal name.
+    expect(trend().columns.map((column) => column.key)).toContain(AVERAGE.key)
+    expect(trend().unit).toBe('SEK')
+  })
+})

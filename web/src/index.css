@@ -202,6 +202,15 @@
     box-shadow: inset 0 0 0 1px var(--hairline);
   }
 
+  /* The connector between two nodes of the request flow, while the hop is in progress: dashes
+     travelling in the direction the data is moving. Reduced-motion freezes it, and the colour
+     alone still separates it from the pending grey. */
+  .flow-line {
+    background-image: linear-gradient(90deg, var(--accent) 0 55%, transparent 55%);
+    background-size: 9px 100%;
+    animation: flow-dashes 700ms linear infinite;
+  }
+
   /* Scrollbars that do not shout. */
   .quiet-scroll {
     scrollbar-width: thin;
@@ -217,6 +226,12 @@
   }
   .quiet-scroll::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@keyframes flow-dashes {
+  to {
+    background-position: 9px 0;
   }
 }
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from calendar import monthrange
 from collections.abc import Sequence
 from datetime import date
 from typing import Any, cast
@@ -35,9 +36,35 @@ _FALLBACK_TITLE = "Resultat"
 _EMPHASIS = re.compile(r"(\*\*|__)(\S.*?\S|\S)\1", re.DOTALL)
 
 
+# The model writes markdown lists despite an explicit prompt rule and an `insights[]` field
+# built for exactly that; under `whitespace-pre-line` they render as literal hyphens.
+_BULLET = re.compile(r"^[ \t]*[-*•]\s+", re.MULTILINE)
+
+
 def strip_markdown(text: str) -> str:
-    """Drop emphasis markers the model was told not to emit."""
-    return _EMPHASIS.sub(r"\2", text)
+    """Drop emphasis markers and list bullets the model was told not to emit."""
+    return _BULLET.sub("", _EMPHASIS.sub(r"\2", text))
+
+
+# What an unresolvable name is replaced by. The prompt already says not to repeat the name a
+# refusal is about; this is the same rule in code, because a guarantee that lives only in a
+# prompt is a guarantee the model gets to decide about.
+_REDACTED_NAME = "det efterfrågade namnet"
+_SENTENCE_START = re.compile(rf"(\A|[.!?]\s+){re.escape(_REDACTED_NAME)}")
+
+
+def scrub_names(text: str, names: Sequence[str]) -> str:
+    """Take names the turn could not resolve back out of the prose.
+
+    Confirming which name was and was not in the data is itself a statement about someone else,
+    and it is the one the refusal path made on every run.
+    """
+    for name in sorted({n.strip() for n in names if len(n.strip()) >= 3}, key=len, reverse=True):
+        # Surrounding quotes go too, or the redaction is left sitting inside "…".
+        text = re.sub(rf"[\"'«»‘’“”]?{re.escape(name)}[\"'«»‘’“”]?", _REDACTED_NAME, text,
+                      flags=re.I)
+    return _SENTENCE_START.sub(
+        lambda m: f"{m.group(1)}{_REDACTED_NAME[0].upper()}{_REDACTED_NAME[1:]}", text)
 
 
 def split_answer(text: str) -> tuple[str, dict[str, Any]]:
@@ -109,6 +136,26 @@ def _measures(result: CachedResult) -> list[dict]:
     return [c for c in result.columns if c.get("type") == "number" and _plottable(c)]
 
 
+_TOOL_TITLE = {"query_market_share": "Marknadsandel", "query_sales": "Försäljning"}
+
+
+def derive_title(result: CachedResult, dimensions: Sequence[dict]) -> str:
+    """A title from the result's own shape, for every card the model gave none.
+
+    The chart-first preview card is built with an empty envelope, so without this every chat
+    answer read "Resultat" for the several seconds between the chart landing and the prose
+    arriving — and market-share answers, where the prompt tells the model to omit `chart`
+    entirely, kept it for good.
+    """
+    head = _TOOL_TITLE.get((result.meta or {}).get("tool", result.tool), _FALLBACK_TITLE)
+    labels = [str(d.get("label", d["key"])).lower() for d in dimensions
+              if not str(d["key"]).endswith("_compare")]
+    if labels:
+        head = f"{head} per {' och '.join(labels[:2])}"
+    period = _period_label(_window((result.meta or {}).get("time_range")))
+    return f"{head} · {period}" if period else head
+
+
 def propose_chart(result: CachedResult, title: str | None = None,
                   subtitle: str | None = None) -> ChartSpec:
     """Pick a chart from the result's shape alone."""
@@ -117,9 +164,9 @@ def propose_chart(result: CachedResult, title: str | None = None,
     # The current period leads. `_delta_pct` never joins it — a percentage on a kronor axis is
     # the bug the filter was written for — and `_compare` only joins it on a time axis, below.
     measures = [m for m in plottable
-                if not m["key"].endswith(("_compare", "_delta_pct"))]
+                if not m["key"].endswith(("_compare", "_delta_pct", "_delta_pe"))]
 
-    title = title or _FALLBACK_TITLE
+    title = title or derive_title(result, dimensions)
     if not measures:
         return ChartSpec(type="table", x=None, y=[], title=title, subtitle=subtitle)
 
@@ -204,7 +251,12 @@ def _period_label(window: TimeWindow | None) -> str | None:
         return None
     tail = f"{_MONTH_SHORT[end.month - 1]} {end.year}"
     if (start.year, start.month) == (end.year, end.month):
-        return tail
+        # A whole calendar month is named; a few days inside one are not. Collapsing a 7-day
+        # comparison to "jun 2026" gave both series of a day-grain chart the same legend label,
+        # and a 7-day window always sits inside one month.
+        if start.day == 1 and end.day == monthrange(end.year, end.month)[1]:
+            return tail
+        return f"{start.day}–{end.day} {tail}"
     return f"{_MONTH_SHORT[start.month - 1]} {start.year}–{tail}"
 
 
@@ -276,9 +328,12 @@ def build_sources(results: Sequence[CachedResult],
 
 def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[str, Any],
                status: str = "ok", produced: Sequence[CachedResult] = (),
-               attributions: Sequence[Attribution] = ()) -> AnswerCard:
+               attributions: Sequence[Attribution] = (),
+               unresolved: Sequence[str] = ()) -> AnswerCard:
     """Assemble the card."""
-    caveats = [strip_markdown(str(c)) for c in (envelope.get("caveats") or [])]
+    caveats = [scrub_names(strip_markdown(str(c)), unresolved)
+               for c in (envelope.get("caveats") or [])]
+    narrative = scrub_names(narrative, unresolved)
     claims = [Claim(literal=a.literal, query_id=a.query_id) for a in attributions]
 
     if result is None:
@@ -288,7 +343,8 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
             status = "cannot_answer"
         return AnswerCard(
             status=cast(CardStatus, status), narrative=narrative,
-            insights=[strip_markdown(str(i)) for i in (envelope.get("insights") or [])],
+            insights=[scrub_names(strip_markdown(str(i)), unresolved)
+                      for i in (envelope.get("insights") or [])],
             caveats=caveats,
             sources=build_sources(produced, None),
             claims=claims,
@@ -314,15 +370,15 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
                                        "chart_type": chart.type})
                 caveats.append(_override_caveat(chart))
 
-    if status == "validation_failed":
-        caveats.insert(0, "Svarstexten kunde inte verifieras mot datan och har därför "
-                          "utelämnats. Diagrammet nedan kommer direkt från databasen.")
+    # No caveat for `validation_failed`: the card renders that sentence from the status itself,
+    # in the amber notice at the top. Adding it here printed it twice, verbatim.
 
     return AnswerCard(
         status=cast(CardStatus, status),
         narrative="" if status == "validation_failed" else narrative,
         insights=([] if status == "validation_failed"
-                  else [strip_markdown(str(i)) for i in (envelope.get("insights") or [])]),
+                  else [scrub_names(strip_markdown(str(i)), unresolved)
+                        for i in (envelope.get("insights") or [])]),
         caveats=caveats,
         chart=chart,
         query_id=result.query_id,

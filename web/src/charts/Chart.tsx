@@ -11,6 +11,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Line,
   LineChart,
   Pie,
@@ -78,8 +79,12 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
   return (
     <figure className="m-0">
       {/* The unit sits above the axis rather than on it — overlaying the top tick is
-          exactly how a chart ends up with an unreadable largest value. */}
-      {prepared.scale && <p className="mb-1 text-2xs text-ink-muted">{prepared.scale.unit}</p>}
+          exactly how a chart ends up with an unreadable largest value. Money carries a scale
+          (`tkr`, `Mkr`); every other unit is itself, and a bare percentage axis said nothing
+          at all about what its numbers were. */}
+      {(prepared.scale || prepared.unit) && (
+        <p className="mb-1 text-2xs text-ink-muted">{prepared.scale?.unit ?? prepared.unit}</p>
+      )}
       <div style={{ height: plotHeight }} role="img" aria-label={description}>
         <ResponsiveContainer width="100%" height="100%">
           {plot(spec, prepared, sideways, onAsk && markClick(prepared, onAsk))}
@@ -94,6 +99,13 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
       {prepared.folded && (
         <p className="mt-2 text-2xs text-ink-muted">
           Mindre poster är summerade till “Övrigt”.
+        </p>
+      )}
+      {prepared.hidden > 0 && (
+        <p className="mt-2 text-2xs text-ink-muted">
+          Visar de {formatNumber(prepared.rows.length)} största av{' '}
+          {formatNumber(prepared.rows.length + prepared.hidden)}. Välj Tabell eller CSV för
+          resten.
         </p>
       )}
       {/* sr-only rather than hidden: it must reach the accessibility tree. The visible
@@ -132,6 +144,9 @@ export function describeChart(spec: ChartSpec, prepared: PreparedChart): string 
   }
   if (prepared.folded) {
     parts.push('mindre poster är summerade till Övrigt')
+  }
+  if (prepared.hidden > 0) {
+    parts.push(`${prepared.hidden} rader visas inte i diagrammet`)
   }
   // Points at the actual control, not at a vaguely gestured "table below": the table *replaces*
   // the chart via the Diagram/Tabell toggle in the card's actions.
@@ -238,28 +253,59 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
     )
   }
 
+  const bar = (descriptor: (typeof series)[number]) => (
+    <Bar
+      key={descriptor.key}
+      dataKey={descriptor.key}
+      name={descriptor.label}
+      fill={descriptor.color}
+      stackId={stacked ? 'stack' : undefined}
+      maxBarSize={MARK.barMaxSize}
+      radius={
+        stacked
+          ? 0
+          : sideways
+            ? [0, MARK.barRadius, MARK.barRadius, 0]
+            : [MARK.barRadius, MARK.barRadius, 0, 0]
+      }
+      isAnimationActive={false}
+    />
+  )
+
+  // A moving average belongs on the same axis as the bars it averages, but not as one: it is
+  // the shape the run of periods makes, which only a line can say.
+  const averages = sideways ? [] : series.filter((descriptor) => descriptor.line)
+  if (averages.length > 0) {
+    return (
+      <ComposedChart data={rows} margin={MARGIN} {...click}>
+        {axes}
+        {series.filter((descriptor) => !descriptor.line).map(bar)}
+        {averages.map((descriptor) => (
+          <Line
+            key={descriptor.key}
+            type="monotone"
+            dataKey={descriptor.key}
+            name={descriptor.label}
+            stroke={descriptor.color}
+            strokeWidth={MARK.lineWidth}
+            dot={false}
+            // The average has gaps where its window was short or incomplete; joining across
+            // them would draw an average over periods it never covered.
+            connectNulls={false}
+            activeDot={{ r: MARK.dotRadius, strokeWidth: 2,
+                         stroke: CHART_INK.surface, fill: descriptor.color }}
+            isAnimationActive={false}
+          />
+        ))}
+      </ComposedChart>
+    )
+  }
+
   return (
     <BarChart data={rows} margin={MARGIN} layout={sideways ? 'vertical' : 'horizontal'}
               {...click}>
       {axes}
-      {series.map((descriptor) => (
-        <Bar
-          key={descriptor.key}
-          dataKey={descriptor.key}
-          name={descriptor.label}
-          fill={descriptor.color}
-          stackId={stacked ? 'stack' : undefined}
-          maxBarSize={MARK.barMaxSize}
-          radius={
-            stacked
-              ? 0
-              : sideways
-                ? [0, MARK.barRadius, MARK.barRadius, 0]
-                : [MARK.barRadius, MARK.barRadius, 0, 0]
-          }
-          isAnimationActive={false}
-        />
-      ))}
+      {series.map(bar)}
     </BarChart>
   )
 }
@@ -400,7 +446,8 @@ function tickLabel(prepared: PreparedChart, value: string, sideways: boolean): s
 
 function yLabel(prepared: PreparedChart, value: number): string {
   if (prepared.scale) return formatMoneyOnScale(value, prepared.scale)
-  if (prepared.unit === '%') return formatNumber(value, value % 1 === 0 ? 0 : 1)
+  if (prepared.unit === '%' || prepared.unit === 'p.e.')
+    return formatNumber(value, value % 1 === 0 ? 0 : 1)
   return formatNumber(value)
 }
 

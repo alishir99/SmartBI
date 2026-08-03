@@ -7,7 +7,6 @@ import { AnswerCardView } from '../components/AnswerCard'
 import { RegionMap, type RegionDatum } from '../charts/RegionMap'
 import { EmptyState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/Skeleton'
-import { SourceChip } from '../components/SourceChip'
 import { useResult } from '../lib/queries'
 import { useChatStore } from '../lib/chat'
 
@@ -107,11 +106,6 @@ function MapTab({ card }: { card: AnswerCard }) {
   return (
     <div className="rounded-card bg-surface p-5 shadow-card ring-hairline">
       <RegionMap data={data} />
-      {card.provenance && (
-        <div className="mt-4 border-t border-[var(--hairline)] pt-3">
-          <SourceChip provenance={card.provenance} />
-        </div>
-      )}
     </div>
   )
 }

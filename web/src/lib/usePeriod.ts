@@ -1,13 +1,7 @@
-/** The selected period and comparison basis, shared by every page that reads the dashboard. */
+/** The selected period, shared by every page that reads the dashboard. */
 
 import { useSyncExternalStore } from 'react'
-import {
-  BASIS_OPTIONS,
-  DEFAULT_BASIS,
-  DEFAULT_PERIOD,
-  PERIOD_OPTIONS,
-  type PeriodOption,
-} from './periods'
+import { DEFAULT_PERIOD, PERIOD_OPTIONS, type PeriodOption } from './periods'
 
 /** One persisted choice out of a fixed set, readable from any page. */
 function choiceStore(storageKey: string, options: PeriodOption[], fallback: string) {
@@ -43,20 +37,11 @@ function choiceStore(storageKey: string, options: PeriodOption[], fallback: stri
 }
 
 const periodStore = choiceStore('solvigo.period', PERIOD_OPTIONS, DEFAULT_PERIOD)
-const basisStore = choiceStore('solvigo.basis', BASIS_OPTIONS, DEFAULT_BASIS)
-
-function useChoice(store: ReturnType<typeof choiceStore>): [string, (value: string) => void] {
-  const value = useSyncExternalStore(store.subscribe, store.read, () => store.fallback)
-  return [value, store.set]
-}
 
 export const setPeriod = periodStore.set
 
 export function usePeriod(): [string, (period: string) => void] {
-  return useChoice(periodStore)
-}
-
-/** What every delta on the screen is measured against. */
-export function useCompareBasis(): [string, (basis: string) => void] {
-  return useChoice(basisStore)
+  const value = useSyncExternalStore(periodStore.subscribe, periodStore.read,
+                                     () => periodStore.fallback)
+  return [value, periodStore.set]
 }

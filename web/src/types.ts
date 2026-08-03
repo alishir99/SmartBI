@@ -17,7 +17,8 @@ export type LoginResponse = {
   user: User
 }
 
-export type ColumnUnit = 'SEK' | 'st' | '%'
+/** `p.e.` is percentage points — a change in a share, which is not a percentage of a percentage. */
+export type ColumnUnit = 'SEK' | 'st' | '%' | 'p.e.'
 
 export type Column = {
   key: string
@@ -133,7 +134,8 @@ export type ResultResponse = {
 export type ChatEvent =
   | { type: 'status'; message: string }
   | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; tool: string; row_count: number }
+  /** `row_count` is null for tools with no row concept — a lookup, a catalogue read. */
+  | { type: 'tool_result'; tool: string; row_count: number | null }
   | { type: 'token'; text: string }
   /** The chart, as soon as its rows land. Not terminal — a `card` follows and replaces it. */
   | { type: 'preview'; card: AnswerCard }

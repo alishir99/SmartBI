@@ -141,7 +141,8 @@ async def test_a_fabricated_figure_is_caught_under_every_status(monkeypatch, sta
     assert client.messages.calls == 3, "the model should have been asked to try again"
     # The chart survives — it is drawn from the cache and never passed through the model.
     assert card.chart is not None
-    assert any("kunde inte verifieras" in c for c in card.caveats)
+    # The status carries the explanation; the card renders it from there, once.
+    assert not any("kunde inte verifieras" in c for c in card.caveats)
 
 
 @pytest.mark.parametrize("status", ["ok", "clarify"])

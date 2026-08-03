@@ -43,8 +43,14 @@ const RAIL_MIN = 320
 const RAIL_MAX = 720
 const RAIL_KEY = 'solvigo.rail'
 
+/** Room the page keeps for itself whatever the rail is dragged to. */
+const PAGE_MIN = 520
+
 function clampRail(px: number): number {
-  return Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)))
+  // The rail must not be draggable past the point where the page it sits next to stops being
+  // usable — a stored width from a wider screen must not survive onto a narrower one either.
+  const max = Math.max(RAIL_MIN, Math.min(RAIL_MAX, window.innerWidth - PAGE_MIN))
+  return Math.min(max, Math.max(RAIL_MIN, Math.round(px)))
 }
 
 function useRailWidth(): [number, (px: number) => void] {

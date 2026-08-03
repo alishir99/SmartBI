@@ -4,17 +4,12 @@ import { useState, type FormEvent } from 'react'
 import { login } from '../lib/api'
 import { useAuthStore } from '../lib/auth'
 import { Button } from '../components/Button'
-import { IconShield } from '../components/Icons'
-
-const DEMO_ACCOUNTS = [
-  { email: 'anna@nordstromaudio.se', label: 'Anna Lindqvist · Nordström Audio AB' },
-  { email: 'erik@lagerkvisthem.se', label: 'Erik Sandberg · Lagerkvist Hem AB' },
-]
-const DEMO_PASSWORD = 'demo1234'
 
 export function LoginPage() {
   const signIn = useAuthStore((state) => state.signIn)
-  const [email, setEmail] = useState(DEMO_ACCOUNTS[0].email)
+  // The page used to arrive with a working account's address and password one click away.
+  // Anyone who reached the login screen was already past the only door there is.
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -39,7 +34,7 @@ export function LoginPage() {
         <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Solvigo Insights</h1>
           <p className="mt-2 text-sm text-ink-secondary">
-            Färdiga svar om din försäljning — med källa till varje siffra.
+            Färdiga svar om din försäljning, direkt ur handlarens data.
           </p>
         </div>
 
@@ -84,31 +79,12 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 rounded-tile bg-surface-2 p-4">
-          <p className="flex items-center gap-2 text-2xs font-medium text-ink-secondary">
-            <IconShield className="h-3.5 w-3.5 text-ink-muted" />
-            Demokonton
-          </p>
-          <ul className="mt-2.5 space-y-1.5">
-            {DEMO_ACCOUNTS.map((account) => (
-              <li key={account.email}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail(account.email)
-                    setPassword(DEMO_PASSWORD)
-                  }}
-                  className="w-full rounded-lg px-2 py-1.5 text-left text-2xs text-ink-secondary transition-colors duration-200 hover:bg-surface-3 hover:text-ink"
-                >
-                  {account.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 px-2 text-2xs text-ink-muted">
-            Samma fråga, olika leverantör — så syns isoleringen live.
-          </p>
-        </div>
+        {/* No credentials on the page — anyone who reached it would already be past the only
+            door there is. But a reviewer who opens the app before reading anything is otherwise
+            simply stuck, so say where they are. */}
+        <p className="mt-5 text-center text-2xs text-ink-muted">
+          Demokonton finns i repots README.
+        </p>
       </div>
     </div>
   )

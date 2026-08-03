@@ -1,11 +1,12 @@
 /** Turns a streamed tool_call into the short Swedish line shown on a progress chip. */
 
+// The tool's own name is an internal identifier; "query_sales" on a retailer's screen is noise.
 const TOOL_LABELS: Record<string, string> = {
-  get_capabilities: 'get_capabilities',
-  resolve_entities: 'resolve_entities',
-  query_sales: 'query_sales',
-  query_market_share: 'query_market_share',
-  dashboard: 'dashboard',
+  get_capabilities: 'Datakatalog',
+  resolve_entities: 'Uppslag',
+  query_sales: 'Försäljning',
+  query_market_share: 'Marknadsandel',
+  dashboard: 'Översikt',
 }
 
 export function toolLabel(tool: string): string {

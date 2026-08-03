@@ -1,9 +1,8 @@
 /** Översikt — the deterministic dashboard. */
 
-import type { ReactNode } from 'react'
 import { useDashboard } from '../lib/queries'
-import { useCompareBasis, usePeriod } from '../lib/usePeriod'
-import { BasisFilter, PeriodFilter } from '../components/PeriodFilter'
+import { usePeriod } from '../lib/usePeriod'
+import { PeriodFilter } from '../components/PeriodFilter'
 import { useChatStore } from '../lib/chat'
 import { AnswerCardView } from '../components/AnswerCard'
 import { KpiTile } from '../components/KpiTile'
@@ -11,15 +10,18 @@ import { PageHeader } from '../components/PageHeader'
 import { CardSkeleton, KpiSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
 
-/** Period and basis are one group: they describe the same window together. */
-function Filters({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>
-}
+const DESCRIPTION = 'Din försäljning hos handlaren, mot perioden dessförinnan.'
+
+/**
+ * `auto-fit` rather than a viewport breakpoint: the chat rail is draggable, so how wide the
+ * viewport is says nothing about how wide this column is. `min(…, 100%)` is what stops a track
+ * wider than its container overflowing when the rail is pulled out.
+ */
+const KPI_GRID = 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))]'
 
 export function OverviewPage() {
   const [period, setPeriod] = usePeriod()
-  const [basis, setBasis] = useCompareBasis()
-  const dashboard = useDashboard(period, basis)
+  const dashboard = useDashboard(period)
   const ask = useChatStore((state) => state.ask)
 
   if (dashboard.isPending) {
@@ -27,14 +29,11 @@ export function OverviewPage() {
       <>
         <PageHeader
           title="Översikt"
-          description="Din försäljning hos handlaren."
+          description={DESCRIPTION}
         >
-          <Filters>
-            <PeriodFilter value={period} onChange={setPeriod} busy />
-            <BasisFilter value={basis} onChange={setBasis} busy />
-          </Filters>
+          <PeriodFilter value={period} onChange={setPeriod} busy />
         </PageHeader>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className={KPI_GRID}>
           {[0, 1, 2, 3].map((index) => (
             <KpiSkeleton key={index} />
           ))}
@@ -58,16 +57,13 @@ export function OverviewPage() {
     <>
       <PageHeader
         title="Översikt"
-        description="Din försäljning hos handlaren."
+        description={DESCRIPTION}
         provenance={provenance}
       >
-        <Filters>
-          <PeriodFilter value={period} onChange={setPeriod} busy={dashboard.isFetching} />
-          <BasisFilter value={basis} onChange={setBasis} busy={dashboard.isFetching} />
-        </Filters>
+        <PeriodFilter value={period} onChange={setPeriod} busy={dashboard.isFetching} />
       </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={KPI_GRID}>
         {kpis.map((kpi) => (
           <KpiTile key={kpi.key} kpi={kpi} onAsk={(question) => void ask(question)} />
         ))}

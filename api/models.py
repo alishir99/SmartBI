@@ -7,7 +7,10 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Role = Literal["supplier_viewer", "supplier_admin", "retail_analyst", "system_admin"]
-Unit = Literal["SEK", "st", "%"]
+# "p.e." is percentage points, and it is a unit of its own rather than a flavour of "%": a share
+# moving 29,5 → 30,7 has risen 1,2 p.e., and letting the two share one unit is what let the model
+# call that "+1,2 procent" and pass validation (G2).
+Unit = Literal["SEK", "st", "%", "p.e."]
 ChartType = Literal["line", "bar", "stacked_bar", "area", "pie", "kpi", "table"]
 CardStatus = Literal["ok", "cannot_answer", "clarify", "validation_failed"]
 
@@ -194,7 +197,9 @@ class ToolCallEvent(BaseModel):
 class ToolResultEvent(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool: str
-    row_count: int
+    # : None for tools with no row concept (get_capabilities, resolve_entities) — the chip then
+    # says nothing rather than "0 rader" next to a green tick.
+    row_count: int | None = None
 
 
 class TokenEvent(BaseModel):

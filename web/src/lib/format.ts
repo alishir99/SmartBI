@@ -165,6 +165,13 @@ export function formatMonth(value: string, withYear = true): string {
   return withYear ? `${name} ${p.year}` : name
 }
 
+/** `24 jun` — a day bucket on an axis, where the year is already in the card's period line. */
+export function formatDayShort(value: string): string {
+  const p = parseYm(value)
+  if (!p) return value
+  return `${p.day} ${MONTHS_SHORT[p.month - 1] ?? p.month}`
+}
+
 /** `4 januari 2026`. */
 export function formatDateLong(value: string): string {
   const p = parseYm(value)
@@ -241,6 +248,7 @@ export function formatQuarter(value: string): string {
  * fixes. Without this the trend axis reads "2025-07-01" where it means "jul 2025".
  */
 const DATE_GRAIN: Record<string, (value: string) => string> = {
+  day: formatDayShort,
   month: formatMonth,
   quarter: formatQuarter,
   week: formatIsoWeek,
@@ -263,6 +271,8 @@ export function formatCell(value: string | number | null, column: Column): strin
         return formatMoneyExact(value)
       case '%':
         return formatPercent(value)
+      case 'p.e.':
+        return formatPercentPoints(value)
       case 'st':
         return formatUnits(value)
       default:
@@ -279,6 +289,8 @@ export function formatKpiValue(value: number, unit: ColumnUnit): string {
       return formatMoney(value)
     case '%':
       return formatPercent(value)
+    case 'p.e.':
+      return formatPercentPoints(value)
     case 'st':
       return formatUnits(value)
     default:

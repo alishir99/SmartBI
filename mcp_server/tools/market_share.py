@@ -14,6 +14,43 @@ from .sales import _jsonable, scope_label
 MIN_BRANDS = 5
 MIN_TRANSACTIONS = 100
 
+# The result's own column spec, in row order. Without it the API falls back to inferring columns
+# from the rows, which gives raw snake_case headers and — worse — no `unit`, and a column with no
+# unit is a column the validator's unit separation cannot police and the chart cannot scale.
+# `category_id` and `suppressed` are deliberately absent: they exist for joining and policy, not
+# for reading, and a numeric id in the column list becomes a value the validator would license.
+BASE_COLUMNS: list[dict] = [
+    {"key": "brand", "type": "text", "label": "Varumärke"},
+    {"key": "subcategory", "type": "text", "label": "Underkategori"},
+    {"key": "own_net_sek", "type": "number", "unit": "SEK", "label": "Egen nettoförsäljning"},
+    {"key": "own_units", "type": "number", "unit": "st", "label": "Egna sålda enheter"},
+    {"key": "n_brands", "type": "number", "unit": "st", "label": "Varumärken i kategorin"},
+    {"key": "category_net_sek", "type": "number", "unit": "SEK",
+     "label": "Kategorins nettoförsäljning"},
+    {"key": "share_pct", "type": "number", "unit": "%", "label": "Marknadsandel"},
+    # No unit: a placement is not a count of anything, and calling it "st" would put it in the
+    # same bucket as sold units.
+    {"key": "rank", "type": "number", "label": "Placering"},
+    {"key": "leader_share_pct", "type": "number", "unit": "%",
+     "label": "Marknadsledarens andel"},
+]
+
+# Only present when compare_to was asked for. "(jämförelse)" is a placeholder the API replaces
+# with the period the comparison actually ran over.
+COMPARE_COLUMNS: list[dict] = [
+    {"key": "own_net_sek_compare", "type": "number", "unit": "SEK",
+     "label": "Egen nettoförsäljning (jämförelse)"},
+    {"key": "category_net_sek_compare", "type": "number", "unit": "SEK",
+     "label": "Kategorins nettoförsäljning (jämförelse)"},
+    {"key": "share_pct_compare", "type": "number", "unit": "%",
+     "label": "Marknadsandel (jämförelse)"},
+    # Percentage points, and it carries its own unit for that reason — see _attach_comparison.
+    {"key": "share_pct_delta_pe", "type": "number", "unit": "p.e.",
+     "label": "Förändring i marknadsandel"},
+]
+
+REASON_COLUMN = {"key": "reason", "type": "text", "label": "Varför utelämnad"}
+
 SQL = """
 WITH own AS (
     SELECT b.brand_id, b.category_id,
@@ -126,6 +163,9 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
         _attach_comparison(rows, [_row(dict(r.items())) for r in previous])
 
     return {
+        "columns": [*BASE_COLUMNS,
+                    *(COMPARE_COLUMNS if compare_window is not None else []),
+                    *([REASON_COLUMN] if any(r["suppressed"] for r in rows) else [])],
         "rows": rows,
         "row_count": len(rows),
         "suppressed_count": sum(1 for r in rows if r["suppressed"]),

@@ -107,6 +107,10 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     # model quotes them in the prose and Swedish SKUs carry model numbers — see
     # mask_entity_names.
     resolved: list[str] = []
+    # Names resolve_entities was asked about and found nothing for. The refusal path repeats them
+    # back — "Lumia Nordic finns inte bland dina varumärken" — which the prompt forbids and only
+    # the prompt was enforcing. `render.scrub_names` takes them out of the card.
+    unresolved: list[str] = []
     calls = 0
     rounds = 0
     usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
@@ -182,8 +186,10 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
                     content = payload
                     if use.name == "resolve_entities":
-                        resolved += [str(m.get("label")) for m in payload.get("matches") or []
-                                     if m.get("label")]
+                        matches = payload.get("matches") or []
+                        resolved += [str(m.get("label")) for m in matches if m.get("label")]
+                        if not matches and isinstance(args.get("text"), str):
+                            unresolved.append(args["text"])
                     if use.name in ROW_TOOLS:
                         cached = cache.put(from_tool_result(
                             supplier_id=supplier_id, tool=use.name,
@@ -207,7 +213,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         "query_id": cached.query_id if use.name in ROW_TOOLS else None})
                     yield ToolResultEvent(
                         tool=use.name,
-                        row_count=int(payload.get("row_count", 0) or 0))
+                        # None, not 0, for the tools that have no row concept: a lookup that
+                        # succeeded read as "✓ Uppslag · 0 rader", which is what a lookup that
+                        # found nothing looks like.
+                        row_count=(int(payload.get("row_count", 0) or 0)
+                                   if use.name in ROW_TOOLS else None))
 
                     if use.name in ROW_TOOLS and cached.rows:
                         # Measured latency is mean 26 s, p95 54 s, and until now the user saw
@@ -215,7 +225,8 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         # prose is not. `_result_for` makes the same guess when the envelope
                         # names no query_id, and the final card corrects it either way.
                         yield PreviewEvent(card=render.build_card(
-                            result=cached, narrative="", envelope={}, produced=produced))
+                            result=cached, narrative="", envelope={}, produced=produced,
+                            unresolved=unresolved))
 
                 messages.append({"role": "user", "content": tool_results})
                 # The fetch is over. Whatever comes next — another tool or the answer — the
@@ -275,7 +286,8 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             card = render.build_card(result=result, narrative=narrative,
                                      envelope=envelope, status=status,
                                      produced=produced,
-                                     attributions=check.attributions if check else [])
+                                     attributions=check.attributions if check else [],
+                                     unresolved=unresolved)
 
             if card.narrative:
                 for start in range(0, len(card.narrative), _CHUNK):

@@ -17,11 +17,16 @@ SCALES: dict[str, float] = {
     "mkr": 1e6, "msek": 1e6, "miljoner": 1e6, "miljon": 1e6, "mnkr": 1e6,
     "tkr": 1e3, "ksek": 1e3, "tusen": 1e3,
 }
-UNIT_WORDS = {"kr", "sek", "kronor", "%", "procent", "st", "styck", "enheter"}
+UNIT_WORDS = {"kr", "sek", "kronor", "%", "procent", "st", "styck", "enheter",
+              # Percentage points. Longer than "procent" and therefore matched before it, which
+              # is the whole point: "12,2 procentenheter" must not be read as 12,2 %.
+              "procentenheter", "procentenhet", "p.e."}
 
-# Longest first, so "kronor" is not matched as "kr" followed by stray letters.
+# Longest first, so "kronor" is not matched as "kr" followed by stray letters. Escaped, because
+# "p.e." carries dots that would otherwise match any character.
 _SUFFIX_ALTERNATIVES = "|".join(
-    sorted(list(SCALES) + list(UNIT_WORDS), key=len, reverse=True))
+    re.escape(word) for word in sorted(list(SCALES) + list(UNIT_WORDS),
+                                       key=len, reverse=True))
 
 # Every character used to group thousands: ordinary space, no-break space, narrow no-break
 # space, thin space — and the period, which a model occasionally reaches for ("12.400.000").
@@ -74,6 +79,7 @@ _ROUND_NUMBER_MAX_REL = 0.02
 
 
 _PERCENT_WORDS = {"%", "procent"}
+_PERCENT_POINT_WORDS = {"p.e.", "procentenheter", "procentenhet"}
 _MONEY_WORDS = {"kr", "sek", "kronor"}
 _COUNT_WORDS = {"st", "styck", "enheter"}
 
@@ -193,6 +199,8 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
 
         if suffix in _PERCENT_WORDS:
             unit_class = "percent"
+        elif suffix in _PERCENT_POINT_WORDS:
+            unit_class = "pe"
         elif suffix in _MONEY_WORDS or suffix in SCALES:
             # A magnitude suffix is always money here: "3,45 Mkr", "2 tusen". No percentage is
             # written with one.
@@ -235,7 +243,7 @@ def candidates_by_result(
 
     for result in results:
         buckets: dict[str, list[float]] = {"money": [], "percent": [], "count": [],
-                                           "unknown": []}
+                                           "pe": [], "unknown": []}
         unit_of = {column["key"]: _class_of_unit(column.get("unit"))
                    for column in result.columns}
 
@@ -259,6 +267,10 @@ def candidates_by_result(
                 continue
 
             own = unit_of.get(key, "unknown")
+            # The difference between two percentages is percentage points, not percent. Keeping
+            # them in one bucket is exactly the hole G2 walked through: "22,8 % → 10,6 %, en
+            # minskning på 12,2 procent" then validated, because 12,2 was in the data — as p.e.
+            delta_class = "pe" if own == "percent" else own
             add(own, *values)                                           # the cells themselves
 
             # Shares and pairwise deltas are licensed only over the rows the model saw: a
@@ -280,14 +292,14 @@ def candidates_by_result(
             # delta between adjacent rows stays available either way — it is local to two rows
             # and does not depend on holding the whole series.
             for previous, current in pairwise(seen):
-                add(own, current - previous)
+                add(delta_class, current - previous)
                 if previous:
                     add("percent", 100.0 * (current - previous) / abs(previous))
 
             if complete:
                 # first→last is a statement about the series as a whole, so it needs the whole
                 # series.
-                add(own, values[-1] - values[0])
+                add(delta_class, values[-1] - values[0])
                 if values[0]:
                     add("percent", 100.0 * (values[-1] - values[0]) / abs(values[0]))
 
@@ -299,7 +311,7 @@ def candidates_by_result(
                     if (isinstance(now, (int, float)) and not isinstance(now, bool)
                             and isinstance(before, (int, float))
                             and not isinstance(before, bool)):
-                        add(unit_of.get(key, "unknown"), float(now) - float(before))
+                        add(delta_class, float(now) - float(before))
 
         # Candidates stay SIGNED.
         for values in buckets.values():
@@ -313,6 +325,8 @@ def _class_of_unit(unit: str | None) -> str:
     """A column's unit, as the same vocabulary a literal is classified into."""
     if unit == "%":
         return "percent"
+    if unit == "p.e.":
+        return "pe"
     if unit == "SEK":
         return "money"
     if unit == "st":
@@ -321,12 +335,13 @@ def _class_of_unit(unit: str | None) -> str:
 
 
 # A literal may only match candidates of its own kind, so a `%` claim cannot match a raw SEK
-# cell.
+# cell — or, since "p.e." became a class of its own, a percentage-point delta.
 _ALLOWED_CLASSES: dict[str, tuple[str, ...]] = {
     "percent": ("percent", "unknown"),
+    "pe": ("pe", "unknown"),
     "money": ("money", "unknown"),
     "count": ("count", "unknown"),
-    "unknown": ("money", "percent", "count", "unknown"),
+    "unknown": ("money", "percent", "pe", "count", "unknown"),
 }
 
 
@@ -468,7 +483,8 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
         # Try the literal as written, then — only when it carried no magnitude suffix — as
         # thousands and as millions.
         scales = ((1.0, 1e3, 1e6)
-                  if literal.implicit_scale_allowed and literal.unit_class != "percent"
+                  if literal.implicit_scale_allowed
+                  and literal.unit_class not in ("percent", "pe")
                   else (1.0,))
         allowed = _ALLOWED_CLASSES[literal.unit_class]
 

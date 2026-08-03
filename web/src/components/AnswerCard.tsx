@@ -28,7 +28,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
   const result = useResult(card.query_id)
 
   const title = card.chart?.title ?? headingFor(card)
-  const subtitle = card.chart?.subtitle ?? subtitleFor(card)
+  const subtitle = subtitleFor(card, card.chart?.subtitle ?? null)
   const prose = card.status === 'validation_failed' ? null : card.narrative
 
   return (
@@ -160,10 +160,18 @@ function headingFor(card: Card): string {
   return 'Svar'
 }
 
-function subtitleFor(card: Card): string | null {
+/**
+ * The window that actually ran is never dropped, even when the model wrote its own subtitle.
+ * The same question resolves to different periods on different runs — the compiler defaults to
+ * the last 12 months, the model sometimes passes `all_time` — and a card whose only statement of
+ * its period is the model's prose is a card whose totals can double with nothing explaining why.
+ */
+function subtitleFor(card: Card, modelSubtitle: string | null): string | null {
   const provenance = card.provenance
-  if (!provenance) return null
-  return `${formatPeriod(provenance.time_range)} · nettoförsäljning, ${provenance.vat}`
+  if (!provenance) return modelSubtitle
+  const period = formatPeriod(provenance.time_range)
+  if (!modelSubtitle) return `${period} · nettoförsäljning, ${provenance.vat}`
+  return modelSubtitle.includes(period) ? modelSubtitle : `${modelSubtitle} · ${period}`
 }
 
 function ChipRow({

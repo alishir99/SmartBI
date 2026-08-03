@@ -245,7 +245,9 @@ def test_validation_failure_keeps_the_chart_and_drops_the_prose():
     assert card.narrative == ""
     assert card.chart is not None
     assert card.query_id == "q_1"
-    assert "kunde inte verifieras" in card.caveats[0]
+    # The explanation is rendered from the status, once, by AnswerCard. Putting it in the
+    # caveats too printed it twice on the card, verbatim.
+    assert not any("kunde inte verifieras" in c for c in card.caveats)
 
 
 def test_cannot_answer_carries_suggestions_and_no_chart():

@@ -22,5 +22,11 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       sourcemap: false,
     },
+    test: {
+      // Only the component tests need a DOM; the pure-function suites do not care, and
+      // per-file `@vitest-environment` comments would be one more thing to remember.
+      environment: 'jsdom',
+      restoreMocks: true,
+    },
   }
 })

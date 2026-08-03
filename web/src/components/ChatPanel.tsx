@@ -190,7 +190,7 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
 
       {turn.card && (
         <AnswerCardView card={turn.card} onAsk={onAsk} height={220}
-                        preview={turn.cardIsPreview} savable={!turn.cardIsPreview} />
+                        preview={turn.cardIsPreview} />
       )}
 
       {turn.error && (
@@ -202,7 +202,8 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
   )
 }
 
-function ToolChipRow({ chip }: { chip: ToolChip }) {
+/** Exported for the render test: a lookup that succeeded once read "✓ Uppslag · 0 rader". */
+export function ToolChipRow({ chip }: { chip: ToolChip }) {
   return (
     <li className="flex items-center gap-2 text-2xs text-ink-secondary">
       <span className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 py-1 pl-2 pr-2.5">

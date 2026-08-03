@@ -56,7 +56,9 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           view={view}
           onToggleView={setView}
           onDelete={onDelete}
-          savable={savable}
+          // A preview is one tool result that a later one may replace, so it is never
+          // savable — here rather than in the caller, so no caller can get it wrong.
+          savable={savable && !preview}
           hasRows={(result.data?.rows.length ?? 0) > 0}
         />
       </header>

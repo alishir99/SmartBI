@@ -400,7 +400,7 @@ solvigo-insights/
 ├─ api/                  FastAPI: auth, MCP-klient, agentloop, validator, SSE
 ├─ web/src/
 │  ├─ charts/            spec→diagram, deterministiskt (+ enhetstester)
-│  ├─ components/        kortrenderare, källchip, chattpanel, skal
+│  ├─ components/        kortrenderare, källchip, chattpanel, skal (+ renderingstester)
 │  ├─ pages/             översikt · produkter · geografi · mina vyer
 │  └─ lib/               api, SSE, formatering (sv-SE), stores
 ├─ scripts/              generate_data · seed · embed_entities

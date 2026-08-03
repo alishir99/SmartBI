@@ -9,7 +9,8 @@ väg: genom en MCP-server.
 > Modellen väljer *frågan* och *presentationen*. Värdena går
 > Postgres → MCP → API → diagram, längs en väg modellen inte rör.
 
-Designresonemanget i sin helhet ligger i [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md).
+Designresonemanget i sin helhet ligger i [`docs/DESIGN.md`](docs/DESIGN.md) — skrivet innan
+en rad kod fanns, och behållet som det skrevs.
 Den här filen är hur du kör systemet och de val som är värda att förstå först.
 
 ---
@@ -239,7 +240,7 @@ Fyra lager, i den ordning de bär vikt:
    trovärdigt.**
 3. **Härkomst.** Varje kort bär en källchip: verktyg · filter · omfång · antal rader ·
    rollup eller faktatabell · tidsstämpel. Expanderad visar den exakta verktygsargumenten.
-4. **Mätning.** `eval/` kör 81 svenska frågor — 52 gyllene och 29 adversariella — mot facit
+4. **Mätning.** `eval/` kör 85 svenska frågor — 56 gyllene och 29 adversariella — mot facit
    som räknats fram **oberoende** med pandas ur samma genererade data. Det gör "hallucinerar
    den?" till ett tal jag kan rapportera. Talen står nedan.
 
@@ -250,7 +251,7 @@ Kört mot `deepseek-v4-pro` (se *Kända begränsningar*). Två tal, medvetet hå
 | | |
 |---|---|
 | **Garantierna** (`adversarial.yaml`, 29 fall) | **27–29 av 29**, och **inget fall faller två körningar i rad**. Ingen konkurrentsiffra, ingen kategoritotal under k-tröskeln och ingen rad från en annan leverantör nådde något kort. Samtliga sex promptinjektionsfall avvisas. Senast mätt **28 av 29** efter att datan regenererats (se nedan). |
-| **Svarskvaliteten** (`golden_questions.yaml`, 52 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna; siffrorna är inte ommätta efter den. |
+| **Svarskvaliteten** (`golden_questions.yaml`, numera 56 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna, och på de 52 fall som fanns då — fyra har tillkommit sedan dess. Talen är alltså historik, inte en mätning av det som ligger här. |
 
 > **Om datasetet bytte under mätningen.** Generatorn hade två fel som gjorde varje orderrad
 > rabatterad och staplade returer på sista dagen. Att rätta dem ändrade varenda siffra i
@@ -397,21 +398,31 @@ solvigo-insights/
 │  └─ lib/               api, SSE, formatering (sv-SE), stores
 ├─ scripts/              generate_data · seed · embed_entities
 ├─ eval/                 gyllene frågor + adversariellt + drivrutin
-└─ docs/API_CONTRACT.md  fryst gränssnitt mellan backend och frontend
+└─ docs/
+   ├─ API_CONTRACT.md    fryst gränssnitt mellan backend och frontend
+   └─ DESIGN.md          designresonemanget, skrivet före koden
 ```
 
 ---
 
 ## Demofrågor att prova
 
-1. "Vad var min försäljning senaste 12 månaderna, och hur står det sig mot året innan?"
-2. "Vilka produkter säljer bäst i Stockholm?" — och som följdfråga: "…mätt i antal istället?"
-   (svaret ändras: intäkter domineras av TV och datorer, volym av billiga varor)
-3. "Hur går det för vårt märke jämfört med kategorin i Hörlurar?"
-4. "Visa försäljningen per län som diagram."
-5. "Vad är vår marginal?" — **ska nekas**, med förslag på vad som *går* att svara på.
-6. "Visa Lumia Nordics siffror." — **ska nekas**; en annan leverantör är inte uttryckbar.
-7. Marknadsandel i "Vintersport" — **ska utelämnas** av k-anonymitetsskyddet.
+Kontot i parentes är det frågan är skriven för. Sortimentet skiljer sig mellan leverantörerna,
+så en fråga ställd på fel konto får ett korrekt men helt annat svar — punkt 7 är hela poängen
+med det.
+
+1. (**anna**) "Vad var min försäljning senaste 12 månaderna, och hur står det sig mot året
+   innan?"
+2. (**anna**) "Vilka produkter säljer bäst i Stockholm?" — och som följdfråga: "…mätt i antal
+   istället?" (svaret ändras: intäkter domineras av TV och datorer, volym av billiga varor)
+3. (**anna**) "Hur går det för vårt märke jämfört med kategorin i Hörlurar?"
+4. (**anna**) "Visa försäljningen per län som diagram."
+5. (**anna**) "Vad är vår marginal?" — **ska nekas**, med förslag på vad som *går* att svara på.
+6. (**anna**) "Visa Lumia Nordics siffror." — **ska nekas**; en annan leverantör är inte
+   uttryckbar.
+7. (**erik**) Marknadsandel i "Vintersport" — **ska utelämnas** av k-anonymitetsskyddet.
+   Nordström säljer ingenting i den kategorin, så som **anna** blir svaret i stället det sanna
+   men mycket tråkigare "ni har ingen försäljning där".
 
 Punkt 5–7 är inte kantfall att undvika i en demo. De är produkten som fungerar.
 
@@ -427,6 +438,20 @@ Promptcachning och kostnadsmätning finns numera: systemprompten skickas som ett
 `cache_control`-block när `LLM_BASE_URL` pekar på Anthropic, och `audit_turn` får riktiga
 `input_tokens`/`output_tokens` per tur plus cache-träffarna. Det var det som saknades för
 kostnadstaket per tenant — själva taket är kvar att bygga.
+
+**Två saker skiljer den här compose-demon från något driftsatt, och de är de första jag
+hade byggt:**
+
+- **Resultatcachen är per process.** `ResultCache` är en `OrderedDict` i minnet, och
+  `/api/result/{query_id}` är där *varje diagram i produkten* hämtar sina siffror. Kör två
+  uvicorn-arbetare eller två API-repliker och ungefär varannan hämtning blir 404. Detsamma
+  gäller rate limits och inloggningsspärren, som försvagas linjärt med antalet repliker.
+  Antingen Redis, eller kör om den cachade verktygsspecen vid miss — `tool` och `tool_args`
+  sparas redan, så det andra alternativet är nästan gratis.
+- **Webbcontainern är inte driftsättbar.** `docker/Dockerfile.web` kör `npm run dev`, alltså
+  Vite-devservern, som containerkommando. Det som behövs är ett flerstegsbygge → nginx, och
+  en icke-root-`USER` i båda avbildningarna (`Dockerfile.python` kopierar dessutom källkoden
+  före `pip install`, vilket ogiltigförklarar beroendelagret vid varje ändring).
 
 Kända luckor i det som ligger här: ingen realtidsström; rollup-refresh är manuell;
 utvärderingsuppsättningen är min egen och delar därmed mina blinda fläckar; syntetisk data
@@ -446,7 +471,7 @@ Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än s
   (beslut D1 — byt `LLM_BASE_URL` och `LLM_MODEL`, inget annat ändras). Svarskvaliteten
   ovan är därför ett golv, inte ett tak: `deepseek-v4-flash` gav 62 % och pro 73 % på samma
   uppsättning. Grundgarantin är oberoende av modellvalet; svarskvaliteten är det inte.
-- **31 % av de gyllene fallen är icke-deterministiska** (16 av 52 växlar mellan två
+- **31 % av de gyllene fallen är icke-deterministiska** (16 av de 52 mätta växlar mellan två
   körningar på identisk kod). Andelen *steg* när validatorbuggen ovan rättades: fall som
   förut föll varje gång växlar nu i stället, vilket är framsteg men inte stabilitet. Med en
   modell som ibland utelämnar huvudsiffran krävs upprepade körningar för att ett tal ska

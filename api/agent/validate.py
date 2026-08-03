@@ -235,22 +235,41 @@ def _numbers_in(rows: Sequence[dict], key: str) -> list[float]:
     return values
 
 
+def _empty_buckets() -> dict[str, list[float]]:
+    return {"money": [], "percent": [], "count": [], "pe": [], "unknown": []}
+
+
+def _is_change_column(key: str, unit_class: str) -> bool:
+    """Whether the column's own values are changes rather than levels."""
+    return key.endswith(("_delta_pct", "_delta_pe", "_delta")) or unit_class == "pe"
+
+
 def candidates_by_result(
-        results: Iterable[CachedResult]) -> list[tuple[str, dict[str, list[float]]]]:
+        results: Iterable[CachedResult]) -> list[tuple[str, dict[str, list[float]],
+                                                       dict[str, list[float]]]]:
     """Every value the model may legitimately have used, kept per result so an accepted literal can
-    name the query that licensed it."""
-    by_result: list[tuple[str, dict[str, list[float]]]] = []
+    name the query that licensed it.
+
+    Levels and changes are kept apart. A level read out of a row has no direction — "Nordström
+    backade från 22,8 % till 10,6 %" states a fall, and neither 22,8 nor 10,6 *is* the fall.
+    Applying the direction check to them rejected the true figures of a whole answer, which is
+    what suppressed the prose on the headline market-share question two runs in three.
+    """
+    by_result: list[tuple[str, dict[str, list[float]], dict[str, list[float]]]] = []
 
     for result in results:
-        buckets: dict[str, list[float]] = {"money": [], "percent": [], "count": [],
-                                           "pe": [], "unknown": []}
+        cells = _empty_buckets()        # values that appear in a row, as they appear
+        derived = _empty_buckets()      # sums, means, shares and differences
         unit_of = {column["key"]: _class_of_unit(column.get("unit"))
                    for column in result.columns}
 
-        def add(bucket: str, *values: float, _buckets=buckets) -> None:
+        def add(bucket: str, *values: float, _buckets=derived) -> None:
             _buckets[bucket].extend(values)
 
-        add("count", float(result.row_count))
+        def add_cell(bucket: str, *values: float, _buckets=cells) -> None:
+            _buckets[bucket].extend(values)
+
+        add_cell("count", float(result.row_count))
 
         # Whether the rows we hold ARE the whole result.
         complete = len(result.rows) >= result.row_count
@@ -258,7 +277,7 @@ def candidates_by_result(
         # `limit` is the one tool argument that legitimately shows up in prose ("topp 10").
         limit = result.tool_args.get("limit")
         if isinstance(limit, int) and not isinstance(limit, bool):
-            add("count", float(limit))
+            add_cell("count", float(limit))
 
         numeric_keys = result.numeric_columns()
         for key in numeric_keys:
@@ -271,7 +290,12 @@ def candidates_by_result(
             # them in one bucket is exactly the hole G2 walked through: "22,8 % → 10,6 %, en
             # minskning på 12,2 procent" then validated, because 12,2 was in the data — as p.e.
             delta_class = "pe" if own == "percent" else own
-            add(own, *values)                                           # the cells themselves
+            # A column that IS a change keeps its direction — `net_sales_sek_delta_pct` of -8,2
+            # says the sales fell, and prose calling that a rise is the failure this check
+            # exists for. Every other cell is a level, and so is anything derived from levels
+            # without subtracting: a total, a mean, a share. Only a difference points anywhere.
+            level = add if _is_change_column(key, own) else add_cell
+            level(own, *values)
 
             # Shares and pairwise deltas are licensed only over the rows the model saw: a
             # 500-row result otherwise yields ~1 000 percentages blanketing [-100, 100], and the
@@ -282,12 +306,12 @@ def candidates_by_result(
                 total = sum(values)
                 # A sum or a mean is the same kind of quantity as the column it came from:
                 # summing kronor gives kronor.
-                add(own, total, total / len(values))
+                level(own, total, total / len(values))
                 if total:
                     # Share is a percentage NO MATTER what the column's unit is: this is the
                     # derivation that turns kronor into a proportion, and it is the reason a `%`
                     # literal has any legitimate claim on a money column at all.
-                    add("percent", *(100.0 * value / total for value in seen))
+                    add_cell("percent", *(100.0 * value / total for value in seen))
 
             # delta between adjacent rows stays available either way — it is local to two rows
             # and does not depend on holding the whole series.
@@ -314,9 +338,10 @@ def candidates_by_result(
                         add(delta_class, float(now) - float(before))
 
         # Candidates stay SIGNED.
-        for values in buckets.values():
-            values.sort()
-        by_result.append((result.query_id, buckets))
+        for buckets in (cells, derived):
+            for values in buckets.values():
+                values.sort()
+        by_result.append((result.query_id, cells, derived))
 
     return by_result
 
@@ -450,6 +475,15 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Viola
     return violations
 
 
+def _find(buckets: dict[str, list[float]], allowed: tuple[str, ...],
+          literal: NumberLiteral, scales: tuple[float, ...]) -> int | None:
+    """The literal against one bucket set, at each scale it may have been written on."""
+    return next((found for found in
+                 (_matching_sign(buckets, allowed, literal.value * scale,
+                                 literal.tolerance * scale) for scale in scales)
+                 if found is not None), None)
+
+
 def _direction_disagrees(text: str, literal: NumberLiteral, sign: int) -> bool:
     """The B3 hole."""
     if sign == 0:
@@ -492,16 +526,20 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
         # queries could account for is attributed to the first one that could — which is the one
         # the model was looking at when it wrote the sentence.
         source, sign = None, 0
-        for query_id, buckets in by_result:
-            found = next(
-                (found for found in
-                 (_matching_sign(buckets, allowed, literal.value * scale,
-                                 literal.tolerance * scale) for scale in scales)
-                 if found is not None),
-                None)
-            if found is not None:
-                source, sign = query_id, found
+
+        # Levels first, across every result: a literal that appears in some row is a level
+        # wherever it sits, and no sentence makes a level point in a direction.
+        for query_id, cells, _derived in by_result:
+            if _find(cells, allowed, literal, scales) is not None:
+                source, sign = query_id, 0
                 break
+
+        if source is None:
+            for query_id, _cells, derived in by_result:
+                found = _find(derived, allowed, literal, scales)
+                if found is not None:
+                    source, sign = query_id, found
+                    break
 
         if source is not None:
             if _direction_disagrees(text, literal, sign):

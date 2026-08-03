@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
+from difflib import SequenceMatcher
 from typing import Any
 
 from anthropic import AsyncAnthropic
@@ -48,6 +49,26 @@ _FRIENDLY_STATUS = {
     "query_sales": "Hämtar försäljningssiffror…",
     "query_market_share": "Beräknar marknadsandel…",
 }
+
+
+# How close a returned label has to be to what was asked for to count as the same thing.
+# ponytail: a similarity ratio, tuned on "nordstrom"→"Nordström" (0,89) against "Lumia
+# Nordic"→"Nordström" (0,35). Raise it if real typos start reading as misses.
+_RESEMBLANCE = 0.6
+
+
+def resembles_any(asked: str, labels: Sequence[str]) -> bool:
+    """Whether any match is plausibly the thing that was asked for.
+
+    An empty match list is the obvious miss, and not the common one: retrieval fuses a lexical
+    and a semantic search, so asking after a competitor comes back with the nearest brand the
+    supplier *does* own. Treating that as a hit is how "Lumia Nordic finns inte bland dina
+    varumärken" reached the card with the name still in it.
+    """
+    asked = asked.casefold().strip()
+    return any(label in asked or asked in label
+               or SequenceMatcher(None, asked, label).ratio() >= _RESEMBLANCE
+               for label in (raw.casefold().strip() for raw in labels) if label)
 
 
 def _system() -> list[dict[str, Any]] | str:
@@ -187,9 +208,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                     content = payload
                     if use.name == "resolve_entities":
                         matches = payload.get("matches") or []
-                        resolved += [str(m.get("label")) for m in matches if m.get("label")]
-                        if not matches and isinstance(args.get("text"), str):
-                            unresolved.append(args["text"])
+                        labels = [str(m["label"]) for m in matches if m.get("label")]
+                        resolved += labels
+                        asked = args.get("text")
+                        if isinstance(asked, str) and not resembles_any(asked, labels):
+                            unresolved.append(asked)
                     if use.name in ROW_TOOLS:
                         cached = cache.put(from_tool_result(
                             supplier_id=supplier_id, tool=use.name,

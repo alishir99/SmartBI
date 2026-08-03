@@ -51,6 +51,14 @@ def strip_markdown(text: str) -> str:
 # prompt is a guarantee the model gets to decide about.
 _REDACTED_NAME = "det efterfrågade namnet"
 _SENTENCE_START = re.compile(rf"(\A|[.!?]\s+){re.escape(_REDACTED_NAME)}")
+_QUOTE = "[\"'«»‘’“”]?"
+# The words the model looked up are rarely the whole name it then writes: it resolves "Lumia"
+# and writes "Lumia Nordic". Redacting only the looked-up part left `det efterfrågade namnet
+# Nordic"` in the prose — the competitor still named, and the sentence broken as well. So the
+# capitalised run continuing the name goes with it. Not case-insensitive, deliberately: this
+# part must match capitalisation or it swallows the rest of the sentence.
+_NAME_TAIL = r"(?:[-\s]+[A-ZÅÄÖ][\w]*)*"
+_REPEATS = re.compile(rf"{re.escape(_REDACTED_NAME)}(\s+{re.escape(_REDACTED_NAME)})+")
 
 
 def scrub_names(text: str, names: Sequence[str]) -> str:
@@ -61,8 +69,9 @@ def scrub_names(text: str, names: Sequence[str]) -> str:
     """
     for name in sorted({n.strip() for n in names if len(n.strip()) >= 3}, key=len, reverse=True):
         # Surrounding quotes go too, or the redaction is left sitting inside "…".
-        text = re.sub(rf"[\"'«»‘’“”]?{re.escape(name)}[\"'«»‘’“”]?", _REDACTED_NAME, text,
-                      flags=re.I)
+        text = re.sub(rf"{_QUOTE}(?i:{re.escape(name)}){_NAME_TAIL}{_QUOTE}",
+                      _REDACTED_NAME, text)
+    text = _REPEATS.sub(_REDACTED_NAME, text)
     return _SENTENCE_START.sub(
         lambda m: f"{m.group(1)}{_REDACTED_NAME[0].upper()}{_REDACTED_NAME[1:]}", text)
 

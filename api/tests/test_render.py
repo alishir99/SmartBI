@@ -7,6 +7,7 @@ from api.agent.render import (
     presentable_columns,
     presentable_row,
     propose_chart,
+    scrub_names,
     split_answer,
     strip_markdown,
     to_columns,
@@ -227,6 +228,36 @@ def test_markdown_emphasis_is_stripped_from_the_prose():
 def test_stripping_leaves_lone_markers_alone():
     """Unpaired markers are punctuation in someone's product name, not formatting."""
     assert strip_markdown("Modell A**") == "Modell A**"
+
+
+# ------------------------------------------------------------------ names in a refusal
+
+def test_a_refusal_does_not_repeat_the_name_it_refuses():
+    """Confirming which name was and was not in the data is itself information about someone
+    else. The prompt says so; only this makes it true."""
+    scrubbed = scrub_names('"Lumia Nordic" finns inte bland dina varumärken.', ["Lumia"])
+    assert "Lumia" not in scrubbed
+    # The looked-up word is "Lumia" and the model wrote "Lumia Nordic": redacting only what was
+    # looked up left `det efterfrågade namnet Nordic"` — still the competitor, and broken prose.
+    assert "Nordic" not in scrubbed
+    assert scrubbed.startswith("Det efterfrågade namnet finns inte")
+
+
+def test_scrubbing_stops_at_the_name():
+    """The tail rule follows capitalised words, so it must not swallow the sentence."""
+    scrubbed = scrub_names("Lumia Nordic finns inte i datan, men Nordström och Vidar gör det.",
+                           ["Lumia Nordic"])
+    assert "Nordström och Vidar" in scrubbed
+
+
+def test_two_lookups_of_the_same_name_redact_once():
+    scrubbed = scrub_names("Lumia Nordics siffror saknas.", ["Lumia", "Lumia Nordics"])
+    assert scrubbed.count("det efterfrågade namnet") + scrubbed.count(
+        "Det efterfrågade namnet") == 1
+
+
+def test_a_name_that_did_resolve_is_left_alone():
+    assert scrub_names("Nordström sålde bäst.", []) == "Nordström sålde bäst."
 
 
 def test_malformed_json_does_not_raise():

@@ -298,6 +298,48 @@ def test_prose_that_states_the_direction_correctly_still_passes(prose):
     assert check.ok, check.violations
 
 
+MARKET_SHARE = result(
+    [{"brand": "Nordström", "share_pct": 10.59, "share_pct_compare": 22.79,
+      "share_pct_delta_pe": -12.2, "own_net_sek": 1_649_276.30}],
+    columns=[{"key": "brand", "type": "text", "label": "Varumärke"},
+             {"key": "share_pct", "type": "number", "label": "Marknadsandel", "unit": "%"},
+             {"key": "share_pct_compare", "type": "number", "label": "Andel (jfr)", "unit": "%"},
+             {"key": "share_pct_delta_pe", "type": "number", "label": "Förändring",
+              "unit": "p.e."},
+             {"key": "own_net_sek", "type": "number", "label": "Netto", "unit": "SEK"}])
+
+
+def test_a_level_quoted_inside_a_falling_sentence_is_not_a_wrong_direction():
+    """What suppressed the prose on the headline market-share question two runs in three: the
+    sentence describes a fall, and 22,79 and 10,59 are the two ends of it, not the fall
+    itself. Both are cells; a level does not point anywhere."""
+    check = validate_narrative(
+        "Nordström backade från 22,79 % till 10,59 %, och nettoförsäljningen föll till "
+        "1 649 276,30 kr.", [MARKET_SHARE])
+    assert check.ok, check.violations
+    assert len(check.attributions) == 3
+
+
+def test_a_total_of_two_shares_is_a_level_too():
+    """The same false rejection one derivation up: the supplier's two brands add to 41,8 % of
+    the category, and a sentence about a decline does not make that sum a decline."""
+    both = result(
+        [{"brand": "Vidar", "share_pct": 31.2}, {"brand": "Nordström", "share_pct": 10.6}],
+        columns=[{"key": "brand", "type": "text", "label": "Varumärke"},
+                 {"key": "share_pct", "type": "number", "label": "Marknadsandel", "unit": "%"}])
+    check = validate_narrative(
+        "Nordström tappar mark, men sammantaget håller ni 41,8 % av kategorin.", [both])
+    assert check.ok, check.violations
+
+
+def test_the_change_column_still_has_a_direction():
+    """The other half: `share_pct_delta_pe` of -12,2 IS the fall, so prose calling it a rise
+    is still rejected."""
+    check = validate_narrative("Marknadsandelen ökade med 12,2 procentenheter.", [MARKET_SHARE])
+    assert not check.ok
+    assert check.violations[0].reason == "wrong_direction"
+
+
 def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
     """B4's compounding factor."""
     revenue = result(

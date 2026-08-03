@@ -351,6 +351,22 @@ async def test_no_tool_data_means_nothing_to_validate_against(monkeypatch):
     assert card.narrative
 
 
+# -------------------------------------------------------- which lookups counted as a miss
+
+@pytest.mark.parametrize("asked, labels, resembles", [
+    # The refusal path. Retrieval fuses lexical and semantic search, so a competitor's name
+    # comes back with the nearest brand the supplier does own — a hit by count, a miss in fact.
+    ("Lumia Nordic", ["Nordström", "Vidar"], False),
+    ("Lumia Nordic", [], False),
+    # A typo must still resolve, or the answer stops naming a brand the user owns.
+    ("nordstrom", ["Nordström"], True),
+    ("Hörlurar", ["Hörlurar"], True),
+    ("vidar hörlurar", ["Vidar Hörlurar V191 Studio"], True),
+])
+def test_a_lookup_counts_as_a_miss_unless_something_like_it_came_back(asked, labels, resembles):
+    assert agent_loop.resembles_any(asked, labels) is resembles
+
+
 # ------------------------------------------------------------------ the visible status
 
 @pytest.mark.asyncio

@@ -32,6 +32,10 @@ router = APIRouter(prefix="/api", tags=["cards"])
 MAX_REFRESHED_CARDS = 12
 REFRESH_CONCURRENCY = 4
 
+# Reads were capped; writes were not, so one authenticated client could grow a tenant's card
+# table without limit. Well above what a supplier pins by hand, and below "unbounded".
+MAX_SAVED_CARDS = 200
+
 
 @router.get("/cards", response_model=list[AnswerCard])
 async def get_cards(tenant: ScopedTenant = Depends(get_supplier_scope),
@@ -91,6 +95,10 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
 @router.post("/cards", response_model=AnswerCard, status_code=status.HTTP_201_CREATED)
 async def save_card(body: SaveCardRequest,
                     tenant: ScopedTenant = Depends(get_supplier_scope)) -> AnswerCard:
+    if await db.count_cards(tenant.supplier_id) >= MAX_SAVED_CARDS:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Max {MAX_SAVED_CARDS} sparade vyer per leverantör. Ta bort en först.")
     card_id = await db.insert_card(
         user_id=tenant.user_id, supplier_id=tenant.supplier_id, title=body.title,
         chart_spec=body.chart.model_dump(), tool_name=body.tool_name,

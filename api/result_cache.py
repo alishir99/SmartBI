@@ -119,6 +119,10 @@ class ResultCache:
         return entry
 
     def _evict(self) -> None:
+        # ponytail: a full scan of at most `max_entries` (500) on every put and every get.
+        # Entries are insertion-ordered by creation, so this could stop at the first live one —
+        # worth doing if the cache ever holds five figures, which it cannot while it is a
+        # per-process dict.
         cutoff = time.monotonic() - self.ttl_seconds
         for query_id in [k for k, v in self._entries.items() if v.created_at < cutoff]:
             del self._entries[query_id]

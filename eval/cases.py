@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import get_args
 
 import yaml
+
+from mcp_server.tools.schemas import DimensionKey
 
 EVAL_DIR = Path(__file__).resolve().parent
 
@@ -17,13 +20,10 @@ KNOWN_TOOLS = frozenset({
     "get_capabilities", "resolve_entities", "query_sales", "query_market_share",
 })
 
-# Mirrors DimensionKey in mcp_server/tools/schemas.py.
-KNOWN_DIMENSIONS = frozenset({
-    "day", "week", "month", "quarter", "year",
-    "product", "brand", "subcategory", "category",
-    "region", "channel", "store", "city",
-    "customer_segment", "loyalty_tier",
-})
+# Read off DimensionKey rather than copied from it. The hand-written copy had drifted: it was
+# missing month_of_year, weekday, is_holiday and campaign_id, so a valid eval case using any of
+# them was rejected by the loader — the suite refusing to measure the tools' actual surface.
+KNOWN_DIMENSIONS = frozenset(get_args(DimensionKey))
 
 # Mirrors ChartSpec.type in docs/API_CONTRACT.md.
 CHART_TYPES = frozenset({

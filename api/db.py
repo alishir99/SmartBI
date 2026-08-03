@@ -115,6 +115,11 @@ async def insert_card(*, user_id: int, supplier_id: int, title: str,
     return int(row["card_id"])
 
 
+async def count_cards(supplier_id: int) -> int:
+    return int(await pool().fetchval(
+        "SELECT count(*) FROM saved_card WHERE supplier_id = $1", supplier_id))
+
+
 async def list_cards(supplier_id: int, limit: int) -> list[dict[str, Any]]:
     # The LIMIT is in the SQL rather than in the route because every one of these rows costs an
     # MCP round-trip when the caller refreshes it — see the note in routes/cards.py.

@@ -1,7 +1,7 @@
 /** The single card renderer. */
 
 import { useState, type ReactNode } from 'react'
-import type { AnswerCard as Card } from '../types'
+import type { AnswerCard as Card, ResultResponse } from '../types'
 import { useResult } from '../lib/queries'
 import { formatPeriod } from '../lib/format'
 import { Chart } from '../charts/Chart'
@@ -27,12 +27,21 @@ type Props = {
    * and then rewrites its own numbers is worse than a card that waited.
    */
   preview?: boolean
+  /**
+   * Rows the caller already has. The shared-link page does: its reader has no session, so
+   * /api/result would 404 for them and the rows travel with the card instead.
+   */
+  rows?: ResultResponse | null
 }
 
 export function AnswerCardView({ card, onAsk, onDelete, savable = true, height = 280,
-                                preview = false }: Props) {
+                                preview = false, rows = null }: Props) {
   const [view, setView] = useState<'chart' | 'table'>('chart')
-  const result = useResult(card.query_id)
+  // Disabled when the rows are already here — the hook has to be called either way.
+  const fetched = useResult(rows ? null : card.query_id)
+  const result = rows
+    ? { data: rows, isPending: false, isError: false, error: null }
+    : fetched
 
   const title = card.chart?.title ?? headingFor(card)
   const subtitle = subtitleFor(card, card.chart?.subtitle ?? null)
@@ -87,7 +96,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </ul>
       )}
 
-      {card.chart && card.query_id && (
+      {card.chart && (card.query_id || rows) && (
         <div className="mt-6">
           {result.isPending && (
             <div style={{ height }}>
@@ -125,9 +134,10 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </div>
       )}
 
-      {/* A chart without a query_id has nothing to draw from — the result query is
-          disabled in that case, so guard here rather than leaving a skeleton forever. */}
-      {(!card.chart || !card.query_id) && card.status === 'ok' && <EmptyState />}
+      {/* A chart without a query_id and without rows has nothing to draw from — the result
+          query is disabled in that case, so guard here rather than leaving a skeleton
+          forever. */}
+      {(!card.chart || !(card.query_id || rows)) && card.status === 'ok' && <EmptyState />}
 
       {card.status === 'clarify' && (
         <ChipRow

@@ -64,33 +64,40 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     totals_args: dict = {"measures": ["net_sales_sek", "units", "avg_price_sek"],
                          "time_range": window, **compare}
 
+    # Named, because they are cached with the result and are what a saved or shared card
+    # re-runs. Passing `{}` here meant every card pinned from the dashboard came back as
+    # "Kunde inte uppdatera …" the next time it was opened.
+    trend_args: dict = {
+        # All three headline measures, so the KPI sparklines cost no extra query. The trend
+        # card charts the first of them; `propose_chart` picks measures[0].
+        "measures": ["net_sales_sek", "units", "avg_price_sek"],
+        "dimensions": [settings["grain"]],
+        "time_range": window,
+        # `propose_chart` overlays this on the trend line.
+        **compare,
+    }
+    top_products_args: dict = {
+        "measures": ["net_sales_sek", "units"],
+        "dimensions": ["product"],
+        "time_range": window,
+        "order_by": {"measure": "net_sales_sek", "dir": "desc"},
+        "limit": 10,
+    }
+    by_region_args: dict = {
+        "measures": ["net_sales_sek"],
+        "dimensions": ["region"],
+        "time_range": window,
+        "order_by": {"measure": "net_sales_sek", "dir": "desc"},
+    }
+
     try:
         # One MCP session, four queries, run concurrently — the tiles are independent and the
         # rollup makes each of them cheap.
         totals, trend, top_products, by_region, share, capabilities = await asyncio.gather(
             _call(mcp, supplier_id, "query_sales", totals_args),
-            _call(mcp, supplier_id, "query_sales", {
-                # All three headline measures, so the KPI sparklines cost no extra query. The
-                # trend card charts the first of them; `propose_chart` picks measures[0].
-                "measures": ["net_sales_sek", "units", "avg_price_sek"],
-                "dimensions": [settings["grain"]],
-                "time_range": window,
-                # `propose_chart` overlays this on the trend line.
-                **compare,
-            }),
-            _call(mcp, supplier_id, "query_sales", {
-                "measures": ["net_sales_sek", "units"],
-                "dimensions": ["product"],
-                "time_range": window,
-                "order_by": {"measure": "net_sales_sek", "dir": "desc"},
-                "limit": 10,
-            }),
-            _call(mcp, supplier_id, "query_sales", {
-                "measures": ["net_sales_sek"],
-                "dimensions": ["region"],
-                "time_range": window,
-                "order_by": {"measure": "net_sales_sek", "dir": "desc"},
-            }),
+            _call(mcp, supplier_id, "query_sales", trend_args),
+            _call(mcp, supplier_id, "query_sales", top_products_args),
+            _call(mcp, supplier_id, "query_sales", by_region_args),
             _call(mcp, supplier_id, "query_market_share", {"time_range": window, **compare}),
             # Calendar only — a dimension read, not a trip to the fact table.
             _call(mcp, supplier_id, "get_capabilities", {}),
@@ -105,9 +112,9 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     average = add_moving_average(trend, "net_sales_sek")
 
     payloads: dict[str, tuple[str, dict, dict]] = {
-        "trend": ("query_sales", {}, trend),
-        "top_products": ("query_sales", {}, top_products),
-        "by_region": ("query_sales", {}, by_region),
+        "trend": ("query_sales", trend_args, trend),
+        "top_products": ("query_sales", top_products_args, top_products),
+        "by_region": ("query_sales", by_region_args, by_region),
     }
     cached = {
         name: cache.put(from_tool_result(supplier_id=supplier_id, tool=tool,
@@ -176,13 +183,13 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
                             f"Kunde inte hämta produktrörelser: {exc}") from exc
 
     return MoversResponse(cards=[
-        _movers_card(cache, supplier_id, risers, "Största uppgångar", "desc"),
-        _movers_card(cache, supplier_id, fallers, "Största tapp", "asc"),
+        _movers_card(cache, supplier_id, risers, "Största uppgångar", "desc", args("desc")),
+        _movers_card(cache, supplier_id, fallers, "Största tapp", "asc", args("asc")),
     ])
 
 
 def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str,
-                 direction: str) -> AnswerCard:
+                 direction: str, tool_args: dict) -> AnswerCard:
     """The one card `propose_chart` cannot pick: the change *is* the measure here.
 
     Everywhere else a delta column is kept off the value axis, because a change next to a level
@@ -190,7 +197,7 @@ def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str
     to itself — in kronor, which is a readable axis, unlike a percentage from an arbitrary base.
     """
     result = cache.put(from_tool_result(supplier_id=supplier_id, tool="query_sales",
-                                        tool_args={}, payload=payload))
+                                        tool_args=tool_args, payload=payload))
     return AnswerCard(
         status="ok",
         chart=ChartSpec(type="bar", x="product", y=["net_sales_sek_delta"],

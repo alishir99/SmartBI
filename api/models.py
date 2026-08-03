@@ -268,11 +268,24 @@ class SaveCardRequest(BaseModel):
 
 class ShareRequest(BaseModel):
     card_id: str
-    # Snapshot by default: a live link re-executes under *someone's* tenant scope, and getting
-    # that wrong is a data leak.
-    mode: Literal["snapshot", "live"] = "snapshot"
+    # ponytail: only `live` is served. A frozen snapshot means storing the rows as they were,
+    # which is a table and a retention policy, not a flag — the mode is carried in the token so
+    # the read side can start honouring it without reissuing links.
+    mode: Literal["snapshot", "live"] = "live"
 
 
 class ShareResponse(BaseModel):
     url: str
     expires_at: str
+
+
+class SharedView(BaseModel):
+    """What a share link resolves to, for a reader with no session at all."""
+
+    card: AnswerCard
+    # Inline, because the reader cannot call /api/result — that endpoint is scoped to a
+    # logged-in tenant, and this page deliberately has no login.
+    result: ResultPage
+    shared_by: str
+    expires_at: str
+    mode: Literal["snapshot", "live"]

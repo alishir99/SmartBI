@@ -9,6 +9,7 @@ import type {
   MoversResponse,
   ResultResponse,
   SaveCardRequest,
+  SharedView,
   ShareResponse,
   User,
 } from '../types'
@@ -111,6 +112,14 @@ export async function shareCard(
   mode: 'snapshot' | 'live',
 ): Promise<ShareResponse> {
   return request<ShareResponse>('/api/share', { method: 'POST', body: { card_id: cardId, mode } })
+}
+
+/**
+ * The read side. No Authorization header is sent or wanted: the token carries which card and
+ * whose scope, both signed, and the reader is a person with no account here.
+ */
+export async function fetchShared(token: string): Promise<SharedView> {
+  return request<SharedView>(`/api/shared/${encodeURIComponent(token)}`)
 }
 
 // --- export -----------------------------------------------------------------

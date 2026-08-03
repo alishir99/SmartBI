@@ -115,6 +115,12 @@ async def insert_card(*, user_id: int, supplier_id: int, title: str,
     return int(row["card_id"])
 
 
+async def supplier_name(supplier_id: int) -> str | None:
+    """Who a shared link was created by — the reader has no session to infer it from."""
+    return await pool().fetchval(
+        "SELECT name FROM dim_supplier WHERE supplier_id = $1", supplier_id)
+
+
 async def count_cards(supplier_id: int) -> int:
     return int(await pool().fetchval(
         "SELECT count(*) FROM saved_card WHERE supplier_id = $1", supplier_id))

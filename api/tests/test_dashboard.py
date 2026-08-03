@@ -475,8 +475,20 @@ MOVERS_PAYLOAD = {
 }
 
 
+MOVERS_ARGS = {"measures": ["net_sales_sek"], "dimensions": ["product"],
+               "order_by": {"field": "net_sales_sek_delta", "dir": "desc"}}
+
+
 def movers_card(direction: str = "desc"):
-    return _movers_card(ResultCache(), 1, MOVERS_PAYLOAD, "Största uppgångar", direction)
+    return _movers_card(ResultCache(), 1, MOVERS_PAYLOAD, "Största uppgångar", direction,
+                        MOVERS_ARGS)
+
+
+def test_the_card_carries_the_arguments_that_produced_it():
+    """A card is saved and shared as tool + arguments, not as a picture. Caching it with `{}`
+    meant everything pinned from the dashboard came back as "Kunde inte uppdatera …"."""
+    assert movers_card().provenance is not None
+    assert movers_card().provenance.tool_args == MOVERS_ARGS
 
 
 def test_the_change_is_the_axis_on_this_card_and_only_this_card():

@@ -210,10 +210,34 @@ POST   /api/cards                {title, chart, tool_name, tool_args}  →  Answ
 DELETE /api/cards/{card_id}      →  204
 GET    /api/export/{query_id}.csv → text/csv  (sv-SE: semicolon separated, comma decimal)
 POST   /api/share                {card_id, mode: "snapshot" | "live"} → {url, expires_at}
+GET    /api/shared/{token}       →  SharedView          ← no Authorization header
 ```
 
 Saving persists the **spec plus the tool arguments**, not a screenshot, so a saved card
-re-runs live against fresh data.
+re-runs live against fresh data. `POST /api/cards` caps a supplier at 200 saved views.
+
+`url` is `{public_web_url}/#/delad/{token}` — a hash route, because the router is one.
+
+```ts
+type SharedView = {
+  card: AnswerCard          // card_id and query_id are null: see below
+  result: ResultPage        // the rows, inline
+  shared_by: string         // supplier name, for a reader with no session
+  expires_at: string
+  mode: "snapshot" | "live" // always "live" today
+}
+```
+
+The only unauthenticated route in the API. Everything it may read comes from the signed
+token: which card, and whose scope the query runs under — so the reader cannot widen either,
+and a live link always re-executes as the supplier who shared it, never as whoever opens it.
+The rows travel inline because `/api/result` is scoped to a logged-in tenant, and no
+`card_id` reaches the reader because every control keyed to it is an authenticated call.
+Every failure — expired, tampered with, card deleted, wrong supplier — returns the same 404
+and the same sentence.
+
+`mode: "snapshot"` is accepted, carried in the token, and served as `live`: freezing rows
+means storing them.
 
 ---
 

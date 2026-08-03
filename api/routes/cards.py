@@ -129,6 +129,8 @@ async def share(body: ShareRequest,
     # The contract is {url, expires_at}; `mode` was being passed and silently dropped, since the
     # model does not declare it.
     return ShareResponse(
-        url=f"{settings.public_web_url}/delad/{token}",
+        # A hash route, because the router is one: `/delad/…` as a path would need a server-side
+        # fallback, and the static image that serves the app deliberately has none.
+        url=f"{settings.public_web_url}/#/delad/{token}",
         expires_at=expires_at.isoformat(),
     )

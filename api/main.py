@@ -14,7 +14,7 @@ from . import auth, db, logs
 from .config import settings
 from .mcp_client import McpClient
 from .result_cache import ResultCache
-from .routes import cards, chat, dashboard, result
+from .routes import cards, chat, dashboard, result, shared
 
 logs.configure()
 logger = logging.getLogger("api")
@@ -116,6 +116,7 @@ app.include_router(dashboard.router)
 app.include_router(chat.router)
 app.include_router(result.router)
 app.include_router(cards.router)
+app.include_router(shared.router)
 
 
 @app.get("/health", tags=["ops"])

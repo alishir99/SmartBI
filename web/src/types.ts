@@ -131,6 +131,15 @@ export type ResultResponse = {
   truncated: boolean
 }
 
+/** What a share link resolves to. The rows come inline: the reader has no session. */
+export type SharedView = {
+  card: AnswerCard
+  result: ResultResponse
+  shared_by: string
+  expires_at: string
+  mode: 'snapshot' | 'live'
+}
+
 export type ChatEvent =
   | { type: 'status'; message: string }
   | { type: 'tool_call'; tool: string; args: Record<string, unknown> }

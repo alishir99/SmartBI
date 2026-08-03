@@ -464,13 +464,19 @@ Kända luckor i det som ligger här: ingen realtidsström; rollup-refresh är ma
 utvärderingsuppsättningen är min egen och delar därmed mina blinda fläckar; syntetisk data
 kan inte visa verklig smuts; ingen återkoppling från tummen upp/ner tillbaka in i evalen.
 
-**Delningslänkar är halva.** `POST /api/share` finns och gör den intressanta delen — en
-signerad, tidsbegränsad token som bär *ursprungsleverantörens* omfång, så att en live-länk
-körs om under den som delade och aldrig under den som läser. Läsänden saknas: hash-routern
-har inga parametriserade rutter, så `/delad/{token}` leder ingenstans. Knappen är därför
-dold (`SHARE_UI_ENABLED` i `CardActions.tsx`) i stället för att erbjuda en länk till en tom
-sida. Det som återstår är en sida som verifierar token och renderar kortet under det omfång
-token anger — en halvdag, inte ett designproblem.
+**Delningslänkar, och det som fortfarande fattas i dem.** `POST /api/share` mintar en
+signerad, tidsbegränsad token som bär *ursprungsleverantörens* omfång, och `GET
+/api/shared/{token}` löser in den: enda rutten i API:t utan session bakom sig. Allt den får
+läsa står i token — vilket kort, och vems behörighet frågan körs under — och båda är
+signerade, så en läsare kan inte vidga något. Sidan (`#/delad/{token}`) är medvetet inte
+appen: ett kort, vem som delat det, när länken slutar gälla, och ingen navigation, ingen
+chatt, inget att spara. Varken `card_id` eller `query_id` följer med till läsaren, eftersom
+varje kontroll som hänger på dem är ett inloggat anrop den sidan inte kan göra.
+
+Det som fattas är **ögonblicksbilden**. Att frysa raderna som de såg ut betyder att lagra
+dem — en tabell och en gallringsregel, inte en flagga — så alla länkar körs om mot färsk
+data vid varje öppning. Läget ligger kvar i token, så läsänden kan börja hedra det utan att
+någon länk behöver göras om.
 
 Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än städar undan:
 

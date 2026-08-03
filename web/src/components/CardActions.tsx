@@ -10,8 +10,8 @@ import { useDeleteCard, useSaveCard, useShareCard } from '../lib/queries'
 import { Button } from './Button'
 import { IconCheck, IconDownload, IconPin, IconShare, IconTrash } from './Icons'
 
-/** The share UI is deferred, not broken. */
-const SHARE_UI_ENABLED = false
+/** The read side exists now: `#/delad/{token}` resolves through GET /api/shared. */
+const SHARE_UI_ENABLED = true
 
 type Props = {
   card: AnswerCard
@@ -181,16 +181,12 @@ function ShareMenu({ cardId }: { cardId: string }) {
         <div className="animate-fade-in absolute right-0 top-full z-20 mt-2 w-72 rounded-tile bg-surface p-4 shadow-pop ring-hairline">
           <p className="text-xs font-medium text-ink">Dela som läslänk</p>
           <div className="mt-3 space-y-2">
+            {/* One option, because one is served. A frozen snapshot means storing the rows as
+                they were, which is a table and a retention rule rather than a flag. */}
             <ShareOption
-              title="Ögonblicksbild"
-              description="Fryser data och tidpunkt. Rekommenderas."
-              loading={share.isPending && share.variables?.mode === 'snapshot'}
-              onClick={() => share.mutate({ cardId, mode: 'snapshot' })}
-            />
-            <ShareOption
-              title="Live"
-              description="Körs om mot färsk data — alltid under den ursprungliga leverantörens behörighet."
-              loading={share.isPending && share.variables?.mode === 'live'}
+              title="Skapa länk"
+              description="Körs om mot färsk data vid varje öppning — alltid under din behörighet, aldrig läsarens. Slutar gälla automatiskt."
+              loading={share.isPending}
               onClick={() => share.mutate({ cardId, mode: 'live' })}
             />
           </div>

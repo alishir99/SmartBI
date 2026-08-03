@@ -440,7 +440,7 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Viola
         # The primary measure is the first numeric column that is not a derived comparison — the
         # same choice propose_chart makes, so prose and chart are judged against one axis.
         primary = next((key for key in measures
-                        if not key.endswith(("_compare", "_delta_pct"))), None)
+                        if not key.endswith(("_compare", "_delta", "_delta_pct"))), None)
         if primary is None:
             continue
 

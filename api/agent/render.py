@@ -173,7 +173,7 @@ def propose_chart(result: CachedResult, title: str | None = None,
     # The current period leads. `_delta_pct` never joins it — a percentage on a kronor axis is
     # the bug the filter was written for — and `_compare` only joins it on a time axis, below.
     measures = [m for m in plottable
-                if not m["key"].endswith(("_compare", "_delta_pct", "_delta_pe"))]
+                if not m["key"].endswith(("_compare", "_delta", "_delta_pct", "_delta_pe"))]
 
     title = title or derive_title(result, dimensions)
     if not measures:

@@ -452,16 +452,20 @@ def test_an_unmarked_card_carries_no_label():
 
 MOVERS_PAYLOAD = {
     "rows": [{"product": "Nordström TV N100", "net_sales_sek": 300.0,
-              "net_sales_sek_compare": 100.0, "net_sales_sek_delta_pct": 200.0},
+              "net_sales_sek_compare": 100.0, "net_sales_sek_delta": 200.0,
+              "net_sales_sek_delta_pct": 200.0},
              {"product": "Nordström Soundbar S5", "net_sales_sek": 110.0,
-              "net_sales_sek_compare": 100.0, "net_sales_sek_delta_pct": 10.0}],
+              "net_sales_sek_compare": 100.0, "net_sales_sek_delta": 10.0,
+              "net_sales_sek_delta_pct": 10.0}],
     "row_count": 2,
     "columns": [{"key": "product", "type": "text", "label": "Produkt"},
                 {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"},
                 {"key": "net_sales_sek_compare", "type": "number",
                  "label": "Netto (jämförelse)", "unit": "SEK"},
+                {"key": "net_sales_sek_delta", "type": "number",
+                 "label": "Netto (förändring)", "unit": "SEK"},
                 {"key": "net_sales_sek_delta_pct", "type": "number",
-                 "label": "Netto (förändring)", "unit": "%"}],
+                 "label": "Netto (förändring i %)", "unit": "%"}],
     "meta": {"tool": "query_sales", "source": "mv_sales_daily (rollup)",
              "scope": "supplier:abcd",
              "time_range": {"from": "2025-07-01", "to": "2026-06-30"},
@@ -475,12 +479,14 @@ def movers_card(direction: str = "desc"):
     return _movers_card(ResultCache(), 1, MOVERS_PAYLOAD, "Största uppgångar", direction)
 
 
-def test_the_percentage_is_the_axis_on_this_card_and_only_this_card():
-    """Everywhere else _delta_pct is kept off the value axis; here it is the only measure."""
+def test_the_change_is_the_axis_on_this_card_and_only_this_card():
+    """Everywhere else a delta is kept off the value axis; here it is the only measure — and it
+    is the change in kronor, because a percentage from an arbitrary base draws one bar and nine
+    invisible ones."""
     card = movers_card()
 
     assert card.chart is not None
-    assert card.chart.y == ["net_sales_sek_delta_pct"]
+    assert card.chart.y == ["net_sales_sek_delta"]
     assert card.chart.x == "product"
     assert card.chart.limit == MOVERS_LIMIT
 

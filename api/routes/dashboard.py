@@ -132,11 +132,12 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
 
 MOVERS_LIMIT = 10
 
-# A large percentage from a small base is still a large percentage. The honest answer is to say
-# so rather than to invent a threshold: what counts as "too small to matter" is the reader's
-# call, and the kronor are one click away in the table view.
-_MOVERS_CAVEAT = ("Förändringen är i procent. En stor procentuell rörelse kan komma från en "
-                  "liten utgångsnivå — välj Tabell för att se kronorna bakom.")
+# Ranked on kronor, not on percent. A percentage ranking put one product that went from 400 kr
+# to 6 000 kr at +1 400 % on the axis and left the other nine bars invisible beside it — a chart
+# whose caveat explained why it could not be read. The percentage is still on the card, in the
+# table view, where it says something about the product rather than about the axis.
+_MOVERS_CAVEAT = ("Rangordnat efter förändring i kronor. Välj Tabell för den procentuella "
+                  "förändringen — en stor procentrörelse kan komma från en liten utgångsnivå.")
 
 
 @router.get("/movers", response_model=MoversResponse)
@@ -160,7 +161,7 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
             "dimensions": ["product"],
             "time_range": window,
             "compare_to": COMPARE_TO,
-            "order_by": {"field": "net_sales_sek_delta_pct", "dir": direction},
+            "order_by": {"field": "net_sales_sek_delta", "dir": direction},
             "limit": MOVERS_LIMIT,
         }
 
@@ -182,16 +183,17 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
 
 def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str,
                  direction: str) -> AnswerCard:
-    """The one card `propose_chart` cannot pick: the percentage *is* the axis here.
+    """The one card `propose_chart` cannot pick: the change *is* the measure here.
 
-    Everywhere else `_delta_pct` is kept off the value axis, because a percentage next to kronor
-    is unreadable. On this card it is the only measure, so it has the axis to itself.
+    Everywhere else a delta column is kept off the value axis, because a change next to a level
+    doubles the bars. On this card the change is the only thing asked about, so it has the axis
+    to itself — in kronor, which is a readable axis, unlike a percentage from an arbitrary base.
     """
     result = cache.put(from_tool_result(supplier_id=supplier_id, tool="query_sales",
                                         tool_args={}, payload=payload))
     return AnswerCard(
         status="ok",
-        chart=ChartSpec(type="bar", x="product", y=["net_sales_sek_delta_pct"],
+        chart=ChartSpec(type="bar", x="product", y=["net_sales_sek_delta"],
                         sort=cast(Literal["asc", "desc"], direction),
                         limit=MOVERS_LIMIT, title=title),
         caveats=[_MOVERS_CAVEAT],

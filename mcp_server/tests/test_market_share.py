@@ -97,7 +97,7 @@ def test_thin_slices_are_suppressed(thin):
 
 @pytest.mark.parametrize(
     "leaky",
-    ["share_pct", "rank", "category_net_sek", "leader_share_pct"],
+    ["share_pct", "rank", "category_net_sek", "leader_share_band"],
 )
 def test_suppression_withholds_everything_derivable(leaky):
     """Leaving rank in while removing share would still narrow a competitor's revenue, so the whole
@@ -114,7 +114,17 @@ def test_thresholds_are_inclusive_at_the_boundary():
 def test_zero_category_total_yields_none_not_a_division_error():
     row = _row(_record(category_net_sek=0))
     assert row["share_pct"] is None
-    assert row["leader_share_pct"] is None
+    assert row["leader_share_band"] is None
+
+
+def test_the_leader_comes_back_as_a_band_not_a_figure():
+    """At exactly MIN_BRANDS, the leader's exact share times the exact category total is the
+    leader's revenue to the krona — and the leader is the competitor most easily named."""
+    row = _row(_record(leader_net_sek=417.0, category_net_sek=1000.0))
+    assert row["leader_share_band"] == "40–45 %"
+    assert "leader_share_pct" not in row
+    assert not any(isinstance(value, float) and abs(value - 41.7) < 0.5
+                   for value in row.values()), "the exact share must not survive elsewhere"
 
 
 # ------------------------------------------------------------------------- comparison

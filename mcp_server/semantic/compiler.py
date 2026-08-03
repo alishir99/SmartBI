@@ -313,6 +313,7 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
         aggregate_keys = set(measures)
         if compare:
             aggregate_keys |= {f"{key}_compare" for key in measures}
+            aggregate_keys |= {f"{key}_delta" for key in measures}
             aggregate_keys |= {f"{key}_delta_pct" for key in measures}
         key = having.get("field") or having.get("measure")
         if key not in aggregate_keys:
@@ -409,7 +410,11 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             select_parts += [
                 f"c.{key}",
                 f"pv.{key} AS {key}_compare",
-                # The delta is computed here rather than by the model.
+                # Both deltas are computed here rather than by the model. The absolute one is
+                # what "biggest mover" should usually mean: ranking on the percentage alone
+                # puts a product that went from 400 kr to 6 000 kr above one that gained a
+                # million, and draws a chart with one bar in it.
+                f"(c.{key} - pv.{key}) AS {key}_delta",
                 f"ROUND((100.0 * (c.{key} - pv.{key}) / "
                 f"NULLIF(ABS(pv.{key}), 0))::numeric, 1) AS {key}_delta_pct",
             ]
@@ -471,6 +476,8 @@ def _columns(dimensions: list[str], measures: list[str],
         if compare:
             columns.append({"key": f"{key}_compare", "type": "number",
                             "unit": measure.unit, "label": f"{measure.label} (jämförelse)"})
-            columns.append({"key": f"{key}_delta_pct", "type": "number", "unit": "%",
+            columns.append({"key": f"{key}_delta", "type": "number", "unit": measure.unit,
                             "label": f"{measure.label} (förändring)"})
+            columns.append({"key": f"{key}_delta_pct", "type": "number", "unit": "%",
+                            "label": f"{measure.label} (förändring i %)"})
     return columns

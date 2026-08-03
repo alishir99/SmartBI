@@ -31,8 +31,8 @@ BASE_COLUMNS: list[dict] = [
     # No unit: a placement is not a count of anything, and calling it "st" would put it in the
     # same bucket as sold units.
     {"key": "rank", "type": "number", "label": "Placering"},
-    {"key": "leader_share_pct", "type": "number", "unit": "%",
-     "label": "Marknadsledarens andel"},
+    # A band, not a figure. See _leader_band.
+    {"key": "leader_share_band", "type": "text", "label": "Marknadsledarens andel"},
 ]
 
 # Only present when compare_to was asked for. "(jämförelse)" is a placeholder the API replaces
@@ -249,7 +249,26 @@ def _row(record: dict) -> dict:
         "share_pct": round(100 * data["own_net_sek"] / category_net, 2) if category_net
                      else None,
         "rank": data["rank"],
-        "leader_share_pct": (round(100 * data["leader_net_sek"] / category_net, 2)
-                             if category_net else None),
+        "leader_share_band": (_leader_band(100 * data["leader_net_sek"] / category_net)
+                              if category_net and data.get("leader_net_sek") else None),
     })
     return row
+
+
+# Wide enough that the leader's revenue comes back as a range rather than a figure, narrow
+# enough to still answer "how far ahead is the leader".
+LEADER_BAND_PE = 5
+
+
+def _leader_band(share_pct: float) -> str:
+    """The leader's share as an interval.
+
+    k-anonymity was doing its job on *whether* to answer and none on *how precisely*. At
+    exactly MIN_BRANDS a #2 supplier received the leader's exact share alongside the exact
+    category total — which is the leader's revenue to the krona, for the one competitor a
+    domain expert can usually name. Five points wide leaves a range instead: on a 15,6 MSEK
+    category, ±0,4 MSEK rather than a number. The trade is deliberate; the alternative was
+    withholding the comparison a supplier is here for.
+    """
+    low = int(share_pct // LEADER_BAND_PE) * LEADER_BAND_PE
+    return f"{low}–{low + LEADER_BAND_PE} %"

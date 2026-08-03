@@ -333,6 +333,13 @@ färre än 100 köp. Annars vore "din andel" bara en subtraktion från en namngi
 omsättning. Datagenereringen innehåller **avsiktligt** en tunn underkategori
 (`Vintersport`, 3 varumärken) så att skyddet *går att visa*, inte bara påstå.
 
+Tröskeln avgjorde däremot bara **om** svaret gavs, inte hur exakt. I en kategori med precis
+5 varumärken fick en tvåa tidigare marknadsledarens exakta andel *och* den exakta
+kategoritotalen — vilket är ledarens omsättning på kronan, för den ena konkurrent en
+branschkunnig oftast kan gissa namnet på. Ledarens andel returneras därför i femprocentsband
+(`40–45 %`): ett intervall, inte ett tal. Avvägningen är medveten — alternativet var att
+stryka jämförelsen som är hela anledningen att fråga.
+
 ### 4. Rollups är en integritetsgräns, inte bara cache
 
 `mv_category_daily` och `mv_brand_monthly` är de enda objekt `query_market_share` får läsa.

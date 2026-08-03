@@ -182,7 +182,10 @@ def test_compare_emits_delta_columns_and_a_full_outer_join():
     })
     keys = [c["key"] for c in compiled.columns]
     assert keys == ["product", "net_sales_sek", "net_sales_sek_compare",
-                    "net_sales_sek_delta_pct"]
+                    "net_sales_sek_delta", "net_sales_sek_delta_pct"]
+    # Both deltas: the absolute one is what "biggest mover" means on a readable axis, the
+    # percentage is what it means about the product.
+    assert "(c.net_sales_sek - pv.net_sales_sek) AS net_sales_sek_delta" in compiled.sql
     assert "FULL OUTER JOIN" in compiled.sql
     assert compiled.compare_range == (date(2024, 7, 1), date(2025, 6, 30))
 
@@ -210,8 +213,8 @@ def test_compare_over_a_date_dimension_returns_both_real_dates():
         "time_range": "last_12_months",
     })
     keys = [c["key"] for c in compiled.columns]
-    assert keys == ["month", "month_compare", "net_sales_sek",
-                    "net_sales_sek_compare", "net_sales_sek_delta_pct"]
+    assert keys == ["month", "month_compare", "net_sales_sek", "net_sales_sek_compare",
+                    "net_sales_sek_delta", "net_sales_sek_delta_pct"]
     # The comparison series has to be labellable with the period it came from.
     assert "pv.month AS month_compare" in compiled.sql
 

@@ -76,7 +76,11 @@ type Provenance = {
   row_count: number
   truncated: boolean
   executed_at: string        // ISO timestamp
-  tool_args: Record<string, unknown>              // shown when the chip is expanded
+  // Carried for saving, re-running and sharing a card. NOT rendered: `tool`, `source`, `scope`
+  // and `tool_args` are internals, and a chip that leads with `query_sales` and
+  // `mv_sales_daily (rollup)` reads as an app handing out its own plumbing. The chip states
+  // what was counted, over which period, from how many rows.
+  tool_args: Record<string, unknown>
 }
 
 // The single unit both the dashboard and the chat produce. One card type, two producers -
@@ -99,7 +103,7 @@ type AnswerCard = {
 
 | status | meaning | render |
 |---|---|---|
-| `ok` | answered from tool data | narrative + chart + source chip |
+| `ok` | answered from tool data | narrative + chart, and a source chip in the chat (not on dashboard tiles, where the page header already states period, supplier and unit) |
 | `clarify` | entity ambiguous, needs a choice | question + clickable candidate chips, no chart |
 | `cannot_answer` | outside what the data can answer | explanation + `suggestions` as clickable prompts |
 | `explain` | a question about the card, not about the data | narrative under "Om diagrammet", no chart |

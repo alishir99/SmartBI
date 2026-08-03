@@ -238,8 +238,13 @@ Fyra lager, i den ordning de bär vikt:
    omgenerering med den felande siffran citerad tillbaka. Vid andra felet: `validation_failed`,
    prosan utelämnas, diagrammet står kvar. **Att misslyckas synligt slår att misslyckas
    trovärdigt.**
-3. **Härkomst.** Varje kort bär en källchip: verktyg · filter · omfång · antal rader ·
-   rollup eller faktatabell · tidsstämpel. Expanderad visar den exakta verktygsargumenten.
+3. **Härkomst.** Varje chattsvar bär en källchip: underlag · period · antal rader ·
+   tidsstämpel. Expanderad visar den jämförelseperiod som gällde, datans täckning, vad som
+   filtrerades och **vilka tal i texten som kommer från just den hämtningen**. Den säger
+   *vad* som räknades, inte vilken tabell som lästes: `query_sales` och `mv_sales_daily` är
+   riktiga svar på fel fråga, och på en leverantörs skärm läser de som att appen lämnar ut
+   sitt innanmäte. Dashboardens kort har ingen chip - sidhuvudet anger redan period,
+   leverantör och enhet en gång för hela sidan.
 4. **Mätning.** `eval/` kör 85 svenska frågor - 56 gyllene och 29 adversariella - mot facit
    som räknats fram **oberoende** med pandas ur samma genererade data. Det gör "hallucinerar
    den?" till ett tal jag kan rapportera. Talen står nedan.

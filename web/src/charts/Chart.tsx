@@ -1,6 +1,6 @@
 /**
  * The one renderer for every `ChartSpec`. It receives the spec from the model and the rows from
- * `/api/result/{query_id}` — the model's output never carries a value, so a hallucinated number
+ * `/api/result/{query_id}` - the model's output never carries a value, so a hallucinated number
  * cannot reach this component.
  */
 
@@ -73,12 +73,12 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
     : height
 
   // Recharts emits a bare <svg> with no accessible name, so a screen reader reaching this point
-  // previously found nothing at all — the chart was simply absent.
+  // previously found nothing at all - the chart was simply absent.
   const description = describeChart(spec, prepared)
 
   return (
     <figure className="m-0">
-      {/* The unit sits above the axis rather than on it — overlaying the top tick is
+      {/* The unit sits above the axis rather than on it - overlaying the top tick is
           exactly how a chart ends up with an unreadable largest value. Money carries a scale
           (`tkr`, `Mkr`); every other unit is itself, and a bare percentage axis said nothing
           at all about what its numbers were. */}
@@ -327,7 +327,7 @@ function sidewaysHeight(rowCount: number): number {
 
 /**
  * An array, not a fragment: Recharts scans its *direct* children for axes, grid and tooltip, and
- * a fragment hides them from that scan — the chart then silently renders with no axes at all.
+ * a fragment hides them from that scan - the chart then silently renders with no axes at all.
  */
 function buildAxes(prepared: PreparedChart, sideways: boolean, markers: string[] = []) {
   const categoryKey = prepared.xColumn?.key
@@ -408,7 +408,7 @@ function categoryAxisWidth(prepared: PreparedChart): number {
 }
 
 /**
- * A pie's colour follows the slice, not the measure, so it reads from `slices` — which
+ * A pie's colour follows the slice, not the measure, so it reads from `slices` - which
  * prepare.ts builds from the dimension values, in the same row order Recharts draws.
  */
 function sliceColor(prepared: PreparedChart, index: number): string {
@@ -432,7 +432,7 @@ function pieTooltip(prepared: PreparedChart) {
   }
 }
 
-/** Full label — for the tooltip, which has room for the whole name. */
+/** Full label - for the tooltip, which has room for the whole name. */
 function xLabel(prepared: PreparedChart, value: string): string {
   return prepared.xColumn ? formatCell(value, prepared.xColumn) : value
 }

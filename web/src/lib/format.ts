@@ -2,7 +2,7 @@
 
 import type { Column, ColumnUnit, DateRange } from '../types'
 
-/** Narrow no-break space — what sv-SE uses between a value and its unit. */
+/** Narrow no-break space - what sv-SE uses between a value and its unit. */
 const NBSP = '\u00A0'
 
 const cache = new Map<string, Intl.NumberFormat>()
@@ -48,7 +48,7 @@ export function moneyScale(maxAbsSek: number): MoneyScale {
   return { divisor: 1_000_000, unit: 'Mkr', decimals: 1 }
 }
 
-/** `12,4 Mkr` — magnitude chosen from this value alone. */
+/** `12,4 Mkr` - magnitude chosen from this value alone. */
 export function formatMoney(sek: number): string {
   const s = moneyScale(sek)
   return `${nf(s.decimals, s.decimals).format(sek / s.divisor)}${NBSP}${s.unit}`
@@ -71,7 +71,7 @@ export function formatMoneyExact(sek: number): string {
 
 // --- percent, units ---------------------------------------------------------
 
-/** `18,3 %` — always one decimal. */
+/** `18,3 %` - always one decimal. */
 export function formatPercent(value: number, decimals = 1): string {
   return `${nf(decimals, decimals).format(value)}${NBSP}%`
 }
@@ -93,7 +93,7 @@ function signPrefix(value: number): string {
 
 export type Delta = {
   direction: 'up' | 'down' | 'flat'
-  /** magnitude only, e.g. `8,2 %` — the arrow carries the sign */
+  /** magnitude only, e.g. `8,2 %` - the arrow carries the sign */
   magnitude: string
   /** the comparison period; a delta is never rendered without it */
   label: string
@@ -165,7 +165,7 @@ export function formatMonth(value: string, withYear = true): string {
   return withYear ? `${name} ${p.year}` : name
 }
 
-/** `24 jun` — a day bucket on an axis, where the year is already in the card's period line. */
+/** `24 jun` - a day bucket on an axis, where the year is already in the card's period line. */
 export function formatDayShort(value: string): string {
   const p = parseYm(value)
   if (!p) return value
@@ -196,7 +196,7 @@ export function isoWeek(date: Date): { year: number; week: number } {
   return { year: d.getUTCFullYear(), week }
 }
 
-/** `v. 14 2026` — from a date, or from a `2026-W14` key. */
+/** `v. 14 2026` - from a date, or from a `2026-W14` key. */
 export function formatIsoWeek(value: string): string {
   const w = /^(\d{4})-W(\d{1,2})$/.exec(value)
   if (w) return `v.${NBSP}${Number(w[2])} ${w[1]}`
@@ -218,7 +218,7 @@ export function formatPeriod(range: DateRange): string {
   return `${MONTHS_SHORT[a.month - 1]} ${a.year}–${MONTHS_SHORT[b.month - 1]} ${b.year}`
 }
 
-/** `14:32` — clock only, for the source chip. */
+/** `14:32` - clock only, for the source chip. */
 export function formatClock(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -304,31 +304,40 @@ export function truncateLabel(value: string, max = 26): string {
   return `${value.slice(0, max - 1).trimEnd()}…`
 }
 
-/** `Stockholms län · fysisk butik` from provenance.filters_applied. */
+/** `Stockholms län · 1 produkt` from provenance.filters_applied. */
 export function describeFilters(filters: Record<string, unknown>): string {
   const parts: string[] = []
   for (const [key, raw] of Object.entries(filters)) {
     if (raw === null || raw === undefined) continue
-    const value = Array.isArray(raw) ? raw.join(', ') : String(raw)
+    const values = Array.isArray(raw) ? raw : [raw]
+    if (values.length === 0) continue
+
+    // An id filter is real - the numbers are narrowed by it and the user has to know - but
+    // the id itself is a database key. "Produkt: 8" says nothing to a supplier and reads as
+    // an internal leak, so the filter is counted rather than printed.
+    const counted = COUNTED_FILTERS[key]
+    if (counted) {
+      parts.push(values.length === 1 ? `1 ${counted[0]}` : `${values.length} ${counted[1]}`)
+      continue
+    }
+
+    const value = values.join(', ')
     if (!value) continue
     parts.push(`${FILTER_LABELS[key] ?? key}: ${value}`)
   }
   return parts.join(' · ')
 }
 
+/** Singular and plural for the filters that carry ids rather than names. */
+const COUNTED_FILTERS: Record<string, [string, string]> = {
+  category_ids: ['kategori', 'kategorier'],
+  product_ids: ['produkt', 'produkter'],
+  brand_ids: ['varumärke', 'varumärken'],
+  store_ids: ['butik', 'butiker'],
+}
+
 const FILTER_LABELS: Record<string, string> = {
   region: 'Region',
   channel: 'Kanal',
-  category_ids: 'Kategori',
-  product_ids: 'Produkt',
-  brand_ids: 'Varumärke',
-  store_ids: 'Butik',
   category: 'Kategori',
-}
-
-/** `mv_sales_daily (rollup)` -> `Förberäknad rollup`. */
-export function describeSource(source: string): string {
-  if (/rollup|^mv_/i.test(source)) return 'Förberäknad rollup'
-  if (/fact_/i.test(source)) return 'Faktatabell (radnivå)'
-  return source
 }

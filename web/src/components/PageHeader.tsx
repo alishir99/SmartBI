@@ -13,7 +13,7 @@ export function PageHeader({
 }: {
   title: string
   description?: string
-  /** Any card's provenance — they share period and coverage within a page. */
+  /** Any card's provenance - they share period and coverage within a page. */
   provenance?: Provenance | null
   children?: ReactNode
 }) {

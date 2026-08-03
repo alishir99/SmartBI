@@ -30,7 +30,7 @@ TABLES = [
 DEMO_PASSWORD = "demo1234"
 
 # One user per supplier for the first two suppliers: the second exists so tenant isolation can
-# be *shown* live rather than asserted — log in as Erik and the same question returns a
+# be *shown* live rather than asserted - log in as Erik and the same question returns a
 # different company's numbers.
 DEMO_USERS = [
     ("anna@nordstromaudio.se", "Anna Lindqvist", "Nordström Audio AB", "supplier_admin"),
@@ -176,7 +176,7 @@ async def build_entity_search(connection: asyncpg.Connection) -> None:
           FROM dim_store s
     """)
 
-    # Regions are not a table, so they get synthetic ids — dense_rank over the distinct names,
+    # Regions are not a table, so they get synthetic ids - dense_rank over the distinct names,
     # stable for a given dataset.
     await connection.execute("""
         INSERT INTO entity_search (kind, entity_id, label, path, synonyms, supplier_id)
@@ -231,7 +231,7 @@ async def main() -> None:
     try:
         existing = await connection.fetchval("SELECT COUNT(*) FROM fact_sales_line")
         if existing and not args.force:
-            print(f"already seeded ({existing:,} order lines) — use --force to reload")
+            print(f"already seeded ({existing:,} order lines) - use --force to reload")
             return
         if existing:
             print("truncating…")

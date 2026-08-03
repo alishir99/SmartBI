@@ -38,7 +38,7 @@ async def main() -> None:
             "SELECT kind, entity_id, label, path, synonyms FROM entity_search "
             "ORDER BY kind, entity_id")
         if not rows:
-            raise SystemExit("entity_search is empty — run scripts/seed.py first")
+            raise SystemExit("entity_search is empty - run scripts/seed.py first")
 
         print(f"embedding {len(rows):,} entities with {MODEL_NAME} ({EMBEDDING_DIM}d)…")
         for start in range(0, len(rows), BATCH):
@@ -59,7 +59,7 @@ async def main() -> None:
             "CREATE INDEX IF NOT EXISTS idx_entity_embedding ON entity_search "
             f"USING ivfflat (embedding vector_cosine_ops) WITH (lists = {LISTS})")
         await connection.execute("ANALYZE entity_search")
-        print("done — resolve_entities will now report retrieval='hybrid'.")
+        print("done - resolve_entities will now report retrieval='hybrid'.")
     finally:
         await connection.close()
 

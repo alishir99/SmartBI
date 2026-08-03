@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Design tokens. Light is the base; dark is declared twice — once for the OS
+   Design tokens. Light is the base; dark is declared twice - once for the OS
    setting and once for the explicit theme stamp, which must win in both
    directions (the :not() guard lets a light stamp beat OS dark).
    Chart series come from the dataviz reference palette with slot 1 swapped for
@@ -19,7 +19,7 @@
 
   --text: #1d1d1f;
   --text-secondary: #6e6e73;
-  /* Was #86868b, which measures 3.62:1 on white and 3.33:1 on --surface-2 — below the
+  /* Was #86868b, which measures 3.62:1 on white and 3.33:1 on --surface-2 - below the
      4.5:1 WCAG AA needs for text this size, across ~15 call sites including every axis
      tick on every chart. Dark mode was never the problem (#8e8e93 measures 5.22:1 on
      --surface); this was a light-mode-only failure, and light is what a projector shows.
@@ -53,7 +53,7 @@
      every tick on every axis, rendered at 11 px. Dark mode already passes. */
   --axis-text: #6b6b70;
 
-  /* categorical series — fixed order, never cycled */
+  /* categorical series - fixed order, never cycled */
   --series-1: #0071e3;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -171,7 +171,7 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Quiet, Apple-ish focus ring — visible for keyboard users, never removed. */
+  /* Quiet, Apple-ish focus ring - visible for keyboard users, never removed. */
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;

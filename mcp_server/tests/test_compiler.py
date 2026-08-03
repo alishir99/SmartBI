@@ -231,7 +231,7 @@ def test_the_internal_ordinal_never_reaches_the_caller():
 
 
 def test_compare_mixing_a_date_and_a_plain_dimension():
-    """Position for the date, value for the product — and DENSE_RANK rather than ROW_NUMBER so the
+    """Position for the date, value for the product - and DENSE_RANK rather than ROW_NUMBER so the
     repeated month keeps one shared position across products."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
@@ -317,7 +317,7 @@ def test_columns_carry_units_and_swedish_labels():
 
 
 def test_order_by_a_derived_compare_column():
-    """"Vilka produkter tappar mest mot förra året?" — the biggest decliner is usually a mid-sized
+    """"Vilka produkter tappar mest mot förra året?" - the biggest decliner is usually a mid-sized
     product, so sorting by the current value never surfaces it."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
@@ -340,7 +340,7 @@ def test_order_by_measure_and_dimension_still_work():
 
 
 def test_percent_of_total_is_computed_in_sql():
-    """"Hur stor andel av försäljningen är online?" — two golden cases used to depend on the model
+    """"Hur stor andel av försäljningen är online?" - two golden cases used to depend on the model
     dividing, which the system prompt forbids."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
@@ -379,7 +379,7 @@ def test_percent_of_total_skips_the_ratio_measures_it_cannot_share():
 
 
 def test_partitioned_top_n_ranks_within_the_partition():
-    """"Topplista per län" — a flat GROUP BY with a global LIMIT returns ten Stockholm rows and no
+    """"Topplista per län" - a flat GROUP BY with a global LIMIT returns ten Stockholm rows and no
     per-county list at all."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
@@ -389,7 +389,7 @@ def test_partitioned_top_n_ranks_within_the_partition():
     assert ("ROW_NUMBER() OVER (PARTITION BY region ORDER BY net_sales_sek DESC"
             in compiled.sql)
     assert "WHERE __rank <=" in compiled.sql
-    # Grouped by county, best first inside each — any other order is unreadable.
+    # Grouped by county, best first inside each - any other order is unreadable.
     assert "ORDER BY region ASC NULLS LAST, net_sales_sek DESC" in compiled.sql
 
 
@@ -438,7 +438,7 @@ def test_having_can_target_a_derived_compare_column():
 
 def test_having_runs_before_the_share_denominator():
     """WHERE is evaluated before window functions in the same SELECT, so the percentages are of the
-    rows the caller asked to keep — not of a set they filtered away."""
+    rows the caller asked to keep - not of a set they filtered away."""
     compiled = compile_ok({
         "measures": ["net_sales_sek"],
         "dimensions": ["product"],

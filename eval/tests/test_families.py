@@ -1,4 +1,4 @@
-"""Pass rates per check family — the resolution the case-level score destroys."""
+"""Pass rates per check family - the resolution the case-level score destroys."""
 
 from __future__ import annotations
 

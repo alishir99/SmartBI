@@ -55,7 +55,7 @@ class Filters(BaseModel):
 
 
 class TimeRange(BaseModel):
-    """Either an explicit window or a named one — not both."""
+    """Either an explicit window or a named one - not both."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -81,7 +81,7 @@ class OrderBy(BaseModel):
 
 
 class Having(BaseModel):
-    """Filter on an aggregate — the threshold applies after grouping, not per order line."""
+    """Filter on an aggregate - the threshold applies after grouping, not per order line."""
 
     model_config = ConfigDict(extra="forbid")
 

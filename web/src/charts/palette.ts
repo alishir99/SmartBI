@@ -17,7 +17,7 @@ export const SERIES_MUTED = 'var(--series-muted)'
 export const MAX_SERIES = SERIES_VARS.length
 
 /**
- * Slot for series index `i`. A 9th series is never a generated hue — callers fold the tail into
+ * Slot for series index `i`. A 9th series is never a generated hue - callers fold the tail into
  * "Övrigt" before reaching here.
  */
 export function seriesColor(index: number): string {
@@ -39,8 +39,8 @@ export const MARK = {
   lineWidth: 2,
   dotRadius: 4,
   areaOpacity: 0.1,
-  /** The comparison period's stroke — read as "context" without needing a legend. */
+  /** The comparison period's stroke - read as "context" without needing a legend. */
   compareDash: '5 4',
-  /** 2px of surface between touching marks — white does the separating. */
+  /** 2px of surface between touching marks - white does the separating. */
   surfaceGap: 2,
 } as const

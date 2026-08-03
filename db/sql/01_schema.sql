@@ -1,4 +1,4 @@
--- Solvigo Insights — star schema (IMPLEMENTATION_PLAN.md §5.2)
+-- Solvigo Insights - star schema (IMPLEMENTATION_PLAN.md §5.2)
 --
 -- Grain of the fact table: one row per order line. Everything else is derivable.
 -- Money is SEK excluding VAT; the unit is stated in the column name and re-stated

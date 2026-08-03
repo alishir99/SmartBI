@@ -1,4 +1,4 @@
-/** Minimal hash router — 30 lines instead of a dependency. */
+/** Minimal hash router - 30 lines instead of a dependency. */
 
 import { useEffect, useState } from 'react'
 

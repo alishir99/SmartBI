@@ -92,7 +92,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
               node.style.height = `${Math.min(node.scrollHeight, 140)}px`
             }}
             onKeyDown={(event) => {
-              // Enter sends; Shift+Enter is a newline — the convention users already have.
+              // Enter sends; Shift+Enter is a newline - the convention users already have.
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 submit(draft)
@@ -132,7 +132,7 @@ function Welcome({ onPick }: { onPick: (question: string) => void }) {
     <div className="animate-fade-in">
       <p className="text-sm leading-relaxed text-ink-secondary">
         Ställ frågan på svenska. Varje svar kommer med ett diagram som ritas ur raderna
-        frågan hämtade — aldrig ur en siffra modellen hittat på.
+        frågan hämtade - aldrig ur en siffra modellen hittat på.
       </p>
       <p className="mt-5 text-2xs font-medium uppercase tracking-wide text-ink-muted">
         Prova
@@ -190,7 +190,7 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
 
       {turn.card && (
         <AnswerCardView card={turn.card} onAsk={onAsk} height={220}
-                        preview={turn.cardIsPreview} />
+                        preview={turn.cardIsPreview} showSource />
       )}
 
       {turn.error && (
@@ -280,7 +280,7 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
                 )}
                 <span className="sr-only">
                   {step.label}
-                  {done ? ' — klart' : active ? ' — pågår' : ''}
+                  {done ? ' - klart' : active ? ' - pågår' : ''}
                 </span>
               </span>
               {index < FLOW.length - 1 && (

@@ -86,7 +86,7 @@ class Oracle:
                      .rename(columns={"name": "store"}), on="store_id"))
 
         df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
-        # date_trunc('week', ...) in Postgres is ISO week — Monday-anchored, matching the `week`
+        # date_trunc('week', ...) in Postgres is ISO week - Monday-anchored, matching the `week`
         # dimension in semantic/model.py.
         df["week"] = df["date"] - pd.to_timedelta(df["date"].dt.weekday, unit="D")
         df["quarter"] = df["date"].dt.to_period("Q").dt.to_timestamp()
@@ -296,13 +296,13 @@ class Oracle:
         if supplier := spec.get("supplier"):
             rows = self.slice(supplier=supplier)
             if rows.empty:
-                raise KeyError(f"no rows for supplier {supplier!r} — is it still in the data?")
+                raise KeyError(f"no rows for supplier {supplier!r} - is it still in the data?")
             value = self.measure(rows, measure)
         elif brand := spec.get("brand_top_product"):
             rows = self.slice(supplier=None)
             rows = rows[rows["brand"] == brand]
             if rows.empty:
-                raise KeyError(f"no rows for brand {brand!r} — is it still in the data?")
+                raise KeyError(f"no rows for brand {brand!r} - is it still in the data?")
             per_product = rows.groupby("product").apply(
                 lambda group: self.measure(group, measure), include_groups=False)
             value = float(per_product.max())
@@ -405,7 +405,7 @@ class Oracle:
 
 
 def _months_back(anchor: date, months: int) -> date:
-    """The same day-of-month N months earlier, clamped — compiler.py's `_months_back`."""
+    """The same day-of-month N months earlier, clamped - compiler.py's `_months_back`."""
     import calendar
     month_index = anchor.month - 1 - months
     year = anchor.year + month_index // 12

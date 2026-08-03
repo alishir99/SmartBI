@@ -1,4 +1,4 @@
-"""Request-scoped dependencies — above all, where tenant scope enters the process."""
+"""Request-scoped dependencies - above all, where tenant scope enters the process."""
 
 from __future__ import annotations
 

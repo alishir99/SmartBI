@@ -1,4 +1,4 @@
-"""Turning one observed answer into a verdict — the whole of the eval's judgement."""
+"""Turning one observed answer into a verdict - the whole of the eval's judgement."""
 
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ GRADED_KEYS = frozenset({
 # Which family each check belongs to, and the reason this file's central observation is worth
 # acting on rather than just documenting.
 CHECK_FAMILIES: dict[str, str] = {
-    # graded against rows from the result cache — the architecture
+    # graded against rows from the result cache - the architecture
     "series": "grounded", "top_n": "grounded", "rank": "grounded",
     "n_brands": "grounded", "suppressed": "grounded",
-    # graded against the narrative — the model
+    # graded against the narrative - the model
     "numeric": "prose", "delta_pct": "prose", "must_contain": "prose",
     "must_not_contain": "prose", "must_not_contain_numbers": "prose",
     "language": "prose",
-    # graded against what the agent chose to do — planning, not values
+    # graded against what the agent chose to do - planning, not values
     "tools_called": "routing", "tools_not_called": "routing", "dimensions": "routing",
     "chart_type": "routing", "status": "routing", "caveats_min": "routing",
     "suggestions_min": "routing",
@@ -45,7 +45,7 @@ FAMILIES = ("grounded", "prose", "routing", "transport")
 
 
 def family_of(check: str) -> str:
-    """An unrecognised check is reported under `routing` rather than dropped — a check missing from
+    """An unrecognised check is reported under `routing` rather than dropped - a check missing from
     the table must not vanish from the totals."""
     return CHECK_FAMILIES.get(check, "routing")
 
@@ -57,7 +57,7 @@ FORBIDDEN_MAX_BARE_INTEGER = 100
 _YEAR_MIN, _YEAR_MAX = 1990, 2099
 
 # Enough Swedish to tell "the model answered in Swedish" from "the model answered in English".
-# Not a language classifier — a smoke test, and deliberately cheap.
+# Not a language classifier - a smoke test, and deliberately cheap.
 _SWEDISH_MARKERS = re.compile(
     r"[åäöÅÄÖ]|\b(och|för|är|vi|på|med|av|inte|kan|det|som|har|under|mot|jämfört)\b",
     re.I,
@@ -94,7 +94,7 @@ class Observed:
     card: dict[str, Any] | None = None
     # : The `tool_call` SSE events, in order: {"tool": str, "args": dict}.
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    # : Rows from GET /api/result/{query_id} — the grounded values, not the narrative's.
+    # : Rows from GET /api/result/{query_id} - the grounded values, not the narrative's.
     rows: list[dict[str, Any]] = field(default_factory=list)
     columns: list[dict[str, Any]] = field(default_factory=list)
     # : An `error` SSE event, a transport failure or a timeout.
@@ -166,8 +166,8 @@ class CaseResult:
             entry = tally[family_of(check)]
             entry[1] += 1
             entry[0] += check not in failed
-        # A transport failure is never in `checks_run` — nothing was asserted, the turn simply
-        # did not arrive — so it is counted here rather than being lost.
+        # A transport failure is never in `checks_run` - nothing was asserted, the turn simply
+        # did not arrive - so it is counted here rather than being lost.
         for check in failed - set(self.checks_run):
             tally[family_of(check)][1] += 1
         return {name: (ok, total) for name, (ok, total) in tally.items() if total}
@@ -370,7 +370,7 @@ def _grade_series(spec: Any, observed: Observed) -> list[Failure]:
 
     if not observed.rows:
         return [Failure("series", f"no result rows to check against "
-                                  f"(query_id={observed.query_id!r}) — the values were "
+                                  f"(query_id={observed.query_id!r}) - the values were "
                                   f"never grounded")]
 
     columns = observed.effective_columns()
@@ -538,7 +538,7 @@ def _grade_delta_pct(spec: Any, observed: Observed) -> list[Failure]:
         return []
 
     if unsigned and expected < 0:
-        return [Failure("delta_pct", f"expected {_fmt(expected)}% — a decline — and the "
+        return [Failure("delta_pct", f"expected {_fmt(expected)}% - a decline - and the "
                                      f"narrative carries the magnitude but no word saying "
                                      f"it fell: {_excerpt(observed.narrative)}")]
     return [Failure("delta_pct", f"expected {_fmt(expected)}% +/-{tolerance_pct}%, "
@@ -579,7 +579,7 @@ def _grade_no_numbers(expected: bool, observed: Observed) -> list[Failure]:
 
 def _is_forbidden_figure(literal: NumberLiteral) -> bool:
     if not literal.bare_integer:
-        # Carries a unit, a magnitude suffix or decimals — a measurement by construction.
+        # Carries a unit, a magnitude suffix or decimals - a measurement by construction.
         return True
     if literal.value.is_integer() and _YEAR_MIN <= literal.value <= _YEAR_MAX:
         return False
@@ -606,7 +606,7 @@ def _within(value: float, expected: float, tolerance_pct: float, literal_tol: fl
 
 def _literal_matches(literal: NumberLiteral, expected: float, tolerance_pct: float,
                      unit: str | None) -> bool:
-    # "12,4" in a sentence about millions is a rounding, not a hallucination — the same
+    # "12,4" in a sentence about millions is a rounding, not a hallucination - the same
     # allowance validate.py makes.
     scales: tuple[float, ...] = (1.0,)
     if literal.implicit_scale_allowed and unit != "%":

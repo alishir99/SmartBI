@@ -12,7 +12,7 @@ IN_REPO_DEFAULTS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # The demo posture — published internal port, in-repo secrets.
+    # The demo posture - published internal port, in-repo secrets.
     solvigo_env: str = "prod"
 
     postgres_host: str = "localhost"
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
         if unchanged := self.unrotated_secrets():
             raise RuntimeError(
                 f"mcp_server: refusing to start with the in-repo default for "
-                f"{', '.join(unchanged)}. These values are public — anyone who can read "
+                f"{', '.join(unchanged)}. These values are public - anyone who can read "
                 f"the repository can call the internal tool surface with them. Set real "
                 f"values, or set SOLVIGO_ENV=dev to run the local demo.")
 

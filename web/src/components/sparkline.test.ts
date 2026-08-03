@@ -11,7 +11,7 @@ describe('sparkPoints', () => {
     expect(xs(sparkPoints([1, 2, 3, 4, 5]))).toEqual([0, 25, 50, 75, 100])
   })
 
-  it('puts the largest value highest — SVG y grows downward', () => {
+  it('puts the largest value highest - SVG y grows downward', () => {
     const [low, mid, high] = ys(sparkPoints([1, 5, 9]))
     expect(high).toBeLessThan(mid)
     expect(mid).toBeLessThan(low)

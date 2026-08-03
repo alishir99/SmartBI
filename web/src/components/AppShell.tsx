@@ -48,7 +48,7 @@ const PAGE_MIN = 520
 
 function clampRail(px: number): number {
   // The rail must not be draggable past the point where the page it sits next to stops being
-  // usable — a stored width from a wider screen must not survive onto a narrower one either.
+  // usable - a stored width from a wider screen must not survive onto a narrower one either.
   const max = Math.max(RAIL_MIN, Math.min(RAIL_MAX, window.innerWidth - PAGE_MIN))
   return Math.min(max, Math.max(RAIL_MIN, Math.round(px)))
 }
@@ -58,7 +58,7 @@ function useRailWidth(): [number, (px: number) => void] {
     try {
       return clampRail(Number(localStorage.getItem(RAIL_KEY)) || RAIL_DEFAULT)
     } catch {
-      // Private mode or a blocked origin — the default is a fine answer.
+      // Private mode or a blocked origin - the default is a fine answer.
       return RAIL_DEFAULT
     }
   })
@@ -82,7 +82,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const turnCount = useChatStore((state) => state.turns.length)
   const seenTurns = useRef(turnCount)
 
-  // A question can start from outside the chat — the suggestion chips under every card call
+  // A question can start from outside the chat - the suggestion chips under every card call
   // `ask` directly.
   useEffect(() => {
     const started = turnCount > seenTurns.current
@@ -152,7 +152,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
 }
 
 /**
- * The drag edge between the page and the chat rail — the ARIA window-splitter pattern, so it
+ * The drag edge between the page and the chat rail - the ARIA window-splitter pattern, so it
  * works from the keyboard too rather than being a mouse-only affordance.
  */
 function RailHandle({ width, onResize }: { width: number; onResize: (px: number) => void }) {

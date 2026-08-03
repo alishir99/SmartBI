@@ -1,7 +1,7 @@
 -- Materialised rollups (IMPLEMENTATION_PLAN.md §5.3).
 --
 -- Two reasons these exist, and both matter:
---   1. Latency — the standard dashboard is six tiles and the answer changes once a day.
+--   1. Latency - the standard dashboard is six tiles and the answer changes once a day.
 --   2. They are the privacy boundary. mv_category_daily and mv_brand_monthly are the only
 --      objects query_market_share may read. Competitor detail is not "filtered out" by
 --      application logic; it was never in the object the tool can reach.
@@ -31,7 +31,7 @@ CREATE UNIQUE INDEX uq_mv_sales_daily
     ON mv_sales_daily (date, supplier_id, product_id, region, channel);
 CREATE INDEX idx_mv_sales_daily_supplier ON mv_sales_daily (supplier_id, date);
 
--- Category totals across ALL brands. Carries no brand or supplier identity — the
+-- Category totals across ALL brands. Carries no brand or supplier identity - the
 -- identity has been aggregated away, which is what makes it safe to read across tenants.
 -- n_brands / n_transactions are carried so the k-anonymity guard (§11.3) has something
 -- to test at query time.

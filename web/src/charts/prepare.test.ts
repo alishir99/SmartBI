@@ -163,7 +163,7 @@ describe('pivot', () => {
     expect(prepared.series).toHaveLength(9)
     expect(prepared.series[8].label).toBe('Övrigt')
     expect(prepared.series[8].color).toBe('var(--series-muted)')
-    // R8 (92) + R9 (91) — the tail is summed, not dropped.
+    // R8 (92) + R9 (91) - the tail is summed, not dropped.
     expect(prepared.rows[0].Övrigt).toBe(183)
     expect(prepared.folded).toBe(true)
   })
@@ -238,7 +238,7 @@ describe('pie slices', () => {
 
   it('gives every slice its own colour', () => {
     // The bug this pins: colour was matched against `series`, which for a pie holds the single
-    // measure and never a dimension value — so every wedge came out --series-1.
+    // measure and never a dimension value - so every wedge came out --series-1.
     const prepared = prepareChart(
       pie(),
       [SUBCATEGORY, NET],

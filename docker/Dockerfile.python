@@ -19,7 +19,7 @@ COPY . .
 RUN pip install --no-deps .
 
 # Not root. uid 1000 because `./logs` and `./data` are bind-mounted from the host in compose
-# and a bind mount keeps the host's ownership — 1000 is the first user on a Linux desktop, and
+# and a bind mount keeps the host's ownership - 1000 is the first user on a Linux desktop, and
 # Docker Desktop on macOS and Windows makes the point moot. If your uid differs and the seed
 # step cannot write, either chown those two directories or add `user: root` to the service.
 RUN useradd --uid 1000 --create-home app && chown -R app:app /app

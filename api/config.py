@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # generous for a human and tight for a script, because a limit that trips during a live demo
     # is worse than no limit at all.
     login_window_seconds: int = 300
-    # A human retyping a password gets it wrong two or three times — capslock, an old saved
+    # A human retyping a password gets it wrong two or three times - capslock, an old saved
     # password.
     login_attempts_per_identifier: int = 5
     # Higher, because an office (or a demo room) shares one NAT address, and locking out a whole
@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     login_attempts_per_ip: int = 30
 
     # A chat turn is several LLM calls and takes 10–30 s, so ten in five minutes is already
-    # faster than a person can read the answers — but a human is not the binding constraint
+    # faster than a person can read the answers - but a human is not the binding constraint
     # here.
     chat_turns_per_user: int = 100
     chat_window_seconds: int = 300
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # a log you have to regex is a log nobody aggregates.
     log_level: str = "INFO"
     log_format: str = "json"
-    # Empty disables the file and leaves stdout only, which is what the container wants —
+    # Empty disables the file and leaves stdout only, which is what the container wants -
     # docker and Cloud Run both collect stdout, and a file inside a container is a file
     # nobody reads. Set it when running the API directly.
     log_file: str = ""
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     log_sensitive: bool = False
     # Rotated on TIME, not on size. Size-based rotation bounds the disk and nothing else:
     # "keep the last 120 MB" is two hours on a busy day and six months on a quiet one, so the
-    # question this log exists to answer — what happened last Tuesday — has no answer. Daily
+    # question this log exists to answer - what happened last Tuesday - has no answer. Daily
     # files with a retention in days give a window you can actually state, and a filename you
     # can reason about.
     log_retention_days: int = 14
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
         if unchanged := self.unrotated_secrets():
             raise RuntimeError(
                 f"api: refusing to start with the in-repo default for "
-                f"{', '.join(unchanged)}. These values are public — anyone who can read "
+                f"{', '.join(unchanged)}. These values are public - anyone who can read "
                 f"the repository can mint a session with them. Set real values, or set "
                 f"SOLVIGO_ENV=dev to run the local demo.")
 

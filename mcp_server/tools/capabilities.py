@@ -1,4 +1,4 @@
-"""get_capabilities — the model's map of the world."""
+"""get_capabilities - the model's map of the world."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ async def get_capabilities(tenant: TenantContext) -> dict:
             "note": "Relativa perioder räknas från sista datumet i datan, inte från dagens "
                     "datum. Det finns ingen data efter coverage.to.",
             "compare_to": ["previous_period", "same_period_last_year"],
-            # The warehouse stores the campaign's id and its days, not its name — so this says
+            # The warehouse stores the campaign's id and its days, not its name - so this says
             # when a campaign ran, and never what it was called.
             "campaigns": [{"campaign_id": r["campaign_id"],
                            "from": r["starts"].isoformat(),
@@ -92,7 +92,7 @@ async def get_capabilities(tenant: TenantContext) -> dict:
         "limits": {
             "max_rows": MAX_ROWS,
             "grain_floor": "Aggregerat från orderrad. Kunddata kan endast grupperas på "
-                           "segment, ålderskategori eller lojalitetsnivå — aldrig på "
+                           "segment, ålderskategori eller lojalitetsnivå - aldrig på "
                            "enskild kund.",
         },
         "what_you_may_see_about_others": {
@@ -100,12 +100,12 @@ async def get_capabilities(tenant: TenantContext) -> dict:
             "category_totals": "Endast aggregat, och endast via query_market_share.",
             "own_rank": "Ja, t.ex. '#2 av 7 varumärken i Hörlurar'.",
             "named_competitors": "Nej. Konkurrenters siffror är inte åtkomliga, inte "
-                                 "filtrerade — de finns inte i objekten verktyget läser.",
+                                 "filtrerade - de finns inte i objekten verktyget läser.",
             "k_anonymity": "Marknadsandelar utelämnas om urvalet innehåller färre än 5 "
                            "varumärken eller färre än 100 köp.",
         },
         "cannot_answer": [
-            "Marginal, inköpspris och COGS — finns inte i datan som exponeras för "
+            "Marginal, inköpspris och COGS - finns inte i datan som exponeras för "
             "leverantörer.",
             "Lagernivåer och prognoser.",
             "Enskilda kunder eller personuppgifter.",

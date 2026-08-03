@@ -79,14 +79,14 @@ async def request_context(request: Request, call_next):
     return response
 
 
-# The API serves JSON, SSE and one CSV — no scripts, no styles, no frames, no images. So the
+# The API serves JSON, SSE and one CSV - no scripts, no styles, no frames, no images. So the
 # policy can be the strictest one there is. It matters because the session token lives in
 # `localStorage` (SSE over fetch needs an Authorization header, which an httpOnly cookie cannot
 # carry), and that trade means any injected script is a session takeover: narrowing the script
 # surface to nothing is the other half of the answer.
 _CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
-# Except Swagger UI — the only HTML this API serves, and it loads its bundle from jsdelivr and
+# Except Swagger UI - the only HTML this API serves, and it loads its bundle from jsdelivr and
 # runs an inline initialiser. Naming that one host on those three paths is what lets the policy
 # above stay absolute everywhere else; the alternative was one policy loose enough for the docs
 # page, applied to every route that carries data.
@@ -121,7 +121,7 @@ app.include_router(shared.router)
 
 @app.get("/health", tags=["ops"])
 async def health() -> dict:
-    """Reports what is actually wired up, including whether an LLM key is present — the most common
+    """Reports what is actually wired up, including whether an LLM key is present - the most common
     reason a fresh checkout appears broken."""
     return {
         "status": "ok",

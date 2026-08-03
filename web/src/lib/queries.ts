@@ -42,7 +42,7 @@ export function useMovers(period: string = DEFAULT_PERIOD) {
   })
 }
 
-/** `enabled` is false for cards without a query_id — clarify / cannot_answer cards. */
+/** `enabled` is false for cards without a query_id - clarify / cannot_answer cards. */
 export function useResult(queryId: string | null) {
   return useQuery({
     queryKey: queryKeys.result(queryId ?? 'none'),

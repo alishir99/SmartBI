@@ -17,7 +17,7 @@ from mcp_server.tools.market_share import (
 @pytest.mark.parametrize(
     ("requested", "expected"),
     [
-        # The dashboard's own last_7_days chip — the window that produced 119.66 % live.
+        # The dashboard's own last_7_days chip - the window that produced 119.66 % live.
         ((date(2026, 6, 24), date(2026, 6, 30)), (date(2026, 6, 1), date(2026, 6, 30))),
         # Spanning a boundary widens on both ends.
         ((date(2026, 5, 15), date(2026, 6, 14)), (date(2026, 5, 1), date(2026, 6, 30))),
@@ -25,7 +25,7 @@ from mcp_server.tools.market_share import (
         ((date(2026, 4, 10), date(2026, 4, 10)), (date(2026, 4, 1), date(2026, 4, 30))),
         # February, common year.
         ((date(2026, 2, 3), date(2026, 2, 3)), (date(2026, 2, 1), date(2026, 2, 28))),
-        # February, leap year — the month-length arithmetic must not assume 28.
+        # February, leap year - the month-length arithmetic must not assume 28.
         ((date(2024, 2, 3), date(2024, 2, 3)), (date(2024, 2, 1), date(2024, 2, 29))),
         # December, so the "next month" step has to roll the year over.
         ((date(2025, 12, 5), date(2025, 12, 20)), (date(2025, 12, 1), date(2025, 12, 31))),
@@ -119,7 +119,7 @@ def test_zero_category_total_yields_none_not_a_division_error():
 
 def test_the_leader_comes_back_as_a_band_not_a_figure():
     """At exactly MIN_BRANDS, the leader's exact share times the exact category total is the
-    leader's revenue to the krona — and the leader is the competitor most easily named."""
+    leader's revenue to the krona - and the leader is the competitor most easily named."""
     row = _row(_record(leader_net_sek=417.0, category_net_sek=1000.0))
     assert row["leader_share_band"] == "40–45 %"
     assert "leader_share_pct" not in row

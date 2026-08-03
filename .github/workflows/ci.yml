@@ -65,7 +65,7 @@ jobs:
         run: PGPASSWORD=solvigo psql -h localhost -U solvigo -d solvigo -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
 
       # The tools connect as app_readonly, so RLS applies to them exactly as it does in
-      # production — which is the whole point of running them here rather than mocking.
+      # production - which is the whole point of running them here rather than mocking.
       - name: Integration tests (against the seeded database)
         run: pytest -q -m integration
 
@@ -81,7 +81,7 @@ jobs:
           node-version: "24"
       - run: npm install
       - run: npx tsc --noEmit
-      # The chart contract (§8) is deterministic frontend logic — order, limit, series
-      # ranking, colour, scale — so it is unit-tested rather than eyeballed.
+      # The chart contract (§8) is deterministic frontend logic - order, limit, series
+      # ranking, colour, scale - so it is unit-tested rather than eyeballed.
       - run: npm test
       - run: npm run build

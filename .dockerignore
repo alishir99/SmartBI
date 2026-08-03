@@ -1,6 +1,6 @@
 # Dockerfile.python is `COPY . .`, so anything reachable here lands in a readable image
 # layer. compose supplies the real values through `env_file:` at *run* time, so copying
-# .env in serves no purpose beyond baking a live API key into all three images — where
+# .env in serves no purpose beyond baking a live API key into all three images - where
 # `docker history` and anyone who pulls the image can read it back out. Both the file and
 # the local override.
 .env
@@ -21,7 +21,7 @@ web/dist/
 .git/
 .github/
 
-# Mounted as a volume by the seed service, so it must not bloat the build context —
+# Mounted as a volume by the seed service, so it must not bloat the build context -
 # the fact CSV alone is ~50 MB.
 data/
 

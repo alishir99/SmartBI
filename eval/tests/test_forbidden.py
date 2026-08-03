@@ -9,7 +9,7 @@ from eval.oracle import Oracle
 
 pytestmark = pytest.mark.skipif(
     not (Oracle().data_dir / "fact_sales_line.csv").exists(),
-    reason=("data/generated is missing — regenerate with: "
+    reason=("data/generated is missing - regenerate with: "
             "python scripts/generate_data.py --seed 42"))
 
 ADVERSARIAL = cases.load("adversarial").cases
@@ -44,7 +44,7 @@ def test_forbidden_literal_still_derives(case_id, oracle):
             f"    derived from the CSVs:    {derived!r}\n"
             f"    subject: {subject!r} at scale {entry.get('scale', 1)}\n"
             f"    the control is forbidding a string the data no longer produces, so it "
-            f"passes for the wrong reason — update the literal to the derived value")
+            f"passes for the wrong reason - update the literal to the derived value")
 
 
 @pytest.mark.parametrize("case_id", CASE_IDS)
@@ -58,5 +58,5 @@ def test_forbidden_figure_is_not_the_tenants_own(case_id, oracle):
         if brand := entry.get("brand_top_product"):
             owned = set(oracle.slice()["brand"].unique())
             assert brand not in owned, (
-                f"{case_id}: {brand!r} is a brand the tenant owns — forbidding its figure "
+                f"{case_id}: {brand!r} is a brand the tenant owns - forbidding its figure "
                 f"asserts nothing about cross-tenant leakage")

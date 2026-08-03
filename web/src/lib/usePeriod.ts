@@ -12,7 +12,7 @@ function choiceStore(storageKey: string, options: PeriodOption[], fallback: stri
     const stored = localStorage.getItem(storageKey)
     if (stored && options.some((option) => option.key === stored)) current = stored
   } catch {
-    // Private mode or a blocked origin — the default is a fine answer.
+    // Private mode or a blocked origin - the default is a fine answer.
   }
 
   const subscribe = (listener: () => void) => {

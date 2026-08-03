@@ -1,4 +1,4 @@
-"""The generator is reproducible — the assumption the whole oracle rests on."""
+"""The generator is reproducible - the assumption the whole oracle rests on."""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
  * One render per card status.
  *
  * These exist because the review found four defects a single render test each would have
- * caught — a deleted source chip that four documents still promised, a `validation_failed`
+ * caught - a deleted source chip that four documents still promised, a `validation_failed`
  * sentence painted twice, a preview card indistinguishable from a final one, and a chip
  * reading "0 rader" next to a green tick. The whole frontend suite was pure functions, so
  * every one of them passed CI.
@@ -67,11 +67,27 @@ function show(card: Partial<AnswerCard>, props: Record<string, unknown> = {}) {
 }
 
 describe('the answer card', () => {
-  it('shows the prose and the source chip on an answered card', () => {
-    show({})
+  it('shows the prose and the source chip on a chat answer', () => {
+    show({}, { showSource: true })
     expect(screen.getByText(/49 360 103 kronor/)).toBeDefined()
     // G1: the chip was deleted while four documents still promised it, and nothing failed.
-    expect(screen.getByText('query_sales')).toBeDefined()
+    expect(screen.getByText('Källa')).toBeDefined()
+  })
+
+  it('leaves the source off a dashboard tile', () => {
+    // The page header already states the period, the supplier and the unit, once, for every
+    // tile on it. A source line under each one is the same sentence four times.
+    show({})
+    expect(screen.queryByText('Källa')).toBeNull()
+  })
+
+  it('says where the numbers came from without naming a table', () => {
+    // The chip led with `query_sales`, `mv_sales_daily (rollup)` and `supplier:8f2a`. To the
+    // person this product is for, that reads as an app handing out database internals.
+    const { container } = show({}, { showSource: true })
+    for (const internal of ['query_sales', 'mv_sales_daily', 'supplier:', 'rollup']) {
+      expect(container.textContent).not.toContain(internal)
+    }
   })
 
   it('states once, not twice, that the text could not be verified', () => {
@@ -102,7 +118,8 @@ describe('the answer card', () => {
     // G3: the same question resolves to different windows on different runs, and the card's
     // own subtitle is the only thing on screen that says which one ran.
     show({})
-    expect(screen.getByText(/jul 2025–jun 2026/)).toBeDefined()
+    // Twice over: the card's subtitle and the source chip, which both name the window.
+    expect(screen.getAllByText(/jul 2025–jun 2026/).length).toBeGreaterThan(0)
   })
 
   it('names the figures a query licensed, once the chip is opened', () => {
@@ -113,7 +130,7 @@ describe('the answer card', () => {
         { query_id: 'q_1', tool: 'query_sales', provenance: PROVENANCE, row_count: 12 },
         { query_id: 'q_2', tool: 'query_market_share', provenance: PROVENANCE, row_count: 6 },
       ],
-    })
+    }, { showSource: true })
     fireEvent.click(screen.getByRole('button', { expanded: false }))
     const panels = screen.getAllByText('Siffror i texten som kommer härifrån')
     expect(panels).toHaveLength(1)

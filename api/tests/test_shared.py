@@ -80,7 +80,7 @@ async def test_a_valid_link_resolves_with_its_rows_inline(stubbed):
 @pytest.mark.asyncio
 async def test_the_query_runs_under_the_sharing_supplier(stubbed):
     """The scope is in the token, not in the request. Whoever opens the link, the query runs
-    as the supplier who created it — and can therefore never widen."""
+    as the supplier who created it - and can therefore never widen."""
     mcp = FakeMcp()
     token, _ = create_share_token(card_id="7", supplier_id=1, mode="live")
     await resolve(token, mcp)
@@ -91,7 +91,7 @@ async def test_the_query_runs_under_the_sharing_supplier(stubbed):
 @pytest.mark.asyncio
 async def test_a_session_token_is_not_a_share_token(stubbed):
     """Both are signed with the same key. Without the type check, any logged-in user's own
-    token would read any card_id they cared to name — including another tenant's."""
+    token would read any card_id they cared to name - including another tenant's."""
     session = create_access_token({"user_id": 5, "supplier_id": 1, "role": "supplier_admin"})
     with pytest.raises(HTTPException) as raised:
         await resolve(session)
@@ -122,7 +122,7 @@ async def test_a_token_signed_with_another_key_is_gone(stubbed):
 
 @pytest.mark.asyncio
 async def test_a_card_belonging_to_another_supplier_is_gone(stubbed):
-    """The token names both, and they have to agree — a signed card_id under the wrong
+    """The token names both, and they have to agree - a signed card_id under the wrong
     supplier_id must not resolve."""
     token, _ = create_share_token(card_id="7", supplier_id=2, mode="live")
     with pytest.raises(HTTPException) as raised:

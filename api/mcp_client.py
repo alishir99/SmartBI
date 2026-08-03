@@ -1,4 +1,4 @@
-"""The MCP client — and the exact point where tenant scope leaves this process."""
+"""The MCP client - and the exact point where tenant scope leaves this process."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ HEADER_TOKEN = "x-solvigo-internal-token"
 
 
 class McpToolError(RuntimeError):
-    """A tool refused the call — bad spec, unknown measure, missing scope."""
+    """A tool refused the call - bad spec, unknown measure, missing scope."""
 
 
 def to_anthropic_tool(descriptor: dict[str, Any]) -> dict[str, Any]:
@@ -101,7 +101,7 @@ class McpClient:
 
     async def call_on(self, session: ClientSession, tool: str,
                       args: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Call on an already-open session — the agent loop makes several per turn."""
+        """Call on an already-open session - the agent loop makes several per turn."""
         result = await session.call_tool(tool, args or {})
         return parse_tool_result(result)
 

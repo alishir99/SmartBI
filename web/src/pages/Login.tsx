@@ -79,7 +79,7 @@ export function LoginPage() {
           </Button>
         </form>
 
-        {/* No credentials on the page — anyone who reached it would already be past the only
+        {/* No credentials on the page - anyone who reached it would already be past the only
             door there is. But a reviewer who opens the app before reading anything is otherwise
             simply stuck, so say where they are. */}
         <p className="mt-5 text-center text-2xs text-ink-muted">

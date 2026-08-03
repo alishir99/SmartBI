@@ -1,16 +1,34 @@
-/** The provenance chip (§9.3). */
+/**
+ * Where the numbers came from, in the words a supplier uses.
+ *
+ * The chip used to lead with `query_sales`, `mv_sales_daily (rollup)`, `supplier:8f2a` and a
+ * block of raw tool arguments. To an engineer that reads as provenance; to the person the
+ * product is for it reads as the application handing out database internals, which is the
+ * opposite of the reassurance the chip exists to give. Same guarantee, stated as what was
+ * counted, over which period, from how many rows.
+ */
 
 import { useId, useState } from 'react'
 import type { Claim, Provenance, ToolCallRecord } from '../types'
 import {
   describeFilters,
-  describeSource,
   formatClock,
   formatNumber,
   formatPeriod,
   formatTimestamp,
 } from '../lib/format'
 import { IconChevronDown, IconDatabase } from './Icons'
+
+/** What each tool read, said as a business fact rather than as a table name. */
+const SOURCE_WORDS: Record<string, string> = {
+  query_sales: 'Din egen försäljning',
+  query_market_share: 'Din försäljning och kategorins totaler',
+  dashboard: 'Din egen försäljning',
+}
+
+function sourceWords(tool: string): string {
+  return SOURCE_WORDS[tool] ?? 'Din egen försäljning'
+}
 
 type Props = {
   provenance: Provenance
@@ -42,15 +60,17 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
         <span className="truncate">
           {multiple ? (
             <>
-              <span className="font-mono">{records.length} källor</span>
+              <span className="font-medium text-ink">Källor</span>
               <Dot />
-              {records.map((record) => record.tool).join(', ')}
+              {records.length} hämtningar
             </>
           ) : (
             <>
-              <span className="font-mono">{provenance.tool}</span>
+              <span className="font-medium text-ink">Källa</span>
               <Dot />
-              {describeSource(provenance.source)}
+              {sourceWords(provenance.tool)}
+              <Dot />
+              {formatPeriod(provenance.time_range)}
               <Dot />
               {formatNumber(provenance.row_count)} rader
             </>
@@ -67,18 +87,22 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
 
       {open && (
         <div id={panelId} className="animate-fade-in mt-3 space-y-3">
+          <p className="text-2xs leading-relaxed text-ink-muted">
+            Talen i svaret kommer härifrån. Språkmodellen väljer vilken fråga som ställs och hur
+            svaret formuleras, men värdena hämtas ur din data och räknas fram innan texten
+            skrivs.
+          </p>
           {multiple ? (
             records.map((record) => (
               <SourcePanel
                 key={record.query_id}
                 provenance={record.provenance}
-                queryId={record.query_id}
                 isPrimary={record.query_id === primaryQueryId}
                 claims={(claims ?? []).filter((claim) => claim.query_id === record.query_id)}
               />
             ))
           ) : (
-            <SourcePanel provenance={provenance} queryId={primaryQueryId ?? null} />
+            <SourcePanel provenance={provenance} claims={claims} />
           )}
         </div>
       )}
@@ -88,12 +112,10 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
 
 function SourcePanel({
   provenance,
-  queryId,
   isPrimary = false,
   claims,
 }: {
   provenance: Provenance
-  queryId: string | null
   isPrimary?: boolean
   claims?: Claim[]
 }) {
@@ -108,9 +130,7 @@ function SourcePanel({
           </span>
         </div>
       )}
-      <Row label="Verktyg" value={provenance.tool} mono />
-      <Row label="Källa" value={provenance.source} mono />
-      <Row label="Behörighet" value={provenance.scope} mono />
+      <Row label="Underlag" value={sourceWords(provenance.tool)} />
       <Row label="Period" value={formatPeriod(provenance.time_range)} />
       {provenance.compare_range && (
         <Row label="Jämförelseperiod" value={formatPeriod(provenance.compare_range)} />
@@ -121,8 +141,8 @@ function SourcePanel({
         label="Rader"
         value={`${formatNumber(provenance.row_count)}${provenance.truncated ? ' (trunkerad)' : ''}`}
       />
-      {filters && <Row label="Filter" value={filters} span />}
-      <Row label="Kördes" value={formatTimestamp(provenance.executed_at)} span />
+      {filters && <Row label="Urval" value={filters} span />}
+      <Row label="Hämtat" value={formatTimestamp(provenance.executed_at)} span />
 
       {/* The sentence this whole feature exists to be able to say. Only rendered when the
           card carries attributions, so a saved card from before them is unaffected. */}
@@ -133,7 +153,7 @@ function SourcePanel({
             {claims.map((claim, index) => (
               <span
                 key={`${claim.literal}-${index}`}
-                className="rounded-pill bg-surface px-2 py-0.5 font-mono text-ink-secondary ring-hairline"
+                className="rounded-pill bg-surface px-2 py-0.5 text-ink-secondary ring-hairline"
               >
                 {claim.literal}
               </span>
@@ -141,17 +161,6 @@ function SourcePanel({
           </dd>
         </div>
       )}
-
-      <div className="sm:col-span-2">
-        <dt className="mb-1.5 text-ink-muted">
-          Exakta argument{queryId ? ` · ${queryId}` : ''}
-        </dt>
-        <dd>
-          <pre className="quiet-scroll overflow-x-auto rounded-lg bg-surface p-3 font-mono text-2xs leading-relaxed text-ink-secondary ring-hairline">
-            {JSON.stringify(provenance.tool_args, null, 2)}
-          </pre>
-        </dd>
-      </div>
     </dl>
   )
 }
@@ -159,18 +168,16 @@ function SourcePanel({
 function Row({
   label,
   value,
-  mono = false,
   span = false,
 }: {
   label: string
   value: string
-  mono?: boolean
   span?: boolean
 }) {
   return (
     <div className={span ? 'sm:col-span-2' : undefined}>
       <dt className="text-ink-muted">{label}</dt>
-      <dd className={`mt-0.5 break-words text-ink-secondary ${mono ? 'font-mono' : ''}`}>{value}</dd>
+      <dd className="mt-0.5 break-words text-ink-secondary">{value}</dd>
     </div>
   )
 }

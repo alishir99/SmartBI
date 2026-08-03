@@ -393,7 +393,7 @@ def build_facts(rng: np.random.Generator, products: pd.DataFrame, brands: pd.Dat
 
         quantity = 1 + rng.poisson(0.30, size=n)
 
-        # Prices drift over the period — electronics deflate, most other things creep up.
+        # Prices drift over the period - electronics deflate, most other things creep up.
         drift = rng.normal(-0.02, 0.05)
         price_factor = 1.0 + drift * (day_pos / max(n_days - 1, 1))
         unit_price = product.list_price_sek * price_factor
@@ -633,7 +633,7 @@ def reconcile(facts: pd.DataFrame, ground_truth: dict) -> None:
     assert totals["returned_lines"] > 0, "no returns generated"
     assert totals["lines_without_customer"] > 0, "no cash purchases generated"
     assert ground_truth["k_anonymity"]["subcategories_below_threshold"], \
-        "k-anonymity path would never fire — the thin subcategory is not thin"
+        "k-anonymity path would never fire - the thin subcategory is not thin"
 
 
 def main() -> None:

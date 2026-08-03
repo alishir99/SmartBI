@@ -57,7 +57,7 @@ describe('describeChart', () => {
   })
 
   it('states the fold into Övrigt, because the picture does', () => {
-    // Only a limited pie folds — every other chart drops the tail outright, because a pie that
+    // Only a limited pie folds - every other chart drops the tail outright, because a pie that
     // does not sum to the whole is a lie and a bar chart missing its tail is not.
     const pie = spec({ type: 'pie', limit: 2 })
     const prepared = prepareChart(pie, [PRODUCT, NET], rows([

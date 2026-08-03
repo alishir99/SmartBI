@@ -1,8 +1,8 @@
-# API contract — frozen interface between backend and frontend
+# API contract - frozen interface between backend and frontend
 
 This file is the coordination point for parallel work. **Backend and frontend are built
 against this document, not against each other.** If you need to change a shape here, say so
-explicitly rather than changing it silently — someone else has already coded against it.
+explicitly rather than changing it silently - someone else has already coded against it.
 
 Money is always SEK excluding VAT. Text shown to users is Swedish; code, comments and
 identifiers are English.
@@ -49,7 +49,7 @@ type Column = {
   unit?: "SEK" | "st" | "%" | null
 }
 
-// The model emits a ChartSpec. It never emits values — only which columns to draw.
+// The model emits a ChartSpec. It never emits values - only which columns to draw.
 type ChartSpec = {
   type: "line" | "bar" | "stacked_bar" | "area" | "pie" | "kpi" | "table"
   x: string | null            // column key
@@ -66,7 +66,7 @@ type ChartSpec = {
 type Provenance = {
   tool: string               // "query_sales" | "query_market_share" | "dashboard"
   source: string             // "mv_sales_daily (rollup)" | "fact_sales_line" | ...
-  scope: string              // "supplier:8f2a" — hashed, not the raw id
+  scope: string              // "supplier:8f2a" - hashed, not the raw id
   currency: "SEK"
   vat: "exkl. moms"
   time_range: { from: string; to: string }        // ISO dates
@@ -79,7 +79,7 @@ type Provenance = {
   tool_args: Record<string, unknown>              // shown when the chip is expanded
 }
 
-// The single unit both the dashboard and the chat produce. One card type, two producers —
+// The single unit both the dashboard and the chat produce. One card type, two producers -
 // which is what lets a chat answer be pinned next to a standard tile.
 type AnswerCard = {
   card_id: string | null     // set once saved
@@ -95,14 +95,22 @@ type AnswerCard = {
 }
 ```
 
-### Status semantics — the frontend must render these differently
+### Status semantics - the frontend must render these differently
 
 | status | meaning | render |
 |---|---|---|
 | `ok` | answered from tool data | narrative + chart + source chip |
 | `clarify` | entity ambiguous, needs a choice | question + clickable candidate chips, no chart |
 | `cannot_answer` | outside what the data can answer | explanation + `suggestions` as clickable prompts |
+| `explain` | a question about the card, not about the data | narrative under "Om diagrammet", no chart |
 | `validation_failed` | a number in the prose did not match the data, twice | chart only, prose suppressed, visible warning |
+
+`explain` is what "vad betyder den streckade linjen?" gets. It needs no query, so it has no
+result - and the rule that turns a resultless `ok` into `cannot_answer` used to put a correct
+explanation under the heading *"Det här har jag inte underlag för"*. It carries its own guard
+instead: the numeric check runs against an empty result set, so an explanation that states a
+figure has nothing to state it from and the prose is suppressed. Explanations describe what is
+drawn; numbers require a tool call.
 
 `validation_failed` is not an error state to hide. It is the guarantee working, and the UI
 should say so plainly: *"Svarstexten kunde inte verifieras mot datan och har därför
@@ -110,7 +118,7 @@ utelämnats. Diagrammet nedan kommer direkt från databasen."*
 
 ---
 
-## Dashboard — deterministic, no LLM
+## Dashboard - deterministic, no LLM
 
 ```
 GET /api/dashboard?period=…  →  { kpis: Kpi[], cards: AnswerCard[] }
@@ -139,25 +147,25 @@ type Kpi = {
 ```
 
 `delta_pct` is null when the comparison window returned nothing to compare against, or falls
-outside the data's coverage — the tile then reads "Ingen jämförelseperiod".
+outside the data's coverage - the tile then reads "Ingen jämförelseperiod".
 
 Cards returned, in order: the sales trend over the period's own grain, top 10 products, sales
 by region. Each is a full `AnswerCard` with `chart` and `query_id` set. The trend card's title
 follows the grain ("Försäljning per månad", "…per vecka"), and it carries a derived
-`net_sales_sek_ma` column — a trailing three-bucket mean drawn as a line over the bars.
+`net_sales_sek_ma` column - a trailing three-bucket mean drawn as a line over the bars.
 
 ```
 GET /api/movers?period=…  →  { cards: AnswerCard[] }
 ```
 
 Biggest risers then biggest fallers, ten each, sorted on the derived `net_sales_sek_delta_pct`
-column. This is the one place that column is on the value axis — everywhere else a percentage
+column. This is the one place that column is on the value axis - everywhere else a percentage
 next to kronor is the bug the filter exists for. The comparison is the window before the
 selected one, as everywhere else.
 
 ---
 
-## Chat — SSE
+## Chat - SSE
 
 ```
 POST /api/chat   { question: string, history?: {role, content}[] }
@@ -176,20 +184,20 @@ type ChatEvent =
   | { type: "error";    message: string }                     // terminal on failure
 ```
 
-Streaming the *tool calls* is a trust feature, not a latency feature — the user watches the
+Streaming the *tool calls* is a trust feature, not a latency feature - the user watches the
 system go to the database.
 
 `preview` carries a card with the chart and an empty narrative, emitted as soon as a row
-tool returns — seconds before the prose is written and validated. It may arrive more than
+tool returns - seconds before the prose is written and validated. It may arrive more than
 once in a turn; each one replaces the last, and the terminal `card` replaces them all. The
-chart was never the untrusted half — it is drawn from the cached rows via
-`/api/result/{query_id}`, not from the model — so showing it early costs nothing in trust.
+chart was never the untrusted half - it is drawn from the cached rows via
+`/api/result/{query_id}`, not from the model - so showing it early costs nothing in trust.
 The prose is still withheld until it has been validated. A stream that ends on a `preview`
 ended early and is an error, not an answer.
 
 ---
 
-## Result data — where charts get their numbers
+## Result data - where charts get their numbers
 
 ```
 GET /api/result/{query_id}?offset=0&limit=1000
@@ -216,7 +224,7 @@ GET    /api/shared/{token}       →  SharedView          ← no Authorization h
 Saving persists the **spec plus the tool arguments**, not a screenshot, so a saved card
 re-runs live against fresh data. `POST /api/cards` caps a supplier at 200 saved views.
 
-`url` is `{public_web_url}/#/delad/{token}` — a hash route, because the router is one.
+`url` is `{public_web_url}/#/delad/{token}` - a hash route, because the router is one.
 
 ```ts
 type SharedView = {
@@ -229,11 +237,11 @@ type SharedView = {
 ```
 
 The only unauthenticated route in the API. Everything it may read comes from the signed
-token: which card, and whose scope the query runs under — so the reader cannot widen either,
+token: which card, and whose scope the query runs under - so the reader cannot widen either,
 and a live link always re-executes as the supplier who shared it, never as whoever opens it.
 The rows travel inline because `/api/result` is scoped to a logged-in tenant, and no
 `card_id` reaches the reader because every control keyed to it is an authenticated call.
-Every failure — expired, tampered with, card deleted, wrong supplier — returns the same 404
+Every failure - expired, tampered with, card deleted, wrong supplier - returns the same 404
 and the same sentence.
 
 `mode: "snapshot"` is accepted, carried in the token, and served as `live`: freezing rows
@@ -247,7 +255,7 @@ means storing them.
 - Magnitude switching, with the unit always on the axis: `< 100 tkr` → `kr`,
   `< 10 Mkr` → `tkr`, otherwise `Mkr`
 - Percentages: one decimal
-- Deltas always carry the comparison period as a label — never a bare `▲ 8,2 %`
+- Deltas always carry the comparison period as a label - never a bare `▲ 8,2 %`
 - ISO weeks; Swedish month names
 - Every card states period, scope and "exkl. moms"
 - Empty and suppressed states are designed, not accidental

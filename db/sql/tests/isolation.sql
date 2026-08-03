@@ -154,14 +154,14 @@ END $$;
 -- Adversarial assertions: the three ways this proof could be true and worthless.
 --
 -- Everything above proves that RLS *works*. None of it proves that RLS is what is doing the
--- work, or that it cannot be walked around. These three do — each one pins an assumption the
+-- work, or that it cannot be walked around. These three do - each one pins an assumption the
 -- rest of the file silently rests on.
 -- ==========================================================================================
 
 -- 1 -------------------------------------------------------- the role cannot ignore policies
 --
 -- Every assertion above is conditional on app_readonly being an ordinary role. A superuser
--- bypasses RLS entirely, and so does BYPASSRLS — and either would make this whole file pass
+-- bypasses RLS entirely, and so does BYPASSRLS - and either would make this whole file pass
 -- while isolating nothing at all. That is currently true and nothing enforced it, which is
 -- the definition of an assumption rather than a guarantee.
 --
@@ -181,11 +181,11 @@ BEGIN
         RAISE EXCEPTION 'app_readonly does not exist';
     END IF;
     IF is_super THEN
-        RAISE EXCEPTION 'app_readonly is a SUPERUSER — every RLS assertion above passes for '
+        RAISE EXCEPTION 'app_readonly is a SUPERUSER - every RLS assertion above passes for '
                         'the wrong reason, because policies are not applied to superusers';
     END IF;
     IF can_bypass THEN
-        RAISE EXCEPTION 'app_readonly holds BYPASSRLS — row-level security is advisory for '
+        RAISE EXCEPTION 'app_readonly holds BYPASSRLS - row-level security is advisory for '
                         'this role and the isolation proven above does not exist';
     END IF;
 
@@ -198,7 +198,7 @@ END $$;
 -- app.supplier_id is a text GUC that the policy casts to INT. A text setting that reaches a
 -- comparison is the classic place an injected predicate would be smuggled in, so the question
 -- is what the cast does with something that is not a number. The requirement is not that it
--- errors — it is that it never yields a WIDER set. Erroring is one acceptable outcome; zero
+-- errors - it is that it never yields a WIDER set. Erroring is one acceptable outcome; zero
 -- rows is another; anything that returns rows for a supplier the caller did not name is not.
 --
 -- Tested with the three shapes that would matter: a SQL fragment, a comma list, and a value
@@ -245,7 +245,7 @@ END $$;
 -- push a user-supplied function INTO the view, where it runs against rows the caller was
 -- never meant to see and can leak them through an error message or a side effect. The barrier
 -- is the mitigation. Not being able to create a function at all is the reason the mitigation
--- never has to hold — defence in depth, tested rather than assumed.
+-- never has to hold - defence in depth, tested rather than assumed.
 DO $$
 BEGIN
     EXECUTE $fn$
@@ -255,7 +255,7 @@ BEGIN
     -- If we get here the function exists, which is the failure. Drop it before raising so a
     -- failing run does not leave an artefact behind for the next one.
     EXECUTE 'DROP FUNCTION IF EXISTS leak_probe(anyelement)';
-    RAISE EXCEPTION 'app_readonly could CREATE FUNCTION — a cheap function can be pushed '
+    RAISE EXCEPTION 'app_readonly could CREATE FUNCTION - a cheap function can be pushed '
                     'into a barrier view and used to read rows the policy excludes';
 EXCEPTION
     WHEN insufficient_privilege THEN

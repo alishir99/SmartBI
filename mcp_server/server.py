@@ -1,4 +1,4 @@
-"""The MCP server — the only path to the data."""
+"""The MCP server - the only path to the data."""
 
 from __future__ import annotations
 
@@ -35,10 +35,10 @@ INSTRUCTIONS = """\
 Semantiskt lager för försäljningsdata i svensk detaljhandel.
 
 Arbetsordning:
-1. get_capabilities — vad som finns, vilka enheter, vilken period datan täcker.
-2. resolve_entities — översätt fritext till ID innan du filtrerar på namn.
-3. query_sales — mät och gruppera. Använd compare_to istället för två anrop och subtraktion.
-4. query_market_share — egen andel och placering i kategorin. Aldrig namngivna konkurrenter.
+1. get_capabilities - vad som finns, vilka enheter, vilken period datan täcker.
+2. resolve_entities - översätt fritext till ID innan du filtrerar på namn.
+3. query_sales - mät och gruppera. Använd compare_to istället för två anrop och subtraktion.
+4. query_market_share - egen andel och placering i kategorin. Aldrig namngivna konkurrenter.
 
 Leverantörsomfång sätts av transporten, inte av dig. Det finns ingen parameter för att välja
 leverantör, och det är avsiktligt.
@@ -72,7 +72,7 @@ async def get_capabilities(ctx: Context) -> dict:
 
 @mcp.tool(
     description="Översätt fritext till kanoniska ID. Anropa alltid detta innan du filtrerar "
-                "på ett namn. Returnerar kandidater med poäng — om flera kandidater är "
+                "på ett namn. Returnerar kandidater med poäng - om flera kandidater är "
                 "rimliga, fråga användaren istället för att välja själv. Tom lista betyder "
                 "att entiteten inte finns; hitta då inte på ett ID.")
 async def resolve_entities(ctx: Context, text: str,
@@ -85,7 +85,7 @@ async def resolve_entities(ctx: Context, text: str,
 @mcp.tool(
     description="Hämta försäljningssiffror: välj mått, gruppera på dimensioner, filtrera, "
                 "och jämför mot föregående period eller samma period förra året. Alla belopp "
-                "i SEK exkl. moms. Använd compare_to hellre än två separata anrop — låt "
+                "i SEK exkl. moms. Använd compare_to hellre än två separata anrop - låt "
                 "databasen räkna, räkna aldrig själv.")
 async def query_sales(ctx: Context,
                       measures: list[MeasureKey],
@@ -122,7 +122,7 @@ async def query_sales(ctx: Context,
                 "kategorins totala försäljning, andel i procent, placering och antal "
                 "varumärken. Konkurrenter namnges aldrig och itemiseras aldrig. Tunna urval "
                 "utelämnas helt (k-anonymitet) och returnerar då suppressed=true med skäl. "
-                "Med compare_to följer 'share_pct_compare' och 'share_pct_delta_pe' med — "
+                "Med compare_to följer 'share_pct_compare' och 'share_pct_delta_pe' med - "
                 "förändringen i procentenheter, inte i procent av en procent.")
 async def query_market_share(ctx: Context,
                              category_ids: list[int] | None = None,
@@ -157,7 +157,7 @@ async def health(_request: Request) -> JSONResponse:
     health check that only proves the process is running is worth very little."""
     try:
         coverage_from, coverage_to = await db.coverage()
-    except Exception as exc:  # noqa: BLE001 — the endpoint's job is to report, not to raise
+    except Exception as exc:  # noqa: BLE001 - the endpoint's job is to report, not to raise
         return JSONResponse({"status": "degraded", "error": str(exc)}, status_code=503)
     return JSONResponse({
         "status": "ok",

@@ -1,4 +1,4 @@
-"""Integration tests — the assertions that need a real, seeded Postgres."""
+"""Integration tests - the assertions that need a real, seeded Postgres."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ async def pool():
 @pytest.fixture(scope="session")
 def truth() -> dict:
     if not GROUND_TRUTH.exists():
-        pytest.skip("data/generated/ground_truth.json saknas — kör scripts/generate_data.py")
+        pytest.skip("data/generated/ground_truth.json saknas - kör scripts/generate_data.py")
     with open(GROUND_TRUTH, encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -75,7 +75,7 @@ async def suppliers(pool) -> dict[str, int]:
         assert rows[0]["supplier_id"] == supplier_id
         found[rows[0]["name"]] = supplier_id
     if not found:
-        pytest.skip("databasen är tom — kör scripts/seed.py")
+        pytest.skip("databasen är tom - kör scripts/seed.py")
     return found
 
 
@@ -105,7 +105,7 @@ async def test_net_sales_matches_ground_truth_for_every_supplier(pool, truth, su
 
 
 async def test_the_monthly_breakdown_matches_ground_truth(pool, truth, suppliers):
-    """The rollup is grouped, not just summed — a grain bug shows up here, not in the total."""
+    """The rollup is grouped, not just summed - a grain bug shows up here, not in the total."""
     name = truth["demo_supplier"]
     expected = truth["per_supplier"][name]["net_sales_by_month"]
 
@@ -258,7 +258,7 @@ async def test_the_rollup_reproduces_the_fact_table_at_every_grain(owner):
                 f"{row['k']}: rollup {row['rollup_net']}/{row['rollup_qty']} "
                 f"vs fact {row['fact_net']}/{row['fact_qty']}" for row in rows)
             assert not rows, (
-                f"mv_sales_daily disagrees with fact_sales_line grouped by {rollup_key} — "
+                f"mv_sales_daily disagrees with fact_sales_line grouped by {rollup_key} - "
                 f"the rollup is stale or half-refreshed (REFRESH MATERIALIZED VIEW). {detail}")
 
 
@@ -342,7 +342,7 @@ async def test_the_two_sources_answer_the_same_question_identically(
         f"only in rollup {sorted(set(rollup) - set(fact))[:3]}, "
         f"only in fact {sorted(set(fact) - set(rollup))[:3]}")
     assert list(rollup) == list(fact), (
-        "the two sources returned the same groups in a different order — a LIMIT that bites "
+        "the two sources returned the same groups in a different order - a LIMIT that bites "
         "would then cut a different slice from each, which is how prose and chart came to "
         "name different winners")
 
@@ -373,7 +373,7 @@ async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers
     # sized, so sorting by current value never surfaces it.
     deltas = [row["net_sales_sek_delta_pct"] for row in payload["rows"]
               if row.get("net_sales_sek_delta_pct") is not None]
-    assert deltas, "every delta came back NULL — the comparison join matched nothing"
+    assert deltas, "every delta came back NULL - the comparison join matched nothing"
     assert deltas == sorted(deltas), "ascending sort on the derived column did not hold"
 
 
@@ -407,7 +407,7 @@ async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
     assert max(counts.values()) <= 2, counts
     # And more than one region survives, which is the actual complaint: a flat GROUP BY with a
     # global LIMIT returned ten Stockholm rows and nothing else.
-    assert len(counts) > 1, "only one region came back — the partition did not apply"
+    assert len(counts) > 1, "only one region came back - the partition did not apply"
 
 
 async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers):
@@ -439,4 +439,4 @@ async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers
     if on_campaign and off_campaign:
         assert min(on_campaign) > max(off_campaign), (
             f"campaign days ({on_campaign}) do not discount harder than ordinary days "
-            f"({off_campaign}) — the generator's campaign branch may have re-broken")
+            f"({off_campaign}) - the generator's campaign branch may have re-broken")

@@ -137,7 +137,7 @@ def test_the_comparison_denominator_is_deduplicated_too():
 
 def test_a_partially_compared_result_shows_no_delta_rather_than_a_mixed_one():
     """Summing rows that carry a comparison with rows that do not puts two periods in one
-    figure — no delta is the honest answer."""
+    figure - no delta is the honest answer."""
     share = {"rows": [compared(share_row("Bruksbo", 10, own=300.0, category=1000.0),
                                own=250.0, category=1000.0),
                       share_row("Bruksbo", 20, own=100.0, category=1000.0)]}
@@ -294,7 +294,7 @@ def test_the_chart_drops_the_overlay_when_the_tiles_drop_the_delta():
 
 
 def test_every_period_carries_the_grain_and_the_noun_its_title_is_built_from():
-    """The trend card's title follows the filter — a literal 'per månad' goes stale on day 1."""
+    """The trend card's title follows the filter - a literal 'per månad' goes stale on day 1."""
     assert all({"grain", "noun", "label"} <= set(settings) for settings in PERIODS.values())
 
 
@@ -400,7 +400,7 @@ def test_a_month_with_no_campaign_is_left_alone():
 
 def test_the_bucket_is_read_from_the_data_not_assumed_to_be_a_month():
     """Days, weeks, months and quarters all label the bucket with its first day, so the next
-    bucket's own value is what bounds this one — no branch per grain."""
+    bucket's own value is what bounds this one - no branch per grain."""
     quarters = ["2025-07-01", "2025-10-01", "2026-01-01"]
 
     # Both campaigns fall inside Q4, and neither is in Q3 or Q1.
@@ -492,7 +492,7 @@ def test_the_card_carries_the_arguments_that_produced_it():
 
 
 def test_the_change_is_the_axis_on_this_card_and_only_this_card():
-    """Everywhere else a delta is kept off the value axis; here it is the only measure — and it
+    """Everywhere else a delta is kept off the value axis; here it is the only measure - and it
     is the change in kronor, because a percentage from an arbitrary base draws one bar and nine
     invisible ones."""
     card = movers_card()
@@ -509,7 +509,7 @@ def test_the_direction_reaches_the_chart_so_fallers_lead_with_the_worst():
 
 
 def test_the_card_says_the_percentage_can_come_from_a_small_base():
-    """No invented threshold — what counts as too small is the reader's call, so say so."""
+    """No invented threshold - what counts as too small is the reader's call, so say so."""
     caveats = " ".join(movers_card().caveats)
 
     assert "procent" in caveats

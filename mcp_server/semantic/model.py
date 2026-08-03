@@ -115,11 +115,11 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
     Dimension("is_holiday", "Dagtyp", "text",
               expr={FACT: "CASE WHEN d.is_holiday THEN 'Röd dag' ELSE 'Vardag' END"}),
     # NULL means "no campaign ran that day", which makes the ordinary days a group of their own
-    # — the comparison the question is usually after.
+    # - the comparison the question is usually after.
     Dimension("campaign_id", "Kampanj", "number",
               expr={FACT: "d.campaign_id"}),
 
-    # Below the rollup's grain — asking for any of these forces the fact table.
+    # Below the rollup's grain - asking for any of these forces the fact table.
     Dimension("store", "Butik", "text",
               expr={FACT: "st.name"}, joins={FACT: ("store",)}),
     Dimension("city", "Stad", "text",

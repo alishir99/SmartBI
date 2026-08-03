@@ -1,4 +1,4 @@
-"""The standard dashboard — deterministic, no LLM anywhere in this file."""
+"""The standard dashboard - deterministic, no LLM anywhere in this file."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ PERIODS: dict[str, dict] = {
 # The comparison follows the filter: whatever window is selected, the deltas and the overlay are
 # measured against the window immediately before it. That used to be a control the user set, but
 # a comparison basis that can disagree with the period filter is a second thing to keep in your
-# head for no gain — every delta on screen is now "vs the period before this one", always.
+# head for no gain - every delta on screen is now "vs the period before this one", always.
 COMPARE_TO = "previous_period"
 DELTA_LABEL = "vs föregående period"
 
@@ -91,7 +91,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     }
 
     try:
-        # One MCP session, four queries, run concurrently — the tiles are independent and the
+        # One MCP session, four queries, run concurrently - the tiles are independent and the
         # rollup makes each of them cheap.
         totals, trend, top_products, by_region, share, capabilities = await asyncio.gather(
             _call(mcp, supplier_id, "query_sales", totals_args),
@@ -99,7 +99,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
             _call(mcp, supplier_id, "query_sales", top_products_args),
             _call(mcp, supplier_id, "query_sales", by_region_args),
             _call(mcp, supplier_id, "query_market_share", {"time_range": window, **compare}),
-            # Calendar only — a dimension read, not a trip to the fact table.
+            # Calendar only - a dimension read, not a trip to the fact table.
             _call(mcp, supplier_id, "get_capabilities", {}),
         )
     except Exception as exc:  # noqa: BLE001
@@ -140,11 +140,11 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
 MOVERS_LIMIT = 10
 
 # Ranked on kronor, not on percent. A percentage ranking put one product that went from 400 kr
-# to 6 000 kr at +1 400 % on the axis and left the other nine bars invisible beside it — a chart
+# to 6 000 kr at +1 400 % on the axis and left the other nine bars invisible beside it - a chart
 # whose caveat explained why it could not be read. The percentage is still on the card, in the
 # table view, where it says something about the product rather than about the axis.
 _MOVERS_CAVEAT = ("Rangordnat efter förändring i kronor. Välj Tabell för den procentuella "
-                  "förändringen — en stor procentrörelse kan komma från en liten utgångsnivå.")
+                  "förändringen - en stor procentrörelse kan komma från en liten utgångsnivå.")
 
 
 @router.get("/movers", response_model=MoversResponse)
@@ -152,7 +152,7 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
                  tenant: ScopedTenant = Depends(get_supplier_scope),
                  mcp: McpClient = Depends(get_mcp),
                  cache: ResultCache = Depends(get_cache)) -> MoversResponse:
-    """Biggest risers and biggest fallers — the question a supplier opens a product page to ask.
+    """Biggest risers and biggest fallers - the question a supplier opens a product page to ask.
 
     Answerable only since the compiler learned to sort on the derived `_delta_pct` column; "vilka
     produkter tappar mest" could not be expressed before that.
@@ -194,7 +194,7 @@ def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str
 
     Everywhere else a delta column is kept off the value axis, because a change next to a level
     doubles the bars. On this card the change is the only thing asked about, so it has the axis
-    to itself — in kronor, which is a readable axis, unlike a percentage from an arbitrary base.
+    to itself - in kronor, which is a readable axis, unlike a percentage from an arbitrary base.
     """
     result = cache.put(from_tool_result(supplier_id=supplier_id, tool="query_sales",
                                         tool_args=tool_args, payload=payload))
@@ -214,7 +214,7 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
     return await mcp.call(supplier_id, tool, args)
 
 
-CAMPAIGN_MARKER_LABEL = ("Streckade linjer markerar perioder med kampanj — handlaren "
+CAMPAIGN_MARKER_LABEL = ("Streckade linjer markerar perioder med kampanj - handlaren "
                          "rabatterar tungt då.")
 
 # Three buckets: long enough to take the spike out of a single month, short enough that a real
@@ -223,7 +223,7 @@ MA_WINDOW = 3
 
 
 def _date_axis(columns: list[dict]) -> str | None:
-    """The time axis — the date column that is not the comparison window's echo."""
+    """The time axis - the date column that is not the comparison window's echo."""
     return next((c["key"] for c in columns
                  if c.get("type") == "date" and not c["key"].endswith("_compare")), None)
 
@@ -264,7 +264,7 @@ def _trend_card(result, title: str, average: str | None, markers: list[str],
     """Both windows as bars, with the moving average as the only line over them.
 
     `propose_chart` draws two lines here, which reads as two trends running side by side. Bars
-    read as what this actually is — the same buckets, one window apart — and leaving the line
+    read as what this actually is - the same buckets, one window apart - and leaving the line
     to the average makes it the shape the eye follows.
     """
     measure, compare = "net_sales_sek", "net_sales_sek_compare"
@@ -289,7 +289,7 @@ def campaign_markers(result, capabilities: dict) -> list[str]:
 
     November spikes every year and nothing on screen said why. The warehouse stores the
     campaign's days but not its name, so a marker can say *that* a campaign ran and never what
-    it was called — which is still the difference between an unexplained spike and an
+    it was called - which is still the difference between an unexplained spike and an
     explained one.
     """
     windows = ((capabilities.get("time") or {}).get("campaigns") or [])
@@ -305,7 +305,7 @@ def campaign_markers(result, capabilities: dict) -> list[str]:
     if not ranges or not values:
         return []
 
-    # Every grain — day, week, month, quarter — labels its bucket with the bucket's first day,
+    # Every grain - day, week, month, quarter - labels its bucket with the bucket's first day,
     # so a bucket runs until the next one begins. That makes this grain-agnostic: no branch per
     # grain, and a campaign starting mid-month still lands in that month.
     last = str((result.meta or {}).get("time_range", {}).get("to") or values[-1][:10])
@@ -326,7 +326,7 @@ def _day_before(iso: str) -> str:
 
 
 def _card(result, title: str) -> AnswerCard:
-    """A dashboard tile is the same AnswerCard the chat produces — one card type, two producers
+    """A dashboard tile is the same AnswerCard the chat produces - one card type, two producers
     (§2).
 
     No subtitle: the card falls back to the window in `provenance.time_range`, which is what the

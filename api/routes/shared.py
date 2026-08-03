@@ -1,9 +1,9 @@
-"""GET /api/shared/{token} — the read side of a share link.
+"""GET /api/shared/{token} - the read side of a share link.
 
 The only route in the API with no session behind it. Everything it is allowed to read comes
 from the token: which card, and whose scope to run it under. A reader cannot widen either,
 because both are signed, and the query runs under the *sharing* supplier's scope whoever opens
-the link — which is the whole reason the scope is in the token rather than in the request.
+the link - which is the whole reason the scope is in the token rather than in the request.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api", tags=["shared"])
 # tells whoever is guessing tokens which guess got closer.
 _GONE = "Länken är ogiltig eller har gått ut."
 
-# The page has no pagination and no export, so this is the whole payload — well above any saved
+# The page has no pagination and no export, so this is the whole payload - well above any saved
 # card's chart, and below anything that hurts to serialise.
 MAX_SHARED_ROWS = 2_000
 
@@ -73,7 +73,7 @@ async def shared(token: str,
     return SharedView(
         card=AnswerCard(
             # Neither id reaches the reader. `query_id` because /api/result is scoped to a
-            # logged-in tenant and would 404 for them — the rows travel inline instead — and
+            # logged-in tenant and would 404 for them - the rows travel inline instead - and
             # `card_id` because every control keyed to it (share, delete) is an authenticated
             # call this page cannot make, and a button that 401s is worse than no button.
             card_id=None, status="ok", chart=chart,

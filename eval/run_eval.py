@@ -1,4 +1,4 @@
-"""The eval driver — HTTP, and nothing else."""
+"""The eval driver - HTTP, and nothing else."""
 
 from __future__ import annotations
 
@@ -167,7 +167,7 @@ def _absorb(observed: Observed, raw: str) -> None:
 
 
 async def fetch_rows(session: Session, query_id: str, timeout: float) -> None | dict:
-    """The grounded result set — the rows the chart is drawn from, not the prose."""
+    """The grounded result set - the rows the chart is drawn from, not the prose."""
     response = await session.client.get(
         f"{session.base_url}/api/result/{query_id}",
         params={"limit": RESULT_PAGE_LIMIT},
@@ -250,10 +250,10 @@ def print_case(result: CaseResult, style: Style, verbose: bool) -> None:
 
 
 _FAMILY_BLURB = {
-    "grounded": "rows from the result cache — the architecture",
-    "prose":    "the narrative — the model",
-    "routing":  "tools, dimensions, chart and status — the plan",
-    "transport": "the turn never arrived — infrastructure, not an answer",
+    "grounded": "rows from the result cache - the architecture",
+    "prose":    "the narrative - the model",
+    "routing":  "tools, dimensions, chart and status - the plan",
+    "transport": "the turn never arrived - infrastructure, not an answer",
 }
 
 
@@ -279,7 +279,7 @@ def print_family_rates(results: list[CaseResult], style: Style) -> None:
             # ASCII arrow deliberately: this line is the one a reader quotes, and a plain cp1252
             # console (the Windows default) cannot encode a real arrow at all.
             f"  -> grounded {100.0 * grounded[0] / grounded[1]:.0f} % vs prose "
-            f"{100.0 * prose[0] / prose[1]:.0f} % — the gap is the model, "
+            f"{100.0 * prose[0] / prose[1]:.0f} % - the gap is the model, "
             f"the floor is the architecture"))
 
 
@@ -320,7 +320,7 @@ def print_summary(results: list[CaseResult], style: Style) -> None:
     breaches = [r for r in results if r.suite == "adversarial" and not r.passed]
     if breaches:
         print()
-        print(style.alarm("BROKEN GUARANTEES — these are safety failures, not accuracy "
+        print(style.alarm("BROKEN GUARANTEES - these are safety failures, not accuracy "
                           "failures:"))
         for result in breaches:
             checks = ", ".join(sorted({f.check for f in result.failures}))
@@ -414,14 +414,14 @@ def assert_vocabulary_is_graded() -> None:
     vocabulary = cases.GOLDEN_EXPECT_KEYS | cases.ADVERSARIAL_EXPECT_KEYS
     ungraded = vocabulary - grade.GRADED_KEYS
     if ungraded:
-        raise SetupError(f"grade.py implements no check for {sorted(ungraded)} — those "
+        raise SetupError(f"grade.py implements no check for {sorted(ungraded)} - those "
                          f"expectations would silently pass. Refusing to run.")
 
     # Same argument one level down.
     unclassified = grade.GRADED_KEYS - set(grade.CHECK_FAMILIES)
     if unclassified:
         raise SetupError(f"grade.py grades {sorted(unclassified)} but assigns them no check "
-                         f"family — they would be reported under 'routing' by default. "
+                         f"family - they would be reported under 'routing' by default. "
                          f"Refusing to run.")
 
 
@@ -463,7 +463,7 @@ async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Windows consoles still default to cp1252, which cannot encode "ö" — and every question in
+    # Windows consoles still default to cp1252, which cannot encode "ö" - and every question in
     # the suites is Swedish.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):

@@ -17,7 +17,7 @@ export type LoginResponse = {
   user: User
 }
 
-/** `p.e.` is percentage points — a change in a share, which is not a percentage of a percentage. */
+/** `p.e.` is percentage points - a change in a share, which is not a percentage of a percentage. */
 export type ColumnUnit = 'SEK' | 'st' | '%' | 'p.e.'
 
 export type Column = {
@@ -29,7 +29,7 @@ export type Column = {
 
 export type ChartType = 'line' | 'bar' | 'stacked_bar' | 'area' | 'pie' | 'kpi' | 'table'
 
-/** The model emits a ChartSpec. It never emits values — only which columns to draw. */
+/** The model emits a ChartSpec. It never emits values - only which columns to draw. */
 export type ChartSpec = {
   type: ChartType
   x: string | null
@@ -63,7 +63,9 @@ export type Provenance = {
   tool_args: Record<string, unknown>
 }
 
-export type CardStatus = 'ok' | 'cannot_answer' | 'clarify' | 'validation_failed'
+/** `explain` answers a question about the card itself: what a line means, which period a
+ *  series covers. No query, no figures, and not a refusal. */
+export type CardStatus = 'ok' | 'cannot_answer' | 'clarify' | 'validation_failed' | 'explain'
 
 /** The single unit both the dashboard and the chat produce. One card type, two producers. */
 /** One tool result the turn produced, with its own provenance. */
@@ -143,10 +145,10 @@ export type SharedView = {
 export type ChatEvent =
   | { type: 'status'; message: string }
   | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
-  /** `row_count` is null for tools with no row concept — a lookup, a catalogue read. */
+  /** `row_count` is null for tools with no row concept - a lookup, a catalogue read. */
   | { type: 'tool_result'; tool: string; row_count: number | null }
   | { type: 'token'; text: string }
-  /** The chart, as soon as its rows land. Not terminal — a `card` follows and replaces it. */
+  /** The chart, as soon as its rows land. Not terminal - a `card` follows and replaces it. */
   | { type: 'preview'; card: AnswerCard }
   | { type: 'card'; card: AnswerCard }
   | { type: 'error'; message: string }

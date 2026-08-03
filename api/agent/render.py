@@ -40,10 +40,24 @@ _EMPHASIS = re.compile(r"(\*\*|__)(\S.*?\S|\S)\1", re.DOTALL)
 # built for exactly that; under `whitespace-pre-line` they render as literal hyphens.
 _BULLET = re.compile(r"^[ \t]*[-*•]\s+", re.MULTILINE)
 
+# And headings: "## Hörlurar - juli 2025 till juni 2026" arrived on a card that already
+# carried that exact title and period in its header. The hashes render literally, and the
+# line was noise even without them.
+_HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]+", re.MULTILINE)
+
+# A dash used as a pause mid-sentence is the single clearest tell that nobody typed this. Both
+# characters go, but only where they are punctuation: an en dash with a space either side is a
+# pause, while "jul 2025-jun 2026" is a range and every period label on the card is written
+# that way. A hyphen carries the same pause and reads as a person typing.
+_PAUSE_DASH = re.compile(r"\s+[–—]\s+|—")
+
 
 def strip_markdown(text: str) -> str:
-    """Drop emphasis markers and list bullets the model was told not to emit."""
-    return _BULLET.sub("", _EMPHASIS.sub(r"\2", text))
+    """Drop the markdown and the tells the model was told not to emit."""
+    text = _EMPHASIS.sub(r"\2", text)
+    text = _HEADING.sub("", text)
+    text = _BULLET.sub("", text)
+    return _PAUSE_DASH.sub(lambda m: " - " if m.group().strip() != m.group() else "-", text)
 
 
 # What an unresolvable name is replaced by. The prompt already says not to repeat the name a
@@ -54,7 +68,7 @@ _SENTENCE_START = re.compile(rf"(\A|[.!?]\s+){re.escape(_REDACTED_NAME)}")
 _QUOTE = "[\"'«»‘’“”]?"
 # The words the model looked up are rarely the whole name it then writes: it resolves "Lumia"
 # and writes "Lumia Nordic". Redacting only the looked-up part left `det efterfrågade namnet
-# Nordic"` in the prose — the competitor still named, and the sentence broken as well. So the
+# Nordic"` in the prose - the competitor still named, and the sentence broken as well. So the
 # capitalised run continuing the name goes with it. Not case-insensitive, deliberately: this
 # part must match capitalisation or it swallows the rest of the sentence.
 _NAME_TAIL = r"(?:[-\s]+[A-ZÅÄÖ][\w]*)*"
@@ -121,7 +135,7 @@ def _plottable(column: dict) -> bool:
 
 
 def _dimensions(result: CachedResult) -> list[dict]:
-    # A column holding one distinct value is not something to split by — it is a filter the
+    # A column holding one distinct value is not something to split by - it is a filter the
     # caller already applied, echoed back on every row.
     return [c for c in result.columns
             if c.get("type") in ("date", "text") and _plottable(c) and _varies(c, result)]
@@ -153,7 +167,7 @@ def derive_title(result: CachedResult, dimensions: Sequence[dict]) -> str:
 
     The chart-first preview card is built with an empty envelope, so without this every chat
     answer read "Resultat" for the several seconds between the chart landing and the prose
-    arriving — and market-share answers, where the prompt tells the model to omit `chart`
+    arriving - and market-share answers, where the prompt tells the model to omit `chart`
     entirely, kept it for good.
     """
     head = _TOOL_TITLE.get((result.meta or {}).get("tool", result.tool), _FALLBACK_TITLE)
@@ -170,8 +184,8 @@ def propose_chart(result: CachedResult, title: str | None = None,
     """Pick a chart from the result's shape alone."""
     dimensions = _dimensions(result)
     plottable = _measures(result)
-    # The current period leads. `_delta_pct` never joins it — a percentage on a kronor axis is
-    # the bug the filter was written for — and `_compare` only joins it on a time axis, below.
+    # The current period leads. `_delta_pct` never joins it - a percentage on a kronor axis is
+    # the bug the filter was written for - and `_compare` only joins it on a time axis, below.
     measures = [m for m in plottable
                 if not m["key"].endswith(("_compare", "_delta", "_delta_pct", "_delta_pe"))]
 
@@ -270,9 +284,9 @@ def _period_label(window: TimeWindow | None) -> str | None:
 
 
 def to_columns(result: CachedResult) -> list[Column]:
-    """What the card's table view renders — the answer's columns, not the tool's."""
+    """What the card's table view renders - the answer's columns, not the tool's."""
     # "(jämförelse)" says a comparison exists; the legend has to say which one. Only the
-    # measure gets renamed — the comparison's date column already reads as a date.
+    # measure gets renamed - the comparison's date column already reads as a date.
     period = _period_label(_window((result.meta or {}).get("compare_range")))
     return [Column(key=c["key"], type=c.get("type", "text"),
                    label=_label(c, period), unit=c.get("unit"))
@@ -347,17 +361,25 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
 
     if result is None:
         # clarify / cannot_answer paths: no data was returned, so there is nothing to chart and
-        # nothing to prove — only the explanation and what to try instead.
+        # nothing to prove - only the explanation and what to try instead. An "ok" here would be
+        # an answer given from memory, so it is downgraded. "explain" is exempt: it answers a
+        # question about the card, needs no query by definition, and any figure it states is
+        # caught by the numeric check running against an empty result set.
         if status == "ok":
             status = "cannot_answer"
+        # A suppressed narrative is suppressed here too. Without this the chartless path was a
+        # way for unverified prose to reach the card with an amber banner over it and nothing
+        # else changed.
+        failed = status == "validation_failed"
         return AnswerCard(
-            status=cast(CardStatus, status), narrative=narrative,
-            insights=[scrub_names(strip_markdown(str(i)), unresolved)
-                      for i in (envelope.get("insights") or [])],
+            status=cast(CardStatus, status), narrative="" if failed else narrative,
+            insights=([] if failed
+                      else [scrub_names(strip_markdown(str(i)), unresolved)
+                            for i in (envelope.get("insights") or [])]),
             caveats=caveats,
             sources=build_sources(produced, None),
             claims=claims,
-            suggestions=[str(s) for s in (envelope.get("suggestions") or [])],
+            suggestions=[strip_markdown(str(s)) for s in (envelope.get("suggestions") or [])],
         )
 
     proposed = propose_chart(result, title=_title(envelope), subtitle=_subtitle(envelope))
@@ -365,14 +387,14 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
     if isinstance(envelope.get("chart"), dict):
         try:
             override = ChartSpec.model_validate(envelope["chart"])
-        except Exception as exc:  # noqa: BLE001 — a bad spec must not lose a good answer
+        except Exception as exc:  # noqa: BLE001 - a bad spec must not lose a good answer
             logger.info("", extra={"event": "chart.override", "reason": "schema",
                                    "problems": [str(exc)[:300]], "chart_type": chart.type})
             caveats.append(_override_caveat(chart))
         else:
             chart, problems = validate_chart(override, result)
             if problems:
-                # `problems` is validator vocabulary — column keys, axis rules. It belongs in
+                # `problems` is validator vocabulary - column keys, axis rules. It belongs in
                 # the log, where someone can act on it, not on a retailer's card.
                 logger.info("", extra={"event": "chart.override", "reason": "invalid",
                                        "problems": problems, "proposed_type": override.type,
@@ -396,7 +418,7 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
         sources=build_sources(produced, result),
         # A suppressed narrative has no claims left to attribute.
         claims=[] if status == "validation_failed" else claims,
-        suggestions=[str(s) for s in (envelope.get("suggestions") or [])],
+        suggestions=[strip_markdown(str(s)) for s in (envelope.get("suggestions") or [])],
     )
 
 
@@ -408,20 +430,22 @@ _CHART_WORD = {"line": "linjediagram", "bar": "stapeldiagram",
 def _override_caveat(chart: ChartSpec) -> str:
     """What the user is told when the server picked the chart instead of the model."""
     if chart.type == "kpi":
-        return "Resultatet är ett enda tal — den föreslagna vyn passade inte datan."
+        return "Resultatet är ett enda tal - den föreslagna vyn passade inte datan."
     word = _CHART_WORD.get(chart.type, "diagram")
-    return f"Visar som {word} — den föreslagna vyn passade inte datan."
+    return f"Visar som {word} - den föreslagna vyn passade inte datan."
 
 
 def _title(envelope: dict[str, Any]) -> str | None:
     chart = envelope.get("chart")
     if isinstance(chart, dict) and chart.get("title"):
-        return str(chart["title"])
+        # Through `strip_markdown` like every other piece of model text: a title is the most
+        # visible line on the card, and an em dash in it is the one nobody misses.
+        return strip_markdown(str(chart["title"]))
     return None
 
 
 def _subtitle(envelope: dict[str, Any]) -> str | None:
     chart = envelope.get("chart")
     if isinstance(chart, dict) and chart.get("subtitle"):
-        return str(chart["subtitle"])
+        return strip_markdown(str(chart["subtitle"]))
     return None

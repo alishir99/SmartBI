@@ -1,4 +1,4 @@
-"""query_market_share — the one tool that reads beyond the caller's own rows."""
+"""query_market_share - the one tool that reads beyond the caller's own rows."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ MIN_BRANDS = 5
 MIN_TRANSACTIONS = 100
 
 # The result's own column spec, in row order. Without it the API falls back to inferring columns
-# from the rows, which gives raw snake_case headers and — worse — no `unit`, and a column with no
+# from the rows, which gives raw snake_case headers and - worse - no `unit`, and a column with no
 # unit is a column the validator's unit separation cannot police and the chart cannot scale.
 # `category_id` and `suppressed` are deliberately absent: they exist for joining and policy, not
 # for reading, and a numeric id in the column list becomes a value the validator would license.
@@ -44,7 +44,7 @@ COMPARE_COLUMNS: list[dict] = [
      "label": "Kategorins nettoförsäljning (jämförelse)"},
     {"key": "share_pct_compare", "type": "number", "unit": "%",
      "label": "Marknadsandel (jämförelse)"},
-    # Percentage points, and it carries its own unit for that reason — see _attach_comparison.
+    # Percentage points, and it carries its own unit for that reason - see _attach_comparison.
     {"key": "share_pct_delta_pe", "type": "number", "unit": "p.e.",
      "label": "Förändring i marknadsandel"},
 ]
@@ -213,7 +213,7 @@ def _attach_comparison(rows: list[dict], previous: list[dict]) -> None:
         row["category_net_sek_compare"] = earlier["category_net_sek"]
         row["share_pct_compare"] = earlier["share_pct"]
         if row["share_pct"] is not None and earlier["share_pct"] is not None:
-            # Percentage points, not percent of a percent — a share moving 29,5 → 30,7 has
+            # Percentage points, not percent of a percent - a share moving 29,5 → 30,7 has
             # risen 1,2 p.e., and calling that "+4 %" is how a share tile misleads.
             row["share_pct_delta_pe"] = round(row["share_pct"] - earlier["share_pct"], 2)
 
@@ -265,7 +265,7 @@ def _leader_band(share_pct: float) -> str:
 
     k-anonymity was doing its job on *whether* to answer and none on *how precisely*. At
     exactly MIN_BRANDS a #2 supplier received the leader's exact share alongside the exact
-    category total — which is the leader's revenue to the krona, for the one competitor a
+    category total - which is the leader's revenue to the krona, for the one competitor a
     domain expert can usually name. Five points wide leaves a range instead: on a 15,6 MSEK
     category, ±0,4 MSEK rather than a number. The trade is deliberate; the alternative was
     withholding the comparison a supplier is here for.

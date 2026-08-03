@@ -110,7 +110,7 @@ def test_a_set_up_turn_that_never_answered_fails_the_case_on_the_prelude(recorde
 
 
 def test_a_set_up_turn_with_a_card_but_no_narrative_is_also_a_broken_prelude(recorder):
-    """An empty assistant turn would degrade the case into a single-turn one — passing, and testing
+    """An empty assistant turn would degrade the case into a single-turn one - passing, and testing
     nothing it claims to test."""
     _, answers = recorder
     answers["Fråga ett?"] = Observed(card=card("   "))

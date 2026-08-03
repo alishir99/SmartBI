@@ -1,4 +1,4 @@
-/** Översikt — the deterministic dashboard. */
+/** Översikt - the deterministic dashboard. */
 
 import { useDashboard } from '../lib/queries'
 import { usePeriod } from '../lib/usePeriod'

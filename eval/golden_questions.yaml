@@ -1,4 +1,4 @@
-# Golden questions — the measured answer to "how do you know it isn't making things up?"
+# Golden questions - the measured answer to "how do you know it isn't making things up?"
 #
 # Each entry is one Swedish question put to the FULL agent through POST /api/chat, plus the
 # answer computed WITHOUT the app. Two independent sources back every number:
@@ -19,7 +19,7 @@
 # Optional alongside `question`:
 #   history      [...]  earlier USER questions, asked for real before this one. run_eval.py
 #                       feeds the system's own narrative back as the assistant turn, exactly
-#                       as web/src/lib/chat.ts does, and grades only the final turn — so the
+#                       as web/src/lib/chat.ts does, and grades only the final turn - so the
 #                       tool calls and the chart below describe the FOLLOW-UP, not the setup.
 #
 # expects fields, all optional except `status`:
@@ -147,7 +147,7 @@
 
 - id: net_sales_last_month
   question: "Hur mycket sålde vi förra månaden?"
-  # gt: net_sales_by_month["2026-05-01"] — "förra månaden" resolves against the data's last
+  # gt: net_sales_by_month["2026-05-01"] - "förra månaden" resolves against the data's last
   # date (2026-06-30), so it is May 2026, not the month before today
   derivation: {measure: net_sales_sek, where: {relative: last_month}}
   expects:
@@ -174,7 +174,7 @@
 
 - id: monthly_trend_last_12m
   question: "Visa vår försäljning per månad det senaste året."
-  # gt: net_sales_by_month, the last twelve keys — the whole series is checked, not a total
+  # gt: net_sales_by_month, the last twelve keys - the whole series is checked, not a total
   derivation: {measure: net_sales_sek, group_by: month, where: {relative: last_12_months}}
   expects:
     series:
@@ -246,7 +246,7 @@
 - id: yearly_trend
   question: "Hur ser försäljningen ut år för år?"
   # derived: calendar years. 2024 and 2026 are partial (data starts 1 juli 2024 and ends
-  # 30 juni 2026) — an answer that compares them without saying so is misleading.
+  # 30 juni 2026) - an answer that compares them without saying so is misleading.
   derivation: {measure: net_sales_sek, group_by: year, where: {relative: all_time}}
   expects:
     series:
@@ -292,7 +292,7 @@
 
 - id: top_products_by_units_last_12m
   question: "Vilka produkter sålde vi flest enheter av senaste året?"
-  # derived: product × units, last_12_months — a different top list from the revenue one
+  # derived: product × units, last_12_months - a different top list from the revenue one
   derivation: {measure: units, group_by: product, top: 5,
                where: {relative: last_12_months}}
   expects:
@@ -358,7 +358,7 @@
 - id: top_products_stockholm_all_time
   question: "Vilka produkter har sålt bäst i Stockholm under hela perioden?"
   # Fourth case in this file to name its period explicitly. "Stockholm" stays
-  # deliberately loose — resolving the city to the län is the point of the case — but
+  # deliberately loose - resolving the city to the län is the point of the case - but
   # the window cannot be left implicit while the expectation is all_time.
   # gt: per_supplier["Nordström Audio AB"].top_10_products_stockholm_by_net_sales
   # (their own example question; requires resolve_entities to turn "Stockholm" into the län)
@@ -407,7 +407,7 @@
 - id: sales_by_region_all_time
   question: "Hur fördelar sig försäljningen mellan länen under hela perioden?"
   # The period is named in the question on purpose. Without it the compiler defaults to
-  # last_12_months (compiler.py :: resolve_time_range) — correctly — and an expectation
+  # last_12_months (compiler.py :: resolve_time_range) - correctly - and an expectation
   # demanding all_time would be testing the eval author's assumption, not the system.
   # gt: per_supplier["Nordström Audio AB"].net_sales_by_region
   derivation: {measure: net_sales_sek, group_by: region, where: {relative: all_time}}
@@ -430,7 +430,7 @@
   question: "Vilket län är vårt starkaste sett över hela perioden?"
   # Period named for the same reason as sales_by_region_all_time: an unqualified
   # question correctly resolves to last_12_months, not to all_time.
-  # gt: net_sales_by_region, the largest key — Stockholms län is deliberately over-indexed
+  # gt: net_sales_by_region, the largest key - Stockholms län is deliberately over-indexed
   derivation: {measure: net_sales_sek, group_by: region, top: 1,
                where: {relative: all_time}}
   expects:
@@ -449,7 +449,7 @@
                where: {relative: last_12_months}}
   expects:
     # No `numeric` here on purpose. This derivation groups without `top:`, so it yields the
-    # all-region total, not any one region — an earlier revision asserted the Stockholm
+    # all-region total, not any one region - an earlier revision asserted the Stockholm
     # figure as `numeric` and it could never have re-derived. The series below already
     # pins every region, which is what the question actually asks for.
     series:
@@ -468,7 +468,7 @@
 - id: stockholm_share_of_own_sales
   question: "Hur stor andel av hela periodens försäljning kommer från Stockholms län?"
   # Same reason as sales_by_region_all_time: name the window or get the default.
-  # derived: Stockholm net / total own net, all_time — both figures are gt keys
+  # derived: Stockholm net / total own net, all_time - both figures are gt keys
   # (net_sales_by_region["Stockholms län"] / net_sales_sek)
   derivation:
     measure: net_sales_sek
@@ -591,7 +591,7 @@
 - id: discount_rate_by_month_last_12m
   question: "Visa rabattgraden per månad senaste året."
   # derived: discount_rate per month; campaign months spike, ordinary months are near zero.
-  # The spread is the point: these four literals used to read 22.48 / 22.45 / 22.31 / 22.92 —
+  # The spread is the point: these four literals used to read 22.48 / 22.45 / 22.31 / 22.92 -
   # flat, because the generator discounted every line (D4). This case is now the guard: if a
   # campaign month and an ordinary month ever agree again, the generator has re-broken.
   derivation: {measure: discount_rate, group_by: month,
@@ -615,7 +615,7 @@
 
 - id: yoy_last_12m_vs_previous_12m
   question: "Hur går det senaste tolv månaderna jämfört med tolv månaderna innan?"
-  # derived: 41 129 464.59 vs 36 407 816.80 — both windows are sums of gt monthly keys
+  # derived: 41 129 464.59 vs 36 407 816.80 - both windows are sums of gt monthly keys
   derivation:
     measure: net_sales_sek
     where: {relative: last_12_months}
@@ -645,7 +645,7 @@
 
 - id: mom_september_vs_august_2025
   question: "Hur var september 2025 jämfört med föregående månad?"
-  # derived: net_sales_by_month 2025-09 (2 925 114.25) vs 2025-08 (3 364 657.88) — a decline
+  # derived: net_sales_by_month 2025-09 (2 925 114.25) vs 2025-08 (3 364 657.88) - a decline
   # of 13.06 %, which is the more interesting case: the answer must not silently report
   # growth. This case used to sit on juni 2026 vs maj 2026; in the current data that pair
   # rises (+0.96 %), which would have quietly turned a decline test into an ordinary delta
@@ -730,7 +730,7 @@
 - id: market_share_headphones_both_brands
   question: "Hur stora andelar har våra varumärken av hörlursmarknaden?"
   # derived: Nordström 10.59 %, Vidar 31.14 % of the same 13 020 164.17 subcategory total.
-  # Two own brands compete separately in one subcategory — they must not be summed before
+  # Two own brands compete separately in one subcategory - they must not be summed before
   # ranking. gt: brands_per_subcategory["Hörlurar"] == 6
   derivation:
     market_share: {subcategory: Hörlurar, brands: [Nordström, Vidar]}
@@ -754,7 +754,7 @@
 
 - id: discontinued_product_series
   question: "Visa försäljningen per månad för Nordström Hörlurar N178 Pro."
-  # derived: launched 2024-12-07, discontinued 2025-05-29 — the series exists for six
+  # derived: launched 2024-12-07, discontinued 2025-05-29 - the series exists for six
   # months and then stops. dim_product.discontinued_date is the source of the truncation.
   derivation:
     measure: net_sales_sek
@@ -830,7 +830,7 @@
 
 # ---------------------------------------------------------------- loose free text
 # None of these strings is a column value. Each one must go through resolve_entities before
-# a filter can be built — otherwise the model has to invent an id, which is exactly the
+# a filter can be built - otherwise the model has to invent an id, which is exactly the
 # hallucination entry point §5.4 closes.
 
 - id: loose_headphones_subcategory
@@ -861,7 +861,7 @@
 
 - id: loose_best_brand
   question: "Vilket är vårt bästa märke under hela perioden?"
-  # gt: per_supplier[...] covers the supplier, not the brand split; derived per brand —
+  # gt: per_supplier[...] covers the supplier, not the brand split; derived per brand -
   # Nordström 47 117 567.07 vs Vidar 30 419 714.32, and the two sum to the gt supplier total
   derivation: {measure: net_sales_sek, group_by: brand, top: 1,
                where: {relative: all_time}}
@@ -954,12 +954,12 @@
   history:
     - "Vilka produkter säljer bäst i Stockholm?"
   # The README's own demo pair (Demofrågor #2), verbatim. Same entity, same window, one word
-  # changes the measure — and the two lists genuinely differ: by revenue Stockholm leads with
+  # changes the measure - and the two lists genuinely differ: by revenue Stockholm leads with
   # Nordström TV N100 Pro (1 742 304,69 SEK), by volume with the cheap Vidar accessories. An
   # answer that quietly re-runs the revenue query passes every other check in this file.
   # derived: product × units, region Stockholms län, last_12_months.
   # #1 and #2 are two units apart (888 / 886), so a flip is evidence the window moved rather
-  # than that the ordering is a coin toss — the numeric below would drift with it.
+  # than that the ordering is a coin toss - the numeric below would drift with it.
   derivation: {measure: units, group_by: product, top: 3,
                where: {relative: last_12_months, region: "Stockholms län"}}
   expects:
@@ -982,8 +982,8 @@
   history:
     - "Hur många enheter sålde vi senaste tolv månaderna?"
   # The follow-up adds a filter and restates nothing else: the measure (enheter, not kronor)
-  # and the window both live in the previous turn only. Answering with 17 330 193 SEK — the
-  # right filter over the wrong measure, and a figure this data really does contain — is the
+  # and the window both live in the previous turn only. Answering with 17 330 193 SEK - the
+  # right filter over the wrong measure, and a figure this data really does contain - is the
   # specific failure this case exists to catch.
   # derived: units, region Stockholms län, last_12_months = 8 929 of the 24 704 nationally.
   derivation: {measure: units, where: {relative: last_12_months, region: "Stockholms län"}}
@@ -1015,7 +1015,7 @@
   question: "Hur fördelar de sig mellan våra två varumärken?"
   history:
     - "Hur går det för våra hörlurar?"
-  # "De" is the only reference to the subcategory anywhere in the question — strip the
+  # "De" is the only reference to the subcategory anywhere in the question - strip the
   # pronoun and nothing is being asked. The follow-up must keep the Hörlurar filter while
   # changing the grouping, and the plausible-looking wrong answer is a brand split of ALL own
   # sales (29 478 833,14 / 19 881 270,22, see brand_split_last_12m), which reads perfectly

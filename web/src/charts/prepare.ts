@@ -26,7 +26,7 @@ export type PreparedChart = {
   unit: ColumnUnit | null
   /** Shared money scale so every tick and label on one axis carries one unit. */
   scale: MoneyScale | null
-  /** Columns describing the prepared rows — what the tooltip and table view read. */
+  /** Columns describing the prepared rows - what the tooltip and table view read. */
   columns: Column[]
   /** True when a tail of small categories was folded into "Övrigt". */
   folded: boolean
@@ -91,7 +91,7 @@ function direct(
   rows: ResultRow[],
   xColumn: Column | null,
 ): Omit<PreparedChart, 'xColumn' | 'unit' | 'scale' | 'slices'> {
-  // The comparison period does not consume a categorical hue — otherwise "last year" arrives
+  // The comparison period does not consume a categorical hue - otherwise "last year" arrives
   // looking like a second brand.
   let hue = 0
   const series = measures.map((column) => {
@@ -180,7 +180,7 @@ function pivot(
 }
 
 /**
- * A time axis is always chronological — a `sort` on a date x would scramble the reading order,
+ * A time axis is always chronological - a `sort` on a date x would scramble the reading order,
  * so the spec's sort only applies to categorical axes.
  */
 function order(
@@ -212,7 +212,7 @@ function applyLimit(
   }
 
   const head = rows.slice(0, limit)
-  // A bar chart cannot fold its tail into "Övrigt" — the sum of the categories it dropped is not
+  // A bar chart cannot fold its tail into "Övrigt" - the sum of the categories it dropped is not
   // a category. So it drops them, and the count is reported instead: rows disappearing unnoticed
   // from the half of the card presented as the trustworthy half is the wrong place to be quiet.
   if (spec.type !== 'pie' || !xColumn) {

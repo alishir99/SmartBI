@@ -1,4 +1,4 @@
-"""resolve_entities — free text to canonical IDs."""
+"""resolve_entities - free text to canonical IDs."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ async def resolve_entities(tenant: TenantContext, text: str, kinds: list[str] | 
         "matches": matches,
         "meta": {"tool": "resolve_entities", "retrieval": retrieval, "query": text,
                  "threshold": LEXICAL_THRESHOLD,
-                 "note": "Flera kandidater betyder att frågan är tvetydig — fråga användaren "
+                 "note": "Flera kandidater betyder att frågan är tvetydig - fråga användaren "
                          "istället för att välja själv."},
     }
 

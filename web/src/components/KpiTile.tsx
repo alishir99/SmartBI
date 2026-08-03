@@ -65,7 +65,7 @@ export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) =
 const SPARK = { width: 100, height: 24, pad: 2 }
 
 /**
- * Shape, not reading: no axis, no ticks, no labels — so it must not be given any, or it
+ * Shape, not reading: no axis, no ticks, no labels - so it must not be given any, or it
  * implies a precision it is not showing. The tile's value and delta carry the numbers, which
  * is why this is hidden from the accessibility tree rather than described badly.
  */

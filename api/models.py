@@ -12,7 +12,13 @@ Role = Literal["supplier_viewer", "supplier_admin", "retail_analyst", "system_ad
 # call that "+1,2 procent" and pass validation (G2).
 Unit = Literal["SEK", "st", "%", "p.e."]
 ChartType = Literal["line", "bar", "stacked_bar", "area", "pie", "kpi", "table"]
-CardStatus = Literal["ok", "cannot_answer", "clarify", "validation_failed"]
+# "explain" is an answer about the card rather than about the data: what a line means, how to
+# read the comparison, which period a series covers. It needs no query, and forcing it into
+# "cannot_answer" (which is what an "ok" with no result becomes) put "Det här har jag inte
+# underlag för" above a paragraph that answered the question perfectly well. It carries its own
+# guard instead: an explanation that states a figure has nothing to state it from, so the
+# numeric check runs on an empty result set and suppresses the prose.
+CardStatus = Literal["ok", "cannot_answer", "clarify", "validation_failed", "explain"]
 
 
 # ------------------------------------------------------------------------------ auth
@@ -60,7 +66,7 @@ class ChartSpec(BaseModel):
     title: str
     subtitle: str | None = None
     # Server-owned: x values worth a line on the axis, and one sentence saying what they mean.
-    # `validate_chart` drops whatever a model puts here — an annotation the model invented is
+    # `validate_chart` drops whatever a model puts here - an annotation the model invented is
     # exactly the kind of claim the rest of this pipeline exists to prevent.
     markers: list[str] = Field(default_factory=list)
     marker_label: str | None = None
@@ -121,7 +127,7 @@ class AnswerCard(BaseModel):
     # : The chart's source.
     query_id: str | None = None
     columns: list[Column] = Field(default_factory=list)
-    # : The chart's provenance, kept for compatibility — it is `sources[i]` for the chart's id.
+    # : The chart's provenance, kept for compatibility - it is `sources[i]` for the chart's id.
     provenance: Provenance | None = None
     # : Every result the turn produced, chart's first.
     sources: list[ToolCallRecord] = Field(default_factory=list)
@@ -141,7 +147,7 @@ class Kpi(BaseModel):
     delta_label: str | None = None
     rank_label: str | None = None
     # The measure over the window's own grain, oldest first. An arrow gives direction; this
-    # gives shape — steady growth, one good month, or a trend that has just turned. It carries
+    # gives shape - steady growth, one good month, or a trend that has just turned. It carries
     # no axis and no labels, so it is a shape and never a reading.
     spark: list[float] = Field(default_factory=list)
 
@@ -175,7 +181,7 @@ class ChatRequest(BaseModel):
     @field_validator("history")
     @classmethod
     def _history_fits_in_a_prompt(cls, turns: list[ChatTurn]) -> list[ChatTurn]:
-        """Turn count alone is not a bound — one turn can hold a megabyte of text."""
+        """Turn count alone is not a bound - one turn can hold a megabyte of text."""
         if (total := sum(len(turn.content) for turn in turns)) > MAX_HISTORY_CHARS:
             raise ValueError(
                 f"historiken är {total} tecken, högst {MAX_HISTORY_CHARS} tillåts")
@@ -197,7 +203,7 @@ class ToolCallEvent(BaseModel):
 class ToolResultEvent(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool: str
-    # : None for tools with no row concept (get_capabilities, resolve_entities) — the chip then
+    # : None for tools with no row concept (get_capabilities, resolve_entities) - the chip then
     # says nothing rather than "0 rader" next to a green tick.
     row_count: int | None = None
 
@@ -210,8 +216,8 @@ class TokenEvent(BaseModel):
 class PreviewEvent(BaseModel):
     """The chart, as soon as its rows land and seconds before the prose is written.
 
-    The chart was never the untrusted half — it is drawn from the cached rows, not from the
-    model — so showing it early costs nothing in trust. The prose is still withheld until it
+    The chart was never the untrusted half - it is drawn from the cached rows, not from the
+    model - so showing it early costs nothing in trust. The prose is still withheld until it
     has been validated, which is the part that can be wrong. Not terminal: a `card` follows.
     """
     type: Literal["preview"] = "preview"
@@ -252,7 +258,7 @@ class ResultPage(BaseModel):
 
 # The tools a saved card may re-run.
 CardTool = Literal["query_sales", "query_market_share"]
-# : The same allowlist as a set, for the read path — derived from the type rather than written :
+# : The same allowlist as a set, for the read path - derived from the type rather than written :
 # twice, so the two can never drift apart.
 ALLOWED_CARD_TOOLS = frozenset(get_args(CardTool))
 
@@ -269,7 +275,7 @@ class SaveCardRequest(BaseModel):
 class ShareRequest(BaseModel):
     card_id: str
     # ponytail: only `live` is served. A frozen snapshot means storing the rows as they were,
-    # which is a table and a retention policy, not a flag — the mode is carried in the token so
+    # which is a table and a retention policy, not a flag - the mode is carried in the token so
     # the read side can start honouring it without reissuing links.
     mode: Literal["snapshot", "live"] = "live"
 
@@ -283,7 +289,7 @@ class SharedView(BaseModel):
     """What a share link resolves to, for a reader with no session at all."""
 
     card: AnswerCard
-    # Inline, because the reader cannot call /api/result — that endpoint is scoped to a
+    # Inline, because the reader cannot call /api/result - that endpoint is scoped to a
     # logged-in tenant, and this page deliberately has no login.
     result: ResultPage
     shared_by: str

@@ -5,12 +5,12 @@
 -- arguments. This file is the layer that still holds if both of those have a bug.
 --
 -- IMPORTANT CORRECTION TO THE PLAN: PostgreSQL does not support row-level security on
--- materialised views — CREATE POLICY only accepts tables. The plan said "RLS policies on
+-- materialised views - CREATE POLICY only accepts tables. The plan said "RLS policies on
 -- fact_sales_line and the rollups"; only the first half is achievable directly. The
 -- rollups are therefore protected by the equivalent construct: no grant on the
 -- materialised view itself, and access exclusively through a security_barrier view whose
 -- predicate is the same current_setting() comparison a policy would have used. Same
--- guarantee, different mechanism — a barrier view stops a user-supplied function being
+-- guarantee, different mechanism - a barrier view stops a user-supplied function being
 -- pushed down below the predicate, which is the leak this needs to prevent.
 
 -- The role the MCP server connects as. Read-only by construction: it is granted SELECT
@@ -25,7 +25,7 @@ END
 $$;
 
 -- Scope helper. Returns NULL when app.supplier_id was never set, and every policy below
--- compares against it — so an unscoped connection sees zero rows rather than all rows.
+-- compares against it - so an unscoped connection sees zero rows rather than all rows.
 -- Failing closed is the whole point.
 CREATE OR REPLACE FUNCTION current_supplier_id() RETURNS INT
 LANGUAGE sql STABLE AS $$
@@ -99,13 +99,13 @@ SELECT * FROM mv_category_daily;
 
 -- Rank is the one market-share figure that cannot be derived from a supplier's own rows:
 -- knowing you sold 4 MSEK says nothing about your position. Computing it over an arbitrary
--- window needs per-brand magnitudes for the whole category, so this view exposes them —
+-- window needs per-brand magnitudes for the whole category, so this view exposes them -
 -- with supplier_id dropped, and with brand_id left in only because it is needed to group
 -- months back into one figure per competitor.
 --
 -- Why that is not a leak: brand_id cannot be turned into a name, because dim_brand's RLS
 -- policy restricts it to the caller's own brands. And query_market_share never returns
--- these rows — it consumes them and emits only own_share, rank, n_brands and the leader's
+-- these rows - it consumes them and emits only own_share, rank, n_brands and the leader's
 -- share. The view is reachable by the MCP server; it is not reachable by the model.
 CREATE VIEW v_category_brand_monthly WITH (security_barrier = true) AS
 SELECT month, brand_id, category_id, region, net_sales_sek, qty

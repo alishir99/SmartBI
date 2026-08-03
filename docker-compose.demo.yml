@@ -1,4 +1,4 @@
-# Demo overlay — publishes the two internal ports to the host.
+# Demo overlay - publishes the two internal ports to the host.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.demo.yml up
 #

@@ -1,4 +1,4 @@
-"""Tests for the numeric validator — §9.2, the second line of the grounding defence."""
+"""Tests for the numeric validator - §9.2, the second line of the grounding defence."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def test_sum_of_the_rows_is_an_allowed_derivation():
 
 
 def test_magnitude_rounding_is_accepted():
-    """"3,45 Mkr" is a rounding of 3 450 900,50 — a human would write it that way, and rejecting it
+    """"3,45 Mkr" is a rounding of 3 450 900,50 - a human would write it that way, and rejecting it
     would make the validator unusable in practice."""
     check = validate_narrative("Mars landade på 3,45 Mkr.", [MONTHLY])
     assert check.ok, check.violations
@@ -348,7 +348,7 @@ def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
                  {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"}])
 
     assert not validate_narrative("Marknadsandelen var 2,89 %.", [revenue]).ok
-    # The same digits as money are still fine — the literal now has to agree about what it is.
+    # The same digits as money are still fine - the literal now has to agree about what it is.
     assert validate_narrative("Stockholm stod för 2 890 100,00 kr.", [revenue]).ok
 
 
@@ -452,8 +452,8 @@ ROUNDED = result(
     "Februari låg på 230 000 kr.",
 ])
 def test_a_correct_rounding_is_not_a_fabrication(prose):
-    """"530 000 kr" is how anyone reports 529 868, and the tolerance rule — half the last
-    decimal place — demanded +/-0,50 kr of it. Two golden cases had their prose suppressed
+    """"530 000 kr" is how anyone reports 529 868, and the tolerance rule - half the last
+    decimal place - demanded +/-0,50 kr of it. Two golden cases had their prose suppressed
     for being accurate, which is the expensive direction of this trade."""
     assert validate_narrative(prose, [ROUNDED]).ok
 

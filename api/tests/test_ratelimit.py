@@ -57,7 +57,7 @@ def test_the_wait_is_how_long_until_a_slot_actually_frees():
 
 def test_hammering_never_extends_a_lockout():
     """A refused attempt must not be counted, or a client that keeps retrying locks itself out
-    forever — and, on the identifier key, so could a third party."""
+    forever - and, on the identifier key, so could a third party."""
     clock = FakeClock()
     window = SlidingWindow(2, 60, clock=clock)
 
@@ -91,7 +91,7 @@ def test_reset_forgets_the_strikes():
 
 
 def test_exhausted_keys_are_swept_rather_than_accumulated():
-    """Keys are unbounded input — any IP, any submitted e-mail — so the dict has to shrink."""
+    """Keys are unbounded input - any IP, any submitted e-mail - so the dict has to shrink."""
     clock = FakeClock()
     window = SlidingWindow(5, 60, clock=clock)
 

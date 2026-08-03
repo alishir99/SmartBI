@@ -1,4 +1,4 @@
-"""query_sales — the workhorse tool."""
+"""query_sales - the workhorse tool."""
 
 from __future__ import annotations
 

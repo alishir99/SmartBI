@@ -1,4 +1,4 @@
-"""Where the full result set lives — server-side, and nowhere else."""
+"""Where the full result set lives - server-side, and nowhere else."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class CachedResult:
         return [c["key"] for c in self.columns if c.get("type") == "number"]
 
     def label_columns(self) -> list[str]:
-        """The non-numeric columns — what identifies a row to a reader."""
+        """The non-numeric columns - what identifies a row to a reader."""
         return [c["key"] for c in self.columns
                 if c.get("type") != "number" and c["key"] not in ("suppressed", "reason")]
 
@@ -80,13 +80,13 @@ class CachedResult:
             "meta": self.meta,
             "note": (
                 f"Detta är en förhandsvisning av {len(rows)} av {self.row_count} rader. "
-                "Hela resultatet finns kvar på servern och ritas i diagrammet — referera "
+                "Hela resultatet finns kvar på servern och ritas i diagrammet - referera "
                 "till query_id i din ChartSpec istället för att räkna upp värden."
                 + (" `aggregates` är beräknat över ALLA rader, inte över urvalet ovan: "
                    "använd det för summa, snitt, största och minsta värde. Raderna du ser "
                    "är ett stickprov och den största posten finns sannolikt inte bland dem."
                    if sampled else
-                   " `aggregates` är beräknat över alla rader — använd det för summa, snitt, "
+                   " `aggregates` är beräknat över alla rader - använd det för summa, snitt, "
                    "största och minsta värde i stället för att räkna själv.")
             ),
         }
@@ -120,7 +120,7 @@ class ResultCache:
 
     def _evict(self) -> None:
         # ponytail: a full scan of at most `max_entries` (500) on every put and every get.
-        # Entries are insertion-ordered by creation, so this could stop at the first live one —
+        # Entries are insertion-ordered by creation, so this could stop at the first live one -
         # worth doing if the cache ever holds five figures, which it cannot while it is a
         # per-process dict.
         cutoff = time.monotonic() - self.ttl_seconds

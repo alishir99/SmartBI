@@ -15,14 +15,14 @@ EVAL_DIR = Path(__file__).resolve().parent
 GOLDEN_PATH = EVAL_DIR / "golden_questions.yaml"
 ADVERSARIAL_PATH = EVAL_DIR / "adversarial.yaml"
 
-# Mirrors the tool surface in mcp_server/ — four tools, deliberately (§6.2).
+# Mirrors the tool surface in mcp_server/ - four tools, deliberately (§6.2).
 KNOWN_TOOLS = frozenset({
     "get_capabilities", "resolve_entities", "query_sales", "query_market_share",
 })
 
 # Read off DimensionKey rather than copied from it. The hand-written copy had drifted: it was
 # missing month_of_year, weekday, is_holiday and campaign_id, so a valid eval case using any of
-# them was rejected by the loader — the suite refusing to measure the tools' actual surface.
+# them was rejected by the loader - the suite refusing to measure the tools' actual surface.
 KNOWN_DIMENSIONS = frozenset(get_args(DimensionKey))
 
 # Mirrors ChartSpec.type in docs/API_CONTRACT.md.
@@ -35,7 +35,7 @@ STATUSES = frozenset({"ok", "clarify", "cannot_answer"})
 
 KNOWN_UNITS = frozenset({"SEK", "st", "%"})
 
-# The frontend feeds back the last eight history entries — four question/answer pairs
+# The frontend feeds back the last eight history entries - four question/answer pairs
 # (web/src/lib/chat.ts :: toHistory).
 MAX_HISTORY_TURNS = 4
 
@@ -152,11 +152,11 @@ def _check_history(where: str, history) -> list[str]:
     if history is None:
         return []
     if not isinstance(history, list) or not history:
-        return [f"{where}: `history` must be a non-empty list of earlier questions — an "
+        return [f"{where}: `history` must be a non-empty list of earlier questions - an "
                 f"empty one is a single-turn case wearing a multi-turn label"]
 
     problems = [f"{where}: history turn {index} must be a non-empty question string, got "
-                f"{turn!r} — only the user's half belongs here, the assistant's is whatever "
+                f"{turn!r} - only the user's half belongs here, the assistant's is whatever "
                 f"the system answers at run time"
                 for index, turn in enumerate(history)
                 if not isinstance(turn, str) or not turn.strip()]
@@ -209,20 +209,20 @@ def _check_golden(where: str, case: dict, expects: dict) -> list[str]:
 
     if expects.get("status") != "ok" and expects.get("status") != ["ok"]:
         if expects.get("status") not in ("ok",):
-            problems.append(f"{where}: golden questions must expect status 'ok' — a case "
+            problems.append(f"{where}: golden questions must expect status 'ok' - a case "
                             f"that should be refused belongs in adversarial.yaml")
 
     # Traceability, enforced rather than commented: every golden case carries a derivation, and
     # tests/test_expectations.py re-computes it against the CSVs.
     derivation = case.get("derivation")
     if not isinstance(derivation, dict) or not derivation:
-        problems.append(f"{where}: missing `derivation` — every expected value must be "
+        problems.append(f"{where}: missing `derivation` - every expected value must be "
                         f"independently re-computable by eval/oracle.py")
     elif "market_share" not in derivation and "measure" not in derivation:
         problems.append(f"{where}: derivation needs either `measure` or `market_share`")
 
     if not {"numeric", "series", "top_n", "rank", "delta_pct"} & set(expects):
-        problems.append(f"{where}: asserts no value at all — add numeric, series, top_n, "
+        problems.append(f"{where}: asserts no value at all - add numeric, series, top_n, "
                         f"rank or delta_pct")
 
     numeric = expects.get("numeric")
@@ -256,7 +256,7 @@ def _check_golden(where: str, case: dict, expects: dict) -> list[str]:
             order = top_n.get("order")
             if not isinstance(order, list) or len(order) < 2:
                 problems.append(f"{where}: expects.top_n.order needs at least two entries "
-                                f"— a one-item list tests no ordering")
+                                f"- a one-item list tests no ordering")
 
     caveats_min = expects.get("caveats_min")
     if caveats_min is not None and (not isinstance(caveats_min, int) or caveats_min < 1):
@@ -309,7 +309,7 @@ def _check_forbids(where: str, case: dict, expects: dict) -> list[str]:
             continue
         declared.add(literal)
         if not ({"supplier", "brand_top_product"} & set(entry)):
-            problems.append(f"{where}: forbids {literal!r} names no subject — add "
+            problems.append(f"{where}: forbids {literal!r} names no subject - add "
                             f"`supplier` or `brand_top_product`")
         scale = entry.get("scale", 1)
         if not isinstance(scale, int) or scale < 1:
@@ -319,7 +319,7 @@ def _check_forbids(where: str, case: dict, expects: dict) -> list[str]:
         if _is_numeric_literal(value) and value not in declared:
             problems.append(
                 f"{where}: must_not_contain has the figure {value!r} with no `forbids` "
-                f"entry deriving it — a forbidden number nobody re-computes stops "
+                f"entry deriving it - a forbidden number nobody re-computes stops "
                 f"existing in the data without anything noticing, and the control passes "
                 f"for the wrong reason")
 
@@ -350,14 +350,14 @@ def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
             asserted = {"must_contain"}
 
     if not asserted:
-        problems.append(f"{where}: asserts nothing — an adversarial case must set at least "
+        problems.append(f"{where}: asserts nothing - an adversarial case must set at least "
                         f"one of must_not_contain_numbers, suppressed, must_not_contain, or "
                         f"must_contain alongside a refusing status")
     # `must_not_contain_numbers` is deliberately NOT accepted here, though it looks like it
     # should be.
     if "ok" in statuses and not expects.get("suppressed") and "must_not_contain" not in expects:
         problems.append(f"{where}: allows status 'ok' without requiring suppression or "
-                        f"forbidding content — that permits a plain answer")
+                        f"forbidding content - that permits a plain answer")
 
     for key in ("must_not_contain_numbers", "suppressed"):
         if key in expects and not isinstance(expects[key], bool):

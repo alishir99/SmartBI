@@ -1,7 +1,7 @@
 """Structured logging: one JSON object per event, correlated by turn.
 
 Why this exists in the shape it does. `audit_turn` already records what a user asked and what
-came back — that is the business record, and it is queryable. What was missing is the
+came back - that is the business record, and it is queryable. What was missing is the
 *operational* record: which tool ran with which arguments, why the validator rejected a
 figure, how long each leg took. Without it the only way to answer "what went wrong at 20:41"
 is `docker logs | grep`, which loses the correlation between lines and cannot be aggregated.
@@ -9,7 +9,7 @@ is `docker logs | grep`, which loses the correlation between lines and cannot be
 Three decisions worth understanding:
 
 **JSON, not formatted strings.** `logger.warning("validation failed: %s", violations)` reads
-fine and is useless in aggregate — you cannot ask "how often does the direction check fire"
+fine and is useless in aggregate - you cannot ask "how often does the direction check fire"
 without parsing prose back out. Every event here carries typed fields instead.
 
 **Context travels implicitly.** `turn_id`, `supplier_id` and `user_id` are set once per
@@ -19,8 +19,8 @@ signature is the alternative, and it is the reason correlation ids usually get d
 
 **Tenant data never reaches the log.** This is a multi-tenant product whose whole claim is
 that one supplier cannot see another's numbers; a log file that quotes result rows would be
-that leak with extra steps. Row *counts*, column *names* and tool *arguments* are recorded —
-arguments are ids and dates the caller already supplied — but never the rows themselves. The
+that leak with extra steps. Row *counts*, column *names* and tool *arguments* are recorded -
+arguments are ids and dates the caller already supplied - but never the rows themselves. The
 question text is recorded because `audit_turn` already stores it deliberately (§11.2) and
 debugging a bad answer without knowing what was asked is guesswork.
 """
@@ -116,7 +116,7 @@ def configure() -> None:
         except OSError as exc:
             # A second copy of what stdout already carries is not worth the process. The
             # container runs unprivileged and `logs/` is a bind mount, so the file can be
-            # unwritable for reasons that have nothing to do with the API being healthy —
+            # unwritable for reasons that have nothing to do with the API being healthy -
             # and an API that refuses to start because it cannot write a duplicate log is
             # an outage caused by its own bookkeeping.
             root.warning("file logging disabled: %s", exc, extra={
@@ -138,7 +138,7 @@ def configure() -> None:
 
 #: Names `logging` already owns on a LogRecord. Passing one via `extra=` raises KeyError,
 #: which inside an agent turn is caught by the broad handler and silently becomes an error
-#: event — a logging call taking down the answer it was there to describe. `event` is ours by
+#: event - a logging call taking down the answer it was there to describe. `event` is ours by
 #: convention and deliberately allowed.
 RESERVED = _STANDARD - {"event"}
 

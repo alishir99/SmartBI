@@ -12,7 +12,7 @@ client = TestClient(app)
 
 def test_a_data_route_allows_nothing_at_all():
     """The session token lives in localStorage, so an injected script is a session takeover.
-    This API serves JSON, SSE and one CSV — there is nothing for a script tag to be doing."""
+    This API serves JSON, SSE and one CSV - there is nothing for a script tag to be doing."""
     csp = client.get("/health").headers["Content-Security-Policy"]
     assert csp.startswith("default-src 'none'")
     assert "jsdelivr" not in csp

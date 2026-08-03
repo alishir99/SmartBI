@@ -113,7 +113,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                    mcp: McpClient, cache: ResultCache) -> AsyncIterator[Any]:
     """Drive one question to an AnswerCard, yielding SSE event models as it goes."""
     if not settings.llm_api_key:
-        yield ErrorEvent(message="LLM_API_KEY är inte satt — agenten kan inte köra.")
+        yield ErrorEvent(message="LLM_API_KEY är inte satt - agenten kan inte köra.")
         return
 
     client = _client()
@@ -125,11 +125,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
     # Every result this turn produced, in order.
     produced: list[CachedResult] = []
     # Labels resolve_entities handed back. They are not rows, so nothing caches them, but the
-    # model quotes them in the prose and Swedish SKUs carry model numbers — see
+    # model quotes them in the prose and Swedish SKUs carry model numbers - see
     # mask_entity_names.
     resolved: list[str] = []
     # Names resolve_entities was asked about and found nothing for. The refusal path repeats them
-    # back — "Lumia Nordic finns inte bland dina varumärken" — which the prompt forbids and only
+    # back - "Lumia Nordic finns inte bland dina varumärken" - which the prompt forbids and only
     # the prompt was enforcing. `render.scrub_names` takes them out of the card.
     unresolved: list[str] = []
     calls = 0
@@ -197,7 +197,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                             "ms": int((time.monotonic() - call_started) * 1000),
                             "error": str(exc)[:300]})
                         # A tool error is usually a spec validation failure, and the message
-                        # names the allowed values — exactly what the model needs to recover.
+                        # names the allowed values - exactly what the model needs to recover.
                         tool_results.append({
                             "type": "tool_result", "tool_use_id": use.id,
                             "is_error": True, "content": str(exc),
@@ -252,7 +252,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                             unresolved=unresolved))
 
                 messages.append({"role": "user", "content": tool_results})
-                # The fetch is over. Whatever comes next — another tool or the answer — the
+                # The fetch is over. Whatever comes next - another tool or the answer - the
                 # panel must stop claiming to be fetching, because composing is where most of
                 # a 40-second turn actually goes.
                 yield StatusEvent(message="Sammanställer svaret…")
@@ -263,7 +263,11 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
             result = _result_for(envelope, produced)
 
             # Validation is gated on tool data existing, not on the model's own status field.
-            if produced:
+            # The one exception runs it on *nothing*: an "explain" answer is about the card, not
+            # about the data, so it may not state figures at all - and against an empty result
+            # set every figure fails, which is exactly the guard that keeps "explain" from
+            # becoming a way to answer a data question from memory.
+            if produced or status == "explain":
                 yield StatusEvent(message="Kontrollerar siffrorna mot datan…")
                 check = validate_narrative(narrative, produced, resolved)
 
@@ -274,7 +278,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
                         "rejected": len(check.violations),
                         "checked": check.checked,
                         "attributed": len(check.attributions),
-                        # The literal is a figure derived from this tenant's rows — for a
+                        # The literal is a figure derived from this tenant's rows - for a
                         # wrong_direction or not_the_argmax rejection it is a REAL value,
                         # since matching the data is why it was flagged. The reason and the
                         # counts carry the diagnosis; the values only come along when someone
@@ -318,7 +322,7 @@ async def run_turn(*, question: str, history: list[dict[str, str]], supplier_id:
 
             yield CardEvent(card=card)
 
-    except Exception as exc:  # noqa: BLE001 — the SSE stream needs one terminal event
+    except Exception as exc:  # noqa: BLE001 - the SSE stream needs one terminal event
         logger.exception("agent turn failed")
         yield ErrorEvent(message=f"Något gick fel i agenten: {exc}")
     finally:

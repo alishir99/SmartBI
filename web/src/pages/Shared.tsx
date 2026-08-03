@@ -3,7 +3,7 @@
  *
  * Deliberately not the app: no navigation, no chat, no period filter, nothing to save. One
  * card, who shared it, when the link stops working, and a sentence about what the reader is
- * looking at. The link cannot be widened — which card and whose scope are both signed into the
+ * looking at. The link cannot be widened - which card and whose scope are both signed into the
  * token, and the query runs as the supplier who shared it.
  */
 
@@ -44,7 +44,7 @@ export function SharedPage({ token }: { token: string }) {
             </h1>
             <p className="mt-2 text-sm text-ink-secondary">
               Delad av {state.view.shared_by}. Siffrorna hämtas färskt ur {state.view.shared_by}s
-              data varje gång länken öppnas, under deras behörighet — aldrig under din.
+              data varje gång länken öppnas, under deras behörighet - aldrig under din.
             </p>
             <p className="mt-1.5 text-2xs text-ink-muted">
               Länken slutar fungera {formatDateLong(state.view.expires_at.slice(0, 10))}.
@@ -69,7 +69,7 @@ export function SharedPage({ token }: { token: string }) {
       )}
 
       <footer className="mt-8 text-2xs text-ink-muted">
-        Solvigo Insights — färdiga svar om försäljningen, direkt ur handlarens data.
+        Solvigo Insights - färdiga svar om försäljningen, direkt ur handlarens data.
       </footer>
     </div>
   )

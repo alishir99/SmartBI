@@ -26,7 +26,7 @@ export function App() {
   const shared = useSharedToken()
 
   // Before the auth gate: a share link is for someone who has no account here, and the token
-  // is what authorises it. A session, if the reader happens to have one, changes nothing —
+  // is what authorises it. A session, if the reader happens to have one, changes nothing -
   // the card is still resolved under the scope of whoever shared it.
   if (shared) return <SharedPage token={shared} />
 

@@ -1,4 +1,4 @@
-"""Rate limits and the per-tenant cost cap — the three places this API can be made expensive."""
+"""Rate limits and the per-tenant cost cap - the three places this API can be made expensive."""
 
 from __future__ import annotations
 
@@ -70,12 +70,12 @@ def _too_many(wait_seconds: float, message: str) -> HTTPException:
 # --------------------------------------------------------------------------------- login
 # Argon2id at 19 MiB, t=2 (api/auth.py) is not merely CPU-expensive: every verification
 # allocates 19 MiB, so an unthrottled login endpoint converts a cheap POST into hundreds of
-# megabytes of allocation churn — a *memory* amplifier, not just a brute-force surface.
+# megabytes of allocation churn - a *memory* amplifier, not just a brute-force surface.
 login_by_identifier = SlidingWindow(settings.login_attempts_per_identifier,
                                     settings.login_window_seconds)
 login_by_ip = SlidingWindow(settings.login_attempts_per_ip, settings.login_window_seconds)
 
-# One message for throttled, unknown-account and wrong-password alike — see the note in
+# One message for throttled, unknown-account and wrong-password alike - see the note in
 # auth.login.
 LOGIN_THROTTLED = "För många inloggningsförsök. Vänta en stund och försök igen."
 
@@ -126,13 +126,13 @@ async def enforce_tenant_budget(supplier_id: int) -> None:
     window_hours = settings.tenant_budget_window_hours
     try:
         used = await db.tokens_used_since(supplier_id, window_hours)
-    except Exception:  # noqa: BLE001 — see docstring
+    except Exception:  # noqa: BLE001 - see docstring
         log.warning("could not read the token budget for supplier %s", supplier_id,
                     exc_info=True)
         return
 
     if used >= budget:
-        # A clean 429 with a Swedish message, not a 500 — the frontend surfaces `detail`
+        # A clean 429 with a Swedish message, not a 500 - the frontend surfaces `detail`
         # verbatim, so this is what the user reads.
         raise _too_many(
             60,

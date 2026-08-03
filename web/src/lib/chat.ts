@@ -44,9 +44,28 @@ function toHistory(turns: ChatTurn[]): ChatHistoryEntry[] {
   for (const turn of turns) {
     if (turn.status !== 'done' || !turn.card) continue
     history.push({ role: 'user', content: turn.question })
-    history.push({ role: 'assistant', content: turn.card.narrative })
+    history.push({ role: 'assistant', content: turn.card.narrative + describeCard(turn.card) })
   }
   return history.slice(-8)
+}
+
+/**
+ * What the card actually put on screen, appended to the answer the model wrote.
+ *
+ * Without this a follow-up like "vad betyder den streckade linjen?" is unanswerable: the
+ * model never sees the chart, because the server picks it after the prose is written. It
+ * would then say it cannot see the chart, which reads as a system that does not know what it
+ * just showed you.
+ */
+function describeCard(card: AnswerCard): string {
+  if (!card.chart) return ''
+  const parts = [`typ: ${card.chart.type}`]
+  if (card.chart.x) parts.push(`x-axel: ${card.chart.x}`)
+  if (card.chart.y.length) parts.push(`serier: ${card.chart.y.join(', ')}`)
+  if (card.chart.markers.length && card.chart.marker_label) {
+    parts.push(`markeringar: ${card.chart.marker_label}`)
+  }
+  return `\n[Diagrammet på kortet - ${parts.join('; ')}]`
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({

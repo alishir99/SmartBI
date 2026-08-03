@@ -153,7 +153,7 @@ def test_a_model_cannot_annotate_the_chart_itself():
 
     spec, problems = validate_chart(override, result)
 
-    assert not problems, "the spec itself is fine — only the annotation is not the model's"
+    assert not problems, "the spec itself is fine - only the annotation is not the model's"
     assert spec.markers == []
     assert spec.marker_label is None
 
@@ -179,7 +179,7 @@ def test_a_malformed_override_does_not_lose_the_answer():
                       envelope={"chart": {"type": "sunburst", "title": "Nej"}})
     assert card.chart is not None and card.chart.type == "bar"
     assert card.narrative == "Svar."
-    assert card.caveats == ["Visar som stapeldiagram — den föreslagna vyn passade inte datan."]
+    assert card.caveats == ["Visar som stapeldiagram - den föreslagna vyn passade inte datan."]
 
 
 def test_a_rejected_override_keeps_validator_vocabulary_off_the_card():
@@ -217,7 +217,7 @@ def test_a_missing_block_still_yields_the_prose():
 
 
 def test_markdown_emphasis_is_stripped_from_the_prose():
-    """The card renders text, not markdown — a literal ** reads as broken."""
+    """The card renders text, not markdown - a literal ** reads as broken."""
     narrative, _ = split_answer(
         'Totalt: **49 360 103 kronor**, mot __43 656 312__ kronor.\n'
         '```json\n{"status": "ok"}\n```')
@@ -230,6 +230,27 @@ def test_stripping_leaves_lone_markers_alone():
     assert strip_markdown("Modell A**") == "Modell A**"
 
 
+def test_a_heading_is_dropped_not_rendered_as_hashes():
+    """The model wrote "## Hörlurar - juli 2025 till juni 2026" onto a card that already
+    carried that title and that period in its header."""
+    assert strip_markdown("## Hörlurar\nEr försäljning steg.") == "Hörlurar\nEr försäljning steg."
+
+
+def test_a_dash_used_as_a_pause_does_not_reach_the_card():
+    """The single clearest tell that nobody typed the sentence, in both its characters."""
+    assert strip_markdown("A — B") == "A - B"
+    assert strip_markdown("Kampanjperioder – månader med rabatt.") == (
+        "Kampanjperioder - månader med rabatt.")
+    assert "—" not in strip_markdown("Försäljningen steg—en ökning på 5 %.")
+
+
+def test_a_date_range_keeps_its_en_dash():
+    """A range is not a pause, and rewriting it would change every period label on the card."""
+    assert strip_markdown("jul 2025–jun 2026") == "jul 2025–jun 2026"
+    kept = "Perioden jul 2025–jun 2026 gäller."
+    assert strip_markdown(kept) == kept
+
+
 # ------------------------------------------------------------------ names in a refusal
 
 def test_a_refusal_does_not_repeat_the_name_it_refuses():
@@ -238,7 +259,7 @@ def test_a_refusal_does_not_repeat_the_name_it_refuses():
     scrubbed = scrub_names('"Lumia Nordic" finns inte bland dina varumärken.', ["Lumia"])
     assert "Lumia" not in scrubbed
     # The looked-up word is "Lumia" and the model wrote "Lumia Nordic": redacting only what was
-    # looked up left `det efterfrågade namnet Nordic"` — still the competitor, and broken prose.
+    # looked up left `det efterfrågade namnet Nordic"` - still the competitor, and broken prose.
     assert "Nordic" not in scrubbed
     assert scrubbed.startswith("Det efterfrågade namnet finns inte")
 
@@ -279,6 +300,24 @@ def test_validation_failure_keeps_the_chart_and_drops_the_prose():
     # The explanation is rendered from the status, once, by AnswerCard. Putting it in the
     # caveats too printed it twice on the card, verbatim.
     assert not any("kunde inte verifieras" in c for c in card.caveats)
+
+
+def test_an_explanation_of_the_card_is_not_a_refusal():
+    """"Vad betyder den streckade linjen?" needs no query, so it has no result - and the rule
+    that turns a resultless "ok" into "cannot_answer" put a correct answer under the heading
+    "Det här har jag inte underlag för"."""
+    card = build_card(result=None, status="explain", envelope={},
+                      narrative="Den grå serien är samma månader året innan.")
+    assert card.status == "explain"
+    assert card.narrative.startswith("Den grå serien")
+    assert card.chart is None
+
+
+def test_an_answer_without_data_is_still_downgraded():
+    """The other half: "ok" with nothing behind it is an answer from memory."""
+    card = build_card(result=None, status="ok", envelope={},
+                      narrative="Försäljningen gick bra.")
+    assert card.status == "cannot_answer"
 
 
 def test_cannot_answer_carries_suggestions_and_no_chart():

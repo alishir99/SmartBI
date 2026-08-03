@@ -9,7 +9,7 @@ from eval.oracle import Oracle
 
 pytestmark = pytest.mark.skipif(
     not (Oracle().data_dir / "fact_sales_line.csv").exists(),
-    reason=("data/generated is missing — regenerate with: "
+    reason=("data/generated is missing - regenerate with: "
             "python scripts/generate_data.py --seed 42"),
 )
 
@@ -140,7 +140,7 @@ def test_top_n_ordering_still_derives(case_id, derived):
     actual = derived[case_id].get("order")
     assert actual is not None, (
         f"{case_id}: expects an ordering but the derivation sets no `top`")
-    # `prefix_only` means the case pins the head of the ranking and is indifferent to the tail —
+    # `prefix_only` means the case pins the head of the ranking and is indifferent to the tail -
     # the useful contract when the ordering below the cut is near-tied.
     compared = actual[:len(expected)] if spec.get("prefix_only") else actual
     pairs = zip(expected, compared, strict=False)
@@ -170,12 +170,12 @@ def test_rank_and_peer_count_still_derive(case_id, derived):
 @pytest.mark.parametrize("case_id", CASE_IDS)
 def test_market_share_cases_stay_above_the_k_threshold(case_id, derived):
     """golden_questions.yaml states that none of its market-share questions should trip the
-    k-anonymity guard — the thin subcategory lives in adversarial.yaml."""
+    k-anonymity guard - the thin subcategory lives in adversarial.yaml."""
     share = case_by_id(case_id)["derivation"].get("market_share")
     if share is None:
         pytest.skip("not a market-share case")
     n_brands = derived[case_id]["n_brands"]
     assert n_brands >= 5, (
         f"{case_id}: subcategory {share['subcategory']!r} now holds {n_brands} brands, "
-        f"below the k-threshold of 5 — this question would be suppressed, so it no longer "
+        f"below the k-threshold of 5 - this question would be suppressed, so it no longer "
         f"belongs in the golden set")

@@ -2,7 +2,7 @@
 
 `logging` owns a set of attribute names on every LogRecord, and passing one through `extra=`
 raises KeyError. Inside an agent turn that lands in the broad handler and becomes an error
-event — a logging call destroying the answer it was added to describe, and only once a
+event - a logging call destroying the answer it was added to describe, and only once a
 handler is attached at the right level, so it passed in isolation and failed in the suite.
 """
 
@@ -60,7 +60,7 @@ def test_bound_context_appears_on_every_record(monkeypatch):
 
 
 def test_binding_none_does_not_create_a_null_field(monkeypatch):
-    """A card with no query_id should leave the field out rather than log `null` — an absent
+    """A card with no query_id should leave the field out rather than log `null` - an absent
     key filters differently from a present empty one."""
     monkeypatch.setattr(logs, "_context", logs.ContextVar("t", default=None))
     logs.bind(turn_id="abc", supplier_id=None)
@@ -119,7 +119,7 @@ def test_the_fingerprint_is_stable_so_repeats_can_still_be_correlated():
 
 
 def test_sensitive_mode_puts_the_text_back(monkeypatch):
-    """Deliberate, for a local debug run — which is how the two false-reject classes were
+    """Deliberate, for a local debug run - which is how the two false-reject classes were
     diagnosed in the first place."""
     monkeypatch.setattr(logs.settings, "log_sensitive", True)
     assert logs.redacted("Hur går det?", "question") == {"question": "Hur går det?"}
@@ -173,7 +173,7 @@ def test_a_rotated_file_keeps_its_extension(tmp_path, monkeypatch):
     """The stdlib default is `api.jsonl.2026-07-31`, which no tool recognises as JSON."""
     handler = configured(tmp_path, monkeypatch)
     logging.getLogger("api").info("", extra={"event": "before"})
-    # As a midnight would: just past due. Not 0 — the handler derives the rotated file's
+    # As a midnight would: just past due. Not 0 - the handler derives the rotated file's
     # date by subtracting one interval, and a negative timestamp is an OSError on Windows.
     handler.rolloverAt = time.time() - 1
     logging.getLogger("api").info("", extra={"event": "after"})
@@ -186,7 +186,7 @@ def test_a_rotated_file_keeps_its_extension(tmp_path, monkeypatch):
 
 def test_retention_still_deletes_despite_the_custom_namer(tmp_path, monkeypatch):
     """The trap this pins: `getFilesToDelete` finds old files by pattern, and renaming them
-    can silently orphan every one — retention that quietly keeps everything for ever is
+    can silently orphan every one - retention that quietly keeps everything for ever is
     worse than no retention, because nobody looks again."""
     handler = configured(tmp_path, monkeypatch, log_retention_days=2)
     for day in range(25, 30):

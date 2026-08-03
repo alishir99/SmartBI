@@ -1,4 +1,4 @@
-/** Geografi — the regional cut, in two views. */
+/** Geografi - the regional cut, in two views. */
 
 import { useState } from 'react'
 import type { AnswerCard } from '../types'
@@ -18,7 +18,7 @@ export function GeographyPage() {
   return (
     <FocusedCardPage
       title="Geografi"
-      description="Försäljning per län. Rangordningen är det man läser av — kartan visar var efterfrågan ligger."
+      description="Försäljning per län. Rangordningen är det man läser av - kartan visar var efterfrågan ligger."
       dimension="region"
       followUps={[
         'Var växer vi snabbast jämfört med förra året?',

@@ -3,7 +3,7 @@
 # when `.env` was absent, and `.gitignore` excludes both `.env` and `data/generated/`.
 #
 # Every service therefore reads `.env.example` first and `.env` second, with the second
-# optional — later files win, so a real `.env` still overrides every default, and someone
+# optional - later files win, so a real `.env` still overrides every default, and someone
 # who has not made one gets a working demo instead of an error. `.env.example` sets
 # SOLVIGO_ENV=dev, which is what permits the in-repo secrets; anything else and the API and
 # MCP server refuse to boot on published defaults.
@@ -26,7 +26,7 @@ services:
       - ./db/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # `-h 127.0.0.1` is the whole point of this line. While docker-entrypoint-initdb.d is
-      # still applying the four schema files, Postgres is up on the Unix socket only — the
+      # still applying the four schema files, Postgres is up on the Unix socket only - the
       # entrypoint deliberately withholds TCP until initialisation finishes. A socket
       # pg_isready therefore reports healthy mid-init, which lets `seed` start against a
       # half-built schema: the classic compose race, and it fails intermittently, which is
@@ -42,7 +42,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.python
     # `data/generated/` is gitignored, so on a clean clone the CSVs do not exist and
-    # seed.py exited — taking mcp, and then api, down with it. Generating them here makes
+    # seed.py exited - taking mcp, and then api, down with it. Generating them here makes
     # `docker compose up` actually work from a fresh clone, which is the bar reviewers
     # apply. Conditional rather than unconditional: the generator is deterministic, so
     # regenerating on every boot would be a minute of work to produce byte-identical files.
@@ -76,7 +76,7 @@ services:
       POSTGRES_HOST: db
     # Deliberately not published. `internal_token` is the only thing between this port and
     # a full cross-tenant read, and a shared secret is defence in depth, not the boundary
-    # itself — the boundary is that the port is not reachable (§11.4, ingress: internal on
+    # itself - the boundary is that the port is not reachable (§11.4, ingress: internal on
     # Cloud Run). docker-compose.demo.yml publishes it for exercising the tools by hand.
     depends_on:
       seed:
@@ -115,7 +115,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.web
       # Vite inlines this into the bundle, so it has to be here and not under `environment:`
-      # — a static image reads no environment at all.
+      # - a static image reads no environment at all.
       args:
         VITE_API_BASE_URL: http://localhost:8000
     ports:

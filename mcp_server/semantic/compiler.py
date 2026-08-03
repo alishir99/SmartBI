@@ -308,7 +308,7 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
     where = ""
     if having:
         # Only aggregates: filtering a dimension is what `filters` is for, and doing it here
-        # would run after the grouping instead of before it — same rows, more work, and a second
+        # would run after the grouping instead of before it - same rows, more work, and a second
         # way to express one thing.
         aggregate_keys = set(measures)
         if compare:

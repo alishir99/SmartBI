@@ -29,7 +29,7 @@ _SUFFIX_ALTERNATIVES = "|".join(
                                        key=len, reverse=True))
 
 # Every character used to group thousands: ordinary space, no-break space, narrow no-break
-# space, thin space — and the period, which a model occasionally reaches for ("12.400.000").
+# space, thin space - and the period, which a model occasionally reaches for ("12.400.000").
 _THOUSANDS_CLASS = "[ \\u00a0\\u202f\\u2009.]"
 
 # Spans whose digits are never measurements.
@@ -73,7 +73,7 @@ _FLOAT_EPSILON = 1e-6
 # +/-50 000 on significant figures alone, which is loose enough to launder a fabrication.
 # Measured over 300 random round figures against a 500-row result: 0 % accepted with no
 # implied tolerance at all (but then 0 of 4 correct roundings survive), and ~8 % at any cap
-# from 1 % upward — the rate is set by how densely 500 values fill the range, not by this
+# from 1 % upward - the rate is set by how densely 500 values fill the range, not by this
 # number. So it is set at the tight end of the band that still keeps every honest rounding.
 _ROUND_NUMBER_MAX_REL = 0.02
 
@@ -183,7 +183,7 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
 
         # …unless the literal is a round number, in which case its trailing zeros ARE the
         # claim. "530 000 kr" is how anyone reports 529 868, and demanding +/-0,50 kr of it
-        # rejected a correct answer — the expensive direction, per this file's own header.
+        # rejected a correct answer - the expensive direction, per this file's own header.
         # So an integer literal is read to its last *significant* digit instead.
         if not decimals:
             digits = match.group("int")
@@ -250,7 +250,7 @@ def candidates_by_result(
     """Every value the model may legitimately have used, kept per result so an accepted literal can
     name the query that licensed it.
 
-    Levels and changes are kept apart. A level read out of a row has no direction — "Nordström
+    Levels and changes are kept apart. A level read out of a row has no direction - "Nordström
     backade från 22,8 % till 10,6 %" states a fall, and neither 22,8 nor 10,6 *is* the fall.
     Applying the direction check to them rejected the true figures of a whole answer, which is
     what suppressed the prose on the headline market-share question two runs in three.
@@ -288,9 +288,9 @@ def candidates_by_result(
             own = unit_of.get(key, "unknown")
             # The difference between two percentages is percentage points, not percent. Keeping
             # them in one bucket is exactly the hole G2 walked through: "22,8 % → 10,6 %, en
-            # minskning på 12,2 procent" then validated, because 12,2 was in the data — as p.e.
+            # minskning på 12,2 procent" then validated, because 12,2 was in the data - as p.e.
             delta_class = "pe" if own == "percent" else own
-            # A column that IS a change keeps its direction — `net_sales_sek_delta_pct` of -8,2
+            # A column that IS a change keeps its direction - `net_sales_sek_delta_pct` of -8,2
             # says the sales fell, and prose calling that a rise is the failure this check
             # exists for. Every other cell is a level, and so is anything derived from levels
             # without subtracting: a total, a mean, a share. Only a difference points anywhere.
@@ -313,7 +313,7 @@ def candidates_by_result(
                     # literal has any legitimate claim on a money column at all.
                     add_cell("percent", *(100.0 * value / total for value in seen))
 
-            # delta between adjacent rows stays available either way — it is local to two rows
+            # delta between adjacent rows stays available either way - it is local to two rows
             # and does not depend on holding the whole series.
             for previous, current in pairwise(seen):
                 add(delta_class, current - previous)
@@ -360,7 +360,7 @@ def _class_of_unit(unit: str | None) -> str:
 
 
 # A literal may only match candidates of its own kind, so a `%` claim cannot match a raw SEK
-# cell — or, since "p.e." became a class of its own, a percentage-point delta.
+# cell - or, since "p.e." became a class of its own, a percentage-point delta.
 _ALLOWED_CLASSES: dict[str, tuple[str, ...]] = {
     "percent": ("percent", "unknown"),
     "pe": ("pe", "unknown"),
@@ -437,7 +437,7 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Viola
         if not measures or not labels or len(result.rows) < 2:
             continue
 
-        # The primary measure is the first numeric column that is not a derived comparison — the
+        # The primary measure is the first numeric column that is not a derived comparison - the
         # same choice propose_chart makes, so prose and chart are judged against one axis.
         primary = next((key for key in measures
                         if not key.endswith(("_compare", "_delta", "_delta_pct"))), None)
@@ -514,7 +514,7 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
                 and 0 <= literal.value <= min(max_rows, _MAX_COUNTING_INTEGER)):
             continue
 
-        # Try the literal as written, then — only when it carried no magnitude suffix — as
+        # Try the literal as written, then - only when it carried no magnitude suffix - as
         # thousands and as millions.
         scales = ((1.0, 1e3, 1e6)
                   if literal.implicit_scale_allowed
@@ -523,7 +523,7 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
         allowed = _ALLOWED_CLASSES[literal.unit_class]
 
         # Results are tried in the order the turn produced them, so a figure that several
-        # queries could account for is attributed to the first one that could — which is the one
+        # queries could account for is attributed to the first one that could - which is the one
         # the model was looking at when it wrote the sentence.
         source, sign = None, 0
 

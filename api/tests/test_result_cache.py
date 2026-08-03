@@ -1,4 +1,4 @@
-"""Tests for the result cache — the store the charts read from."""
+"""Tests for the result cache - the store the charts read from."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def test_an_entry_is_readable_by_its_own_tenant():
 
 
 def test_another_tenant_cannot_read_the_same_query_id():
-    """The route turns this None into a 404 — not a 403, which would confirm the id exists."""
+    """The route turns this None into a 404 - not a 403, which would confirm the id exists."""
     cache = ResultCache()
     entry = cache.put(cached(supplier_id=1))
     assert cache.get(entry.query_id, 2) is None
@@ -107,7 +107,7 @@ def test_numeric_columns_are_identified():
 
 # The B2 fixture, built to reproduce the defect rather than to be convenient: the largest value
 # sits *outside* the 25 rows the model is shown, so any answer inferred from the sample names
-# the wrong winner while quoting a number that really is in the result set — which is exactly
+# the wrong winner while quoting a number that really is in the result set - which is exactly
 # why the validator used to accept it.
 B2_ROWS = (
     [{"product": f"P{i}", "net_sales_sek": 8_507_984.0 - i} for i in range(PREVIEW_ROWS)]
@@ -143,7 +143,7 @@ def test_the_model_is_told_the_argmax_it_cannot_see():
     aggregates = b2_cached().preview()["aggregates"]
 
     assert aggregates["net_sales_sek"]["max"]["value"] == 8_932_965.0
-    # The identifying column comes with it — the point is to turn a number into an answer.
+    # The identifying column comes with it - the point is to turn a number into an answer.
     assert aggregates["net_sales_sek"]["max"]["product"] == "P40"
 
 

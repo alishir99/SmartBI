@@ -10,7 +10,7 @@ from eval.oracle import DEMO_SUPPLIER, MEASURES, Oracle
 
 pytestmark = pytest.mark.skipif(
     not (Oracle().data_dir / "fact_sales_line.csv").exists(),
-    reason=("data/generated is missing — regenerate with: "
+    reason=("data/generated is missing - regenerate with: "
             "python scripts/generate_data.py --seed 42"),
 )
 
@@ -188,7 +188,7 @@ def test_vintersport_is_below_the_k_anonymity_threshold(oracle):
         f"nothing. Subcategories present: {sorted(per_subcategory)}")
     assert per_subcategory["Vintersport"] < 5, (
         f"Vintersport now holds {per_subcategory['Vintersport']} brands, at or above the "
-        f"k-threshold of 5 — the suppression demo no longer fires")
+        f"k-threshold of 5 - the suppression demo no longer fires")
     assert per_subcategory["Vintersport"] == min(per_subcategory.values())
 
 
@@ -203,9 +203,9 @@ def test_the_tenant_sells_nothing_in_vintersport(oracle):
 
 def test_the_discontinued_product_stops_before_coverage_ends(oracle):
     discontinued = oracle.discontinued_products()
-    assert not discontinued.empty, "no discontinued product — the truncated-series case is dead"
+    assert not discontinued.empty, "no discontinued product - the truncated-series case is dead"
 
 
 def test_a_store_opened_inside_the_coverage_window(oracle):
     new_stores = oracle.stores_opened_within_coverage()
-    assert not new_stores.empty, "no late-opening store — the partial-history case is dead"
+    assert not new_stores.empty, "no late-opening store - the partial-history case is dead"

@@ -1,4 +1,4 @@
-"""POST /api/chat — one agent turn, streamed as SSE."""
+"""POST /api/chat - one agent turn, streamed as SSE."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ async def chat(body: ChatRequest,
                mcp: McpClient = Depends(get_mcp),
                cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     # Both refusals happen before the response starts, so they are a plain 429 with a Swedish
-    # `detail` — which the frontend renders verbatim (web/src/lib/api.ts) — rather than an error
+    # `detail` - which the frontend renders verbatim (web/src/lib/api.ts) - rather than an error
     # frame inside a 200 stream that a client has to know to look for.
     ratelimit.enforce_chat_turn(tenant.user_id)
     await ratelimit.enforce_tenant_budget(tenant.supplier_id)
@@ -82,7 +82,7 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
             # producer of an AnswerCard - all of which go through a FastAPI response_model -
             # carries `from`. The client then reads undefined for the start of every window.
             yield f"data: {event.model_dump_json(by_alias=True)}\n\n"
-    except Exception as exc:  # noqa: BLE001 — the client is waiting on this stream
+    except Exception as exc:  # noqa: BLE001 - the client is waiting on this stream
         logger.exception("chat stream failed")
         yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
     finally:

@@ -1,7 +1,7 @@
 [project]
 name = "solvigo-insights"
 version = "0.1.0"
-description = "AI-native sales dashboard for suppliers — MCP semantic layer over a Swedish retail star schema"
+description = "AI-native sales dashboard for suppliers - MCP semantic layer over a Swedish retail star schema"
 requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.30",
@@ -11,7 +11,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     # PyJWT, not python-jose: jose was declared and never imported, is unmaintained and
     # carries CVE history, and pulled `cryptography` in behind it. PyJWT was already the
-    # library api/auth.py imports — it just happened to resolve transitively through `mcp`,
+    # library api/auth.py imports - it just happened to resolve transitively through `mcp`,
     # which is a dependency an upgrade could silently drop.
     "pyjwt>=2.9",
     "argon2-cffi>=23.1",
@@ -53,7 +53,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.flake8-bugbear]
 # `Depends(...)` and `Query(...)` in a default argument is the FastAPI idiom, not the mutable
-# default B008 is meant to catch — FastAPI reads these markers off the signature. Listing them
+# default B008 is meant to catch - FastAPI reads these markers off the signature. Listing them
 # here keeps B008 switched on everywhere it is actually useful, rather than littering the
 # routes with per-line noqa.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
@@ -74,12 +74,12 @@ markers = [
 python_version = "3.13"
 ignore_missing_imports = true
 # There are no __init__.py files: Python has not needed them since 3.3, and pytest does not
-# either while no two test modules share a basename. mypy is the one tool that does — api
+# either while no two test modules share a basename. mypy is the one tool that does - api
 # and mcp_server each have a `config.py`, and without a package root it sees two modules
 # both called `config`. This tells it where the roots are instead.
 explicit_package_bases = true
 mypy_path = "."
-# Test modules use deliberately partial fakes — a FakeMcp implements the three methods the
+# Test modules use deliberately partial fakes - a FakeMcp implements the three methods the
 # loop actually calls, and typing it as the full client would mean importing a protocol that
 # exists only to satisfy the checker.
 exclude = "tests/"

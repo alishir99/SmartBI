@@ -26,7 +26,7 @@ describe('date grain', () => {
 
   it('reads a day as a day, without the year', () => {
     // The day grain only ever covers a recent window of days or weeks, and the card's period
-    // line already states which — so the axis says "1 jul", not "2025-07-01".
+    // line already states which - so the axis says "1 jul", not "2025-07-01".
     expect(formatCell('2025-07-01', date('day'))).toBe('1 jul')
   })
 

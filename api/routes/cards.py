@@ -65,7 +65,7 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
 
     try:
         payload = await mcp.call(supplier_id, row["tool_name"], row["tool_args"])
-    except Exception:  # noqa: BLE001 — one broken saved view must not hide the others
+    except Exception:  # noqa: BLE001 - one broken saved view must not hide the others
         logger.warning("could not refresh card %s", row["card_id"], exc_info=True)
         return AnswerCard(
             card_id=str(row["card_id"]), status="cannot_answer",

@@ -1,4 +1,4 @@
-"""The API's own database connection — deliberately *not* the MCP server's."""
+"""The API's own database connection - deliberately *not* the MCP server's."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ async def record_turn(
             json.dumps(tool_calls, default=str), json.dumps(row_counts, default=str),
             latency_ms, input_tokens, output_tokens, status,
         )
-    except Exception:                                    # noqa: BLE001 — see docstring
+    except Exception:                                    # noqa: BLE001 - see docstring
         log.exception("kunde inte skriva audit_turn")
 
 
@@ -116,7 +116,7 @@ async def insert_card(*, user_id: int, supplier_id: int, title: str,
 
 
 async def supplier_name(supplier_id: int) -> str | None:
-    """Who a shared link was created by — the reader has no session to infer it from."""
+    """Who a shared link was created by - the reader has no session to infer it from."""
     return await pool().fetchval(
         "SELECT name FROM dim_supplier WHERE supplier_id = $1", supplier_id)
 
@@ -128,7 +128,7 @@ async def count_cards(supplier_id: int) -> int:
 
 async def list_cards(supplier_id: int, limit: int) -> list[dict[str, Any]]:
     # The LIMIT is in the SQL rather than in the route because every one of these rows costs an
-    # MCP round-trip when the caller refreshes it — see the note in routes/cards.py.
+    # MCP round-trip when the caller refreshes it - see the note in routes/cards.py.
     rows = await pool().fetch(
         "SELECT card_id, title, chart_spec, tool_name, tool_args FROM saved_card "
         "WHERE supplier_id = $1 ORDER BY created_at DESC LIMIT $2",

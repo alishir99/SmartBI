@@ -1,5 +1,5 @@
 /**
- * Produkter — the movers page. It used to be the same "Topp 10 produkter" chart that is already
+ * Produkter - the movers page. It used to be the same "Topp 10 produkter" chart that is already
  * on the overview, which gave it no reason to exist. "What is rising and what is falling" is the
  * question a supplier opens a product page to ask.
  */

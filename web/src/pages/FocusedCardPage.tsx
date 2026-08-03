@@ -23,7 +23,7 @@ type Props = {
   /** The x dimension the card must be grouped by, e.g. `product` or `region`. */
   dimension: string
   followUps: string[]
-  /** Rendered in place of the card — Geografi uses it to offer a map alongside the bars. */
+  /** Rendered in place of the card - Geografi uses it to offer a map alongside the bars. */
   render?: (card: AnswerCard | null) => ReactNode
 }
 
@@ -96,7 +96,7 @@ export function FocusedCardPage({ title, description, dimension, followUps, rend
   )
 }
 
-/** Match on the chart's x dimension rather than an index — card order is the backend's. */
+/** Match on the chart's x dimension rather than an index - card order is the backend's. */
 function pick(cards: AnswerCard[], dimension: string): AnswerCard | null {
   return cards.find((card) => card.chart?.x === dimension) ?? null
 }

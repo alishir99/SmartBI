@@ -115,7 +115,7 @@ SUPPLIERS: dict[str, list[str]] = {
     "Aurora Kök AB": ["Aurora", "Tindra"],
 }
 
-# The supplier the demo logs in as — the one whose dashboard is shown in the video.
+# The supplier the demo logs in as - the one whose dashboard is shown in the video.
 DEMO_SUPPLIER = "Nordström Audio AB"
 
 # Which brands compete in which subcategory.

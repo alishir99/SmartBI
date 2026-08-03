@@ -98,7 +98,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
 
         {/* The coastline, beneath the data. Filled with a flat surface tone and outlined
             rather than shaded: it is context, and a map whose background competes with its
-            marks for attention has stopped being a background. `fillRule` matters — the
+            marks for attention has stopped being a background. `fillRule` matters - the
             path carries three separate polygons (mainland, Gotland, Öland). */}
         <path
           d={SWEDEN_PATH}
@@ -152,7 +152,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
 
         {/* Labels for the largest counties only, and only where one will not land on top of
             another already placed. The south is dense enough that labelling everything
-            produces overlapping text — the hover readout carries the rest. */}
+            produces overlapping text - the hover readout carries the rest. */}
         {labelled.map((entry) => (
           <text
             key={`label-${entry.region}`}

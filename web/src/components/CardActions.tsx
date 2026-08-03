@@ -160,7 +160,7 @@ function ShareMenu({ cardId }: { cardId: string }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      /* clipboard blocked — the link is on screen and selectable */
+      /* clipboard blocked - the link is on screen and selectable */
     }
   }
 
@@ -185,7 +185,7 @@ function ShareMenu({ cardId }: { cardId: string }) {
                 they were, which is a table and a retention rule rather than a flag. */}
             <ShareOption
               title="Skapa länk"
-              description="Körs om mot färsk data vid varje öppning — alltid under din behörighet, aldrig läsarens. Slutar gälla automatiskt."
+              description="Körs om mot färsk data vid varje öppning - alltid under din behörighet, aldrig läsarens. Slutar gälla automatiskt."
               loading={share.isPending}
               onClick={() => share.mutate({ cardId, mode: 'live' })}
             />
@@ -234,7 +234,7 @@ function ShareOption({
   )
 }
 
-/** `topp-10-produkter-2026-06-30.csv` — readable in a downloads folder a week later. */
+/** `topp-10-produkter-2026-06-30.csv` - readable in a downloads folder a week later. */
 function csvName(card: AnswerCard): string {
   const base = (card.chart?.title ?? 'export')
     .toLowerCase()

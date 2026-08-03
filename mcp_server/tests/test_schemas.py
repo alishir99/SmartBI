@@ -39,7 +39,7 @@ async def test_no_tool_lets_the_caller_name_a_supplier(tools):
 
 
 async def test_exactly_four_tools_are_exposed(tools):
-    """A small, orthogonal tool set outperforms a large one — keep it deliberate."""
+    """A small, orthogonal tool set outperforms a large one - keep it deliberate."""
     assert {tool.name for tool in tools} == EXPECTED_TOOLS
 
 

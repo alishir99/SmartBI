@@ -1,7 +1,7 @@
-# Solvigo Insights — AI-native försäljningsdashboard
+# Solvigo Insights - AI-native försäljningsdashboard
 
 "BI utan BI-avdelning" för leverantörer i svensk detaljhandel. En leverantör loggar in och
-landar på en **färdig dashboard** — inte en tom chattruta — och kan sedan fördjupa sig genom
+landar på en **färdig dashboard** - inte en tom chattruta - och kan sedan fördjupa sig genom
 att fråga sin data på vanlig svenska. Både dashboarden och chatten läser data på exakt samma
 väg: genom en MCP-server.
 
@@ -9,7 +9,7 @@ väg: genom en MCP-server.
 > Modellen väljer *frågan* och *presentationen*. Värdena går
 > Postgres → MCP → API → diagram, längs en väg modellen inte rör.
 
-Designresonemanget i sin helhet ligger i [`docs/DESIGN.md`](docs/DESIGN.md) — skrivet innan
+Designresonemanget i sin helhet ligger i [`docs/DESIGN.md`](docs/DESIGN.md) - skrivet innan
 en rad kod fanns, och behållet som det skrevs.
 Den här filen är hur du kör systemet och de val som är värda att förstå först.
 
@@ -24,13 +24,13 @@ docker compose up
 Det är hela kommandot, från en färsk klon. Ingen `.env` behövs och ingen data behöver
 genereras först: varje tjänst läser `.env.example` och därefter `.env` om den finns, och
 seed-steget genererar CSV-filerna om `data/generated/` saknas. Båda är `gitignore`:ade, så
-utan det här dog kedjan direkt — compose felade på en saknad `.env`, och `seed.py` avslutade
+utan det här dog kedjan direkt - compose felade på en saknad `.env`, och `seed.py` avslutade
 på saknade CSV:er, vilket gjorde att `mcp` aldrig startade och `api` aldrig heller.
 
 - Webb: http://localhost:5173
 - API: http://localhost:8000/docs
 
-Det enda som inte kan levereras på det viset är `LLM_API_KEY` — en nyckel går inte att
+Det enda som inte kan levereras på det viset är `LLM_API_KEY` - en nyckel går inte att
 committa. Utan den fungerar dashboarden, verktygen och hela den deterministiska vägen;
 chatten svarar *"LLM_API_KEY är inte satt"*. Lägg in den i en egen `.env` för att köra
 agenten:
@@ -41,7 +41,7 @@ docker compose up
 ```
 
 MCP-servern och Postgres publiceras **inte** på värden i standarduppsättningen. De behöver
-det inte — API:t når dem över compose-nätverket — och `internal_token` är tänkt som
+det inte - API:t når dem över compose-nätverket - och `internal_token` är tänkt som
 djupförsvar bakom en oåtkomlig port, inte som hela åtkomstkontrollen. För att kunna anropa
 verktygen direkt eller öppna `psql` och se RLS neka en läsning över tenant-gränsen:
 
@@ -54,7 +54,7 @@ Då finns MCP health på http://localhost:8081/health och Postgres på `localhos
 `SOLVIGO_ENV=dev` i `.env.example` är det som tillåter de inkomna standardhemligheterna.
 Utan den vägrar både API:t och MCP-servern att starta så länge `JWT_SECRET`,
 `INTERNAL_TOKEN`, `POSTGRES_PASSWORD` eller `APP_DB_PASSWORD` står kvar på värdena som
-ligger i repot — de är publika, och en okonfigurerad driftsättning ska falla högljutt
+ligger i repot - de är publika, och en okonfigurerad driftsättning ska falla högljutt
 i stället för att köra vidare på dem.
 
 Demokonton (lösenord `demo1234`):
@@ -89,7 +89,7 @@ python eval/run_eval.py       # gyllene frågor mot ground truth
 python eval/run_eval.py --adversarial
 ```
 
-`pytest` kräver ingen databas. Sviten innehåller också ett fåtal integrationstester —
+`pytest` kräver ingen databas. Sviten innehåller också ett fåtal integrationstester -
 de påståenden som bara en riktig, seedad Postgres kan pröva: att RLS faktiskt stoppar en
 läsning över tenant-gränsen när anropet går genom verktygen, och att verktygen
 reproducerar `ground_truth.json`. De hoppas över automatiskt när ingen databas svarar,
@@ -107,14 +107,14 @@ Varje rad är ett JSON-objekt och varje turn har ett eget `turn_id`, så en hel 
 följa från början till slut. Loggen skrivs till stdout (`docker compose logs api`) och till
 `./logs/api.jsonl`, som överlever en omstart.
 
-Filändelsen är `.jsonl` därför att innehållet *är* JSON Lines — ett objekt per rad. `.log`
+Filändelsen är `.jsonl` därför att innehållet *är* JSON Lines - ett objekt per rad. `.log`
 hade antytt fritext, och `jq` och varje logg-shipper läser `.jsonl` direkt.
 
 **Rotation sker på tid, inte på storlek.** Vid midnatt UTC byter filen namn till
 `api-2026-07-31.jsonl` och en ny `api.jsonl` börjar; `LOG_RETENTION_DAYS` (14) styr hur många
 som sparas, resten raderas. Storleksrotation begränsar bara disken: "de senaste 120 MB" är
-två timmar en tung dag och ett halvår en lugn, och då går frågan loggen finns för — *vad hände
-i tisdags* — inte att besvara. UTC och inte lokal tid, eftersom en containers tidszon inte ska
+två timmar en tung dag och ett halvår en lugn, och då går frågan loggen finns för - *vad hände
+i tisdags* - inte att besvara. UTC och inte lokal tid, eftersom en containers tidszon inte ska
 behöva vara känd för att läsa ett filnamn, och en sommartidsväxling annars ger en 23-timmarsfil.
 
 ```bash
@@ -147,18 +147,18 @@ behövs för att hitta tillbaka:
 | Fält | Loggas | Varför |
 |---|---|---|
 | resultatrader | aldrig | En loggfil som citerar rader är samma läcka via en omväg. |
-| frågetext | längd + `sha` (12 tecken) | Fingeravtrycket räcker för att se att samma fråga återkommer och för att joina mot `audit_turn`. Texten själv är fri text — den kan innehålla vad som helst en användare skriver. |
-| avvisade tal | nej, bara `reasons` + antal | Vid `wrong_direction` och `not_the_argmax` är literalen ett *verkligt* värde ur tenantens data — att den matchade datan är ju skälet till att den flaggades. |
+| frågetext | längd + `sha` (12 tecken) | Fingeravtrycket räcker för att se att samma fråga återkommer och för att joina mot `audit_turn`. Texten själv är fri text - den kan innehålla vad som helst en användare skriver. |
+| avvisade tal | nej, bara `reasons` + antal | Vid `wrong_direction` och `not_the_argmax` är literalen ett *verkligt* värde ur tenantens data - att den matchade datan är ju skälet till att den flaggades. |
 | verktygsargument | bara nycklarna | Värdena namnger produkter, län och perioder som just den leverantören frågade om. |
 | `supplier_id`, `user_id` | ja | Pseudonyma heltal, och hela poängen med att kunna filtrera. Omfattas av retention. |
 | `query_id` | ja | En cache-nyckel, inte en behörighet: `/api/result/{query_id}` är tenant-scopat och svarar 404 över gränsen. |
 | radantal, latens, tokens | ja | Ren metadata. |
 
-`LOG_SENSITIVE=true` lägger tillbaka frågetext, avvisade tal och argumentvärden — för en
+`LOG_SENSITIVE=true` lägger tillbaka frågetext, avvisade tal och argumentvärden - för en
 lokal felsökningskörning. Den är avstängd som standard, eftersom ett integritetsskydd man
 måste komma ihåg att slå på är ett integritetsskydd som fallerar.
 
-`audit_turn` gör något annat och finns kvar: affärsloggen — en rad per turn, i databasen, för
+`audit_turn` gör något annat och finns kvar: affärsloggen - en rad per turn, i databasen, för
 fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som det blev.
 
 ---
@@ -181,7 +181,7 @@ fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som d
 │   Agentpipeline:  PLAN+EXECUTE → VALIDATE (numeriskt) → RENDER (kort)     │
 └───────────────┬───────────────────────────────────────────────────────────┘
                 │ MCP (streamable HTTP, internt)
-                │ TenantContext injiceras här — inte del av något verktygsschema
+                │ TenantContext injiceras här - inte del av något verktygsschema
 ┌───────────────▼───────────────────────────────────────────────────────────┐
 │  MCP-server (FastMCP)                  "det semantiska lagret"            │
 │   get_capabilities()    vad som finns, vilka enheter, vad som är tillåtet  │
@@ -197,7 +197,7 @@ fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som d
 ```
 
 **Notera de två konsumenterna.** Den deterministiska dashboarden och LLM-agenten anropar
-*samma fyra verktyg*. MCP är inte ett omslag vi lade till för modellens skull — det är enda
+*samma fyra verktyg*. MCP är inte ett omslag vi lade till för modellens skull - det är enda
 vägen till data. Därför kan chatten och dashboarden inte visa olika siffror för samma sak.
 
 ---
@@ -216,12 +216,12 @@ Det här är beslutet jag räknar med att bli hårdast utfrågad om.
 | Enheter kan fästas på resultatet | ❌ | ✅ | ✅ |
 | Testbart isolerat | ❌ | ✅ | ✅ |
 
-De sa att de ställer egna frågor live — det stryker kolumn 2. Allt annat stryker kolumn 1.
+De sa att de ställer egna frågor live - det stryker kolumn 2. Allt annat stryker kolumn 1.
 
 Konkret: `mcp_server/semantic/model.py` är ett register över vad som får mätas och delas upp.
 `compiler.py` översätter en typad spec till SQL där **varje identifierare kommer från
 registret** och **varje värde är en bunden parameter**. En fientlig sträng blir ett
-valideringsfel, inte en fråga. Det finns 43 tester på just det — de flesta parsar den
+valideringsfel, inte en fråga. Det finns 43 tester på just det - de flesta parsar den
 genererade SQL:en med `sqlglot` och kontrollerar att inget literalvärde tog sig in i den.
 
 ### 2. Så vet vi att siffrorna är verkliga
@@ -233,14 +233,14 @@ Fyra lager, i den ordning de bär vikt:
    Diagrammet hämtas sedan från `/api/result/{query_id}`. Modellen ser alltså aldrig de
    värden diagrammet ritar. Det är en egenskap hos arkitekturen, inte hos promptkvaliteten.
 2. **Numerisk validering.** Berättelsen *är* genererad text, så efter verktygsloopen plockas
-   varje siffra ut ur prosan och måste finnas i resultatmängden — eller vara en tillåten
+   varje siffra ut ur prosan och måste finnas i resultatmängden - eller vara en tillåten
    härledning (summa, medel, differens, andel) inom avrundningstolerans. Vid fel: en
    omgenerering med den felande siffran citerad tillbaka. Vid andra felet: `validation_failed`,
    prosan utelämnas, diagrammet står kvar. **Att misslyckas synligt slår att misslyckas
    trovärdigt.**
 3. **Härkomst.** Varje kort bär en källchip: verktyg · filter · omfång · antal rader ·
    rollup eller faktatabell · tidsstämpel. Expanderad visar den exakta verktygsargumenten.
-4. **Mätning.** `eval/` kör 85 svenska frågor — 56 gyllene och 29 adversariella — mot facit
+4. **Mätning.** `eval/` kör 85 svenska frågor - 56 gyllene och 29 adversariella - mot facit
    som räknats fram **oberoende** med pandas ur samma genererade data. Det gör "hallucinerar
    den?" till ett tal jag kan rapportera. Talen står nedan.
 
@@ -251,11 +251,11 @@ Kört mot `deepseek-v4-pro` (se *Kända begränsningar*). Två tal, medvetet hå
 | | |
 |---|---|
 | **Garantierna** (`adversarial.yaml`, 29 fall) | **27–29 av 29**, och **inget fall faller två körningar i rad**. Ingen konkurrentsiffra, ingen kategoritotal under k-tröskeln och ingen rad från en annan leverantör nådde något kort. Samtliga sex promptinjektionsfall avvisas. Senast mätt **28 av 29** efter att datan regenererats (se nedan). |
-| **Svarskvaliteten** (`golden_questions.yaml`, numera 56 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna, och på de 52 fall som fanns då — fyra har tillkommit sedan dess. Talen är alltså historik, inte en mätning av det som ligger här. |
+| **Svarskvaliteten** (`golden_questions.yaml`, numera 56 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna, och på de 52 fall som fanns då - fyra har tillkommit sedan dess. Talen är alltså historik, inte en mätning av det som ligger här. |
 
 > **Om datasetet bytte under mätningen.** Generatorn hade två fel som gjorde varje orderrad
 > rabatterad och staplade returer på sista dagen. Att rätta dem ändrade varenda siffra i
-> datan, alltså också varje förväntat värde i `golden_questions.yaml` — de är omhärledda ur
+> datan, alltså också varje förväntat värde i `golden_questions.yaml` - de är omhärledda ur
 > `eval/oracle.py`, vilket testsviten framtvingar, men de *uppmätta* svarskvalitetstalen
 > ovan är från före bytet och står kvar som historik tills de körs om. Garantisviten kördes
 > om: **28 av 29**. Det enda fallet som föll (`injection_fake_system_block`) avvisade
@@ -263,16 +263,16 @@ Kört mot `deepseek-v4-pro` (se *Kända begränsningar*). Två tal, medvetet hå
 > finns i datan. Ingen siffra läckte. Det är precis den sortens fall som växlar mellan
 > körningar, och det är därför det står ett spann här.
 
-Uppdelningen per checkfamilj i samma körning — den upplösning som ett enda pass/fail per
+Uppdelningen per checkfamilj i samma körning - den upplösning som ett enda pass/fail per
 fall slänger bort:
 
 ```
 pass rate by check family:
-  prose        73/74   checks  ( 98.6%)   the narrative — the model
-  routing      39/39   checks  (100.0%)   tools, dimensions, chart and status — the plan
+  prose        73/74   checks  ( 98.6%)   the narrative - the model
+  routing      39/39   checks  (100.0%)   tools, dimensions, chart and status - the plan
 ```
 
-Spannet är inte slarv, det är resultatet. Två körningar på **identisk kod** gav 36 och 40 —
+Spannet är inte slarv, det är resultatet. Två körningar på **identisk kod** gav 36 och 40 -
 30 fall passerar stabilt, 6 faller stabilt, och 16 växlar mellan körningar. Ett enskilt värde
 från den här uppsättningen betyder därför ingenting; det är därför det står ett spann och ett
 stickprov här i stället för en siffra med två decimaler. Rätt nästa steg är *n* körningar per
@@ -288,13 +288,13 @@ De 6 stabila fallen är svarskvalitet, inte grundning: modellen utelämnar huvud
 påhittat värde som nått ett kort.
 
 **Vad mätningen hittade i skyddet självt.** Uppsättningen fanns för att mäta modellen och
-råkade i stället fälla validatorn. Fem av de stabilt fallerande fallen delade form — alla
-frågade efter toppsäljande produkter — och loggen visade varför: överträdelserna var `139`,
+råkade i stället fälla validatorn. Fem av de stabilt fallerande fallen delade form - alla
+frågade efter toppsäljande produkter - och loggen visade varför: överträdelserna var `139`,
 `217`, `282` och `191 St`. Det är inga belopp, det är modellbeteckningar inne i produktnamn
 (`Nordström TV N100 Pro`, `Vidar Hörlurar V191 Studio`), och `St` i "Studio" lästes som
 enheten `st`. Validatorn dolde alltså prosan på den vanligaste frågan en leverantör ställer.
-Namnen maskas nu med resultatets egna rader innan tal extraheras — bara text verktyget redan
-returnerat, aldrig en siffra — och två regressionstester håller båda riktningarna: namn med
+Namnen maskas nu med resultatets egna rader innan tal extraheras - bara text verktyget redan
+returnerat, aldrig en siffra - och två regressionstester håller båda riktningarna: namn med
 riktiga belopp passerar, ett påhittat belopp bredvid ett maskat namn fångas fortfarande.
 Poängen är inte buggen utan att en enskild siffra dolde den: 55 % såg ut som en svag modell
 och var i själva verket ett skydd som brann av på fel indata.
@@ -303,7 +303,7 @@ Modellen får aldrig räkna något databasen kan räkna. Därför finns `compare
 periodjämförelser är den vanligaste följdfrågan, och att låta modellen hämta två resultat och
 subtrahera är precis där aritmetiska fel uppstår.
 
-### 3. Leverantörsisolering — tre oberoende lager
+### 3. Leverantörsisolering - tre oberoende lager
 
 1. **`supplier_id` finns inte i något verktygsschema.** Modellen kan inte formulera
    "visa leverantör 7". Det testas i `mcp_server/tests/test_schemas.py`, och det är
@@ -314,7 +314,7 @@ subtrahera är precis där aritmetiska fel uppstår.
    rollup-vyerna.
 
 > Rättelse till planen, värd att nämna: PostgreSQL stöder **inte** RLS på materialiserade
-> vyer — `CREATE POLICY` tar bara tabeller. Rollups skyddas därför av motsvarande
+> vyer - `CREATE POLICY` tar bara tabeller. Rollups skyddas därför av motsvarande
 > konstruktion: ingen `GRANT` på den materialiserade vyn alls, och åtkomst enbart via en
 > `security_barrier`-vy med samma predikat som en policy skulle haft.
 
@@ -325,8 +325,8 @@ Vad en leverantör får se om andra:
 | ✅ Egna varumärken | Full detalj: produkt × butik × dag |
 | ✅ Kategoritotaler | Endast aggregat, k-anonymiserat |
 | ✅ Egen placering | "#2 av 6 varumärken i Hörlurar" |
-| ❌ Namngivna konkurrentsiffror | Aldrig — inte filtrerade, inte åtkomliga |
-| ❌ Kundnivå | Aldrig — verktygens minsta kornighet förbjuder det |
+| ❌ Namngivna konkurrentsiffror | Aldrig - inte filtrerade, inte åtkomliga |
+| ❌ Kundnivå | Aldrig - verktygens minsta kornighet förbjuder det |
 
 **k-anonymitet:** marknadsandelar utelämnas om urvalet har färre än 5 varumärken eller
 färre än 100 köp. Annars vore "din andel" bara en subtraktion från en namngiven konkurrents
@@ -335,15 +335,15 @@ omsättning. Datagenereringen innehåller **avsiktligt** en tunn underkategori
 
 Tröskeln avgjorde däremot bara **om** svaret gavs, inte hur exakt. I en kategori med precis
 5 varumärken fick en tvåa tidigare marknadsledarens exakta andel *och* den exakta
-kategoritotalen — vilket är ledarens omsättning på kronan, för den ena konkurrent en
+kategoritotalen - vilket är ledarens omsättning på kronan, för den ena konkurrent en
 branschkunnig oftast kan gissa namnet på. Ledarens andel returneras därför i femprocentsband
-(`40–45 %`): ett intervall, inte ett tal. Avvägningen är medveten — alternativet var att
+(`40–45 %`): ett intervall, inte ett tal. Avvägningen är medveten - alternativet var att
 stryka jämförelsen som är hela anledningen att fråga.
 
 ### 4. Rollups är en integritetsgräns, inte bara cache
 
 `mv_category_daily` och `mv_brand_monthly` är de enda objekt `query_market_share` får läsa.
-Konkurrentdata är därför inte "bortfiltrerad" av applikationslogik — den fanns aldrig i det
+Konkurrentdata är därför inte "bortfiltrerad" av applikationslogik - den fanns aldrig i det
 objekt verktyget når. En rollup som aggregerat bort identitet är en strukturellt starkare
 garanti än en `WHERE`-sats.
 
@@ -353,17 +353,17 @@ Tre publika datamängder utvärderades (Online Retail II, Olist, Superstore). In
 struktur marknadsandel kräver: flera konkurrerande varumärken per kategori, ägda av olika
 leverantörer, med överlappande sortiment. Och ingen ger ett **facit**.
 
-`scripts/generate_data.py --seed 42` är deterministisk — samma seed ger byte-identisk
-utdata — och skriver både CSV:erna och `ground_truth.json`. Att det stämmer är inget
+`scripts/generate_data.py --seed 42` är deterministisk - samma seed ger byte-identisk
+utdata - och skriver både CSV:erna och `ground_truth.json`. Att det stämmer är inget
 påstående: `eval/tests/test_determinism.py` genererar två gånger och jämför SHA-256 per
 fil, och kontrollerar dessutom att en *annan* seed ger andra siffror, så testet inte
-skulle kunna passera på en generator som ignorerar sin seed. Hela facit vilar på det —
+skulle kunna passera på en generator som ignorerar sin seed. Hela facit vilar på det -
 `ground_truth.json` beskriver bara datan om ingen oseedad slump når utdatan.
 Formen: 8 leverantörer, 14 varumärken, 6 kategorier / 22 underkategorier, 392 produkter,
 81 butiker över alla 21 län plus onlinekanal, 24 månader, ~811 000 orderrader, 848 MSEK.
 
 Ärligt motargument, som jag säger i videon istället för att gömma: syntetisk data kan vara
-för städad. Därför injicerar generatorn medvetet verklig smuts — ~1,5 % returer,
+för städad. Därför injicerar generatorn medvetet verklig smuts - ~1,5 % returer,
 ~0,8 % kontantköp utan kund, en utgången produkt med avbruten serie, en butik som öppnar
 mitt i perioden, prisdrift över tid, och den tunna kategorin ovan.
 
@@ -372,7 +372,7 @@ mitt i perioden, prisdrift över tid, och den tunna kategorin ovan.
 **DeepSeek `deepseek-v4-pro`, körd genom Anthropics SDK** mot
 `https://api.deepseek.com/anthropic`. DeepSeek exponerar ett Anthropic-kompatibelt endpoint
 med fullt `tools`-stöd, och MCP:s verktygsdeskriptor (`{name, description, inputSchema}`) är
-i praktiken identisk med Anthropics (`input_schema`) — så konverteringen är ett namnbyte, inte
+i praktiken identisk med Anthropics (`input_schema`) - så konverteringen är ett namnbyte, inte
 ett adapterlager. Att byta till riktig Claude är `base_url` plus modellnamn, inget annat.
 
 Vad det kostar, sagt rakt ut:
@@ -380,7 +380,7 @@ Vad det kostar, sagt rakt ut:
 - Endpointen **ignorerar `cache_control`**, så promptcachningen (~90 % besparing på det
   stabila prefixet) uteblir. Systemprompten är ändå strukturerad som ett stabilt block så
   att den vinsten finns kvar den dag vi byter.
-- `anthropic-beta`-headers stöds inte, så SDK:ns `tool_runner` går bort — verktygsloopen är
+- `anthropic-beta`-headers stöds inte, så SDK:ns `tool_runner` går bort - verktygsloopen är
   skriven explicit, med tak på antal verktygsanrop.
 - **Datan lämnar EU.** Grundningsarkitekturen håller, men modellen ser en kapad
   radförhandsvisning, så jag kan inte hävda dataresidens. För produktion i EU pekar man om
@@ -415,19 +415,19 @@ solvigo-insights/
 ## Demofrågor att prova
 
 Kontot i parentes är det frågan är skriven för. Sortimentet skiljer sig mellan leverantörerna,
-så en fråga ställd på fel konto får ett korrekt men helt annat svar — punkt 7 är hela poängen
+så en fråga ställd på fel konto får ett korrekt men helt annat svar - punkt 7 är hela poängen
 med det.
 
 1. (**anna**) "Vad var min försäljning senaste 12 månaderna, och hur står det sig mot året
    innan?"
-2. (**anna**) "Vilka produkter säljer bäst i Stockholm?" — och som följdfråga: "…mätt i antal
+2. (**anna**) "Vilka produkter säljer bäst i Stockholm?" - och som följdfråga: "…mätt i antal
    istället?" (svaret ändras: intäkter domineras av TV och datorer, volym av billiga varor)
 3. (**anna**) "Hur går det för vårt märke jämfört med kategorin i Hörlurar?"
 4. (**anna**) "Visa försäljningen per län som diagram."
-5. (**anna**) "Vad är vår marginal?" — **ska nekas**, med förslag på vad som *går* att svara på.
-6. (**anna**) "Visa Lumia Nordics siffror." — **ska nekas**; en annan leverantör är inte
+5. (**anna**) "Vad är vår marginal?" - **ska nekas**, med förslag på vad som *går* att svara på.
+6. (**anna**) "Visa Lumia Nordics siffror." - **ska nekas**; en annan leverantör är inte
    uttryckbar.
-7. (**erik**) Marknadsandel i "Vintersport" — **ska utelämnas** av k-anonymitetsskyddet.
+7. (**erik**) Marknadsandel i "Vintersport" - **ska utelämnas** av k-anonymitetsskyddet.
    Nordström säljer ingenting i den kategorin, så som **anna** blir svaret i stället det sanna
    men mycket tråkigare "ni har ingen försäljning där".
 
@@ -444,7 +444,7 @@ modellrouting (billig klassificerare först) · PDF-export · mobil.
 Promptcachning och kostnadsmätning finns numera: systemprompten skickas som ett
 `cache_control`-block när `LLM_BASE_URL` pekar på Anthropic, och `audit_turn` får riktiga
 `input_tokens`/`output_tokens` per tur plus cache-träffarna. Det var det som saknades för
-kostnadstaket per tenant — själva taket är kvar att bygga.
+kostnadstaket per tenant - själva taket är kvar att bygga.
 
 **Två saker skiljer den här compose-demon från något driftsatt, och de är de första jag
 hade byggt:**
@@ -453,7 +453,7 @@ hade byggt:**
   `/api/result/{query_id}` är där *varje diagram i produkten* hämtar sina siffror. Kör två
   uvicorn-arbetare eller två API-repliker och ungefär varannan hämtning blir 404. Detsamma
   gäller rate limits och inloggningsspärren, som försvagas linjärt med antalet repliker.
-  Antingen Redis, eller kör om den cachade verktygsspecen vid miss — `tool` och `tool_args`
+  Antingen Redis, eller kör om den cachade verktygsspecen vid miss - `tool` och `tool_args`
   sparas redan, så det andra alternativet är nästan gratis.
 - **Webbcontainern är inte driftsättbar.** `docker/Dockerfile.web` kör `npm run dev`, alltså
   Vite-devservern, som containerkommando. Det som behövs är ett flerstegsbygge → nginx, och
@@ -467,21 +467,21 @@ kan inte visa verklig smuts; ingen återkoppling från tummen upp/ner tillbaka i
 **Delningslänkar, och det som fortfarande fattas i dem.** `POST /api/share` mintar en
 signerad, tidsbegränsad token som bär *ursprungsleverantörens* omfång, och `GET
 /api/shared/{token}` löser in den: enda rutten i API:t utan session bakom sig. Allt den får
-läsa står i token — vilket kort, och vems behörighet frågan körs under — och båda är
+läsa står i token - vilket kort, och vems behörighet frågan körs under - och båda är
 signerade, så en läsare kan inte vidga något. Sidan (`#/delad/{token}`) är medvetet inte
 appen: ett kort, vem som delat det, när länken slutar gälla, och ingen navigation, ingen
 chatt, inget att spara. Varken `card_id` eller `query_id` följer med till läsaren, eftersom
 varje kontroll som hänger på dem är ett inloggat anrop den sidan inte kan göra.
 
 Det som fattas är **ögonblicksbilden**. Att frysa raderna som de såg ut betyder att lagra
-dem — en tabell och en gallringsregel, inte en flagga — så alla länkar körs om mot färsk
+dem - en tabell och en gallringsregel, inte en flagga - så alla länkar körs om mot färsk
 data vid varje öppning. Läget ligger kvar i token, så läsänden kan börja hedra det utan att
 någon länk behöver göras om.
 
 Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än städar undan:
 
 - **Modellen är inte Claude.** Allt är kört mot `deepseek-v4-pro` via Anthropic-SDK:t
-  (beslut D1 — byt `LLM_BASE_URL` och `LLM_MODEL`, inget annat ändras). Svarskvaliteten
+  (beslut D1 - byt `LLM_BASE_URL` och `LLM_MODEL`, inget annat ändras). Svarskvaliteten
   ovan är därför ett golv, inte ett tak: `deepseek-v4-flash` gav 62 % och pro 73 % på samma
   uppsättning. Grundgarantin är oberoende av modellvalet; svarskvaliteten är det inte.
 - **31 % av de gyllene fallen är icke-deterministiska** (16 av de 52 mätta växlar mellan två
@@ -496,7 +496,7 @@ Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än s
   verktygsanrop, inte per kort, är rätt form.
 - **Modellen svarar ibland på en angränsande fråga i stället för att avböja.** "Vilka kunder
   köpte mest?" kan besvaras med `customer_segment` i stället för ett nekande. Ingen kundrad
-  lämnar någonsin verktygslagret — kornighetsgolvet håller — men ett aggregat som *ser ut*
+  lämnar någonsin verktygslagret - kornighetsgolvet håller - men ett aggregat som *ser ut*
   som ett svar på fel fråga är sitt eget problem.
 
 

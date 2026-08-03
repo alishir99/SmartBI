@@ -62,7 +62,7 @@ class FakeMessages:
         self.calls += 1
         self.kwargs.append(kwargs)
         if self.calls > 200:
-            raise AssertionError("runaway loop — the iteration cap did not hold")
+            raise AssertionError("runaway loop - the iteration cap did not hold")
         if not self.script:
             raise AssertionError("the loop asked the model for more turns than were scripted")
         return self.script[0] if self.repeat_last and len(self.script) == 1 \
@@ -127,6 +127,30 @@ def query_turn() -> Response:
                                        "dimensions": ["month"]})])
 
 
+# --------------------------------------------------- explaining the card, without querying it
+
+@pytest.mark.asyncio
+async def test_a_question_about_the_chart_is_answered_without_a_query(monkeypatch):
+    """"Vad betyder den streckade linjen?" is about the card, not about the data."""
+    answer = ("Den grå serien är samma månader året innan.\n" + envelope("explain"))
+    card, client = await run(monkeypatch, [Response(answer)])
+
+    assert card.status == "explain"
+    assert card.narrative.startswith("Den grå serien")
+    assert client.messages.calls == 1, "no tool call is needed to describe the card"
+
+
+@pytest.mark.asyncio
+async def test_an_explanation_may_not_smuggle_in_a_figure(monkeypatch):
+    """Which is what keeps "explain" from being a way to answer a data question from memory:
+    with no result set behind it, any figure fails the numeric check."""
+    lie = ("Den grå serien låg på 6 400 000,00 kr.\n" + envelope("explain"))
+    card, _ = await run(monkeypatch, [Response(lie)], repeat_last=True)
+
+    assert card.status == "validation_failed"
+    assert card.narrative == ""
+
+
 # ------------------------------------------------------------- the gate is on data, not status
 
 @pytest.mark.parametrize("status", ["ok", "clarify", "cannot_answer", "partial"])
@@ -139,7 +163,7 @@ async def test_a_fabricated_figure_is_caught_under_every_status(monkeypatch, sta
     assert card.status == "validation_failed"
     assert card.narrative == ""
     assert client.messages.calls == 3, "the model should have been asked to try again"
-    # The chart survives — it is drawn from the cache and never passed through the model.
+    # The chart survives - it is drawn from the cache and never passed through the model.
     assert card.chart is not None
     # The status carries the explanation; the card renders it from there, once.
     assert not any("kunde inte verifieras" in c for c in card.caveats)
@@ -355,7 +379,7 @@ async def test_no_tool_data_means_nothing_to_validate_against(monkeypatch):
 
 @pytest.mark.parametrize("asked, labels, resembles", [
     # The refusal path. Retrieval fuses lexical and semantic search, so a competitor's name
-    # comes back with the nearest brand the supplier does own — a hit by count, a miss in fact.
+    # comes back with the nearest brand the supplier does own - a hit by count, a miss in fact.
     ("Lumia Nordic", ["Nordström", "Vidar"], False),
     ("Lumia Nordic", [], False),
     # A typo must still resolve, or the answer stops naming a brand the user owns.

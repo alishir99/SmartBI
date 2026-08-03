@@ -1,5 +1,5 @@
 # Build context is the repo root (not web/) so this Dockerfile does not have to live inside
-# the directory it builds — keeps both Dockerfiles together under docker/.
+# the directory it builds - keeps both Dockerfiles together under docker/.
 
 FROM node:24-slim AS build
 
@@ -18,7 +18,7 @@ RUN npm run build
 
 # The dev server used to be the container command, which meant the "deployable" image was a
 # watcher with source maps and no compression. This stage carries the built assets and nothing
-# else — no node, no node_modules, no source. Unprivileged nginx: runs as uid 101 and listens
+# else - no node, no node_modules, no source. Unprivileged nginx: runs as uid 101 and listens
 # on 8080, so nothing here needs root or a capability to bind a low port.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 

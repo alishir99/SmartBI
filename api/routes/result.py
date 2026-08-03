@@ -1,4 +1,4 @@
-"""GET /api/result/{query_id} — where charts actually get their numbers."""
+"""GET /api/result/{query_id} - where charts actually get their numbers."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Where tenant scope comes from — and, more importantly, where it does not."""
+"""Where tenant scope comes from - and, more importantly, where it does not."""
 
 from __future__ import annotations
 

@@ -15,7 +15,7 @@ type Props = {
   card: Card
   /**
    * Puts a new question into the chat. Used by the suggestion and candidate chips, and by the
-   * chart marks and table rows — every number on the card is the start of a question.
+   * chart marks and table rows - every number on the card is the start of a question.
    */
   onAsk?: (question: string) => void
   onDelete?: (cardId: string) => void
@@ -23,7 +23,7 @@ type Props = {
   height?: number
   /**
    * The chart-first card shown while the prose is still being written. It is one tool result,
-   * and a turn that calls a second one replaces it — so it says so. A card that looks final
+   * and a turn that calls a second one replaces it - so it says so. A card that looks final
    * and then rewrites its own numbers is worse than a card that waited.
    */
   preview?: boolean
@@ -32,12 +32,19 @@ type Props = {
    * /api/result would 404 for them and the rows travel with the card instead.
    */
   rows?: ResultResponse | null
+  /**
+   * The source chip, which only the chat shows. A dashboard card is already framed by the
+   * page: one period, one supplier, stated once in the page header. Repeating a source line
+   * under every tile is noise there, while in the chat it is the answer to "where did this
+   * number come from" for a card the user just conjured.
+   */
+  showSource?: boolean
 }
 
 export function AnswerCardView({ card, onAsk, onDelete, savable = true, height = 280,
-                                preview = false, rows = null }: Props) {
+                                preview = false, rows = null, showSource = false }: Props) {
   const [view, setView] = useState<'chart' | 'table'>('chart')
-  // Disabled when the rows are already here — the hook has to be called either way.
+  // Disabled when the rows are already here - the hook has to be called either way.
   const fetched = useResult(rows ? null : card.query_id)
   const result = rows
     ? { data: rows, isPending: false, isError: false, error: null }
@@ -56,7 +63,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           {preview && (
             <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-2xs text-ink-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-              Preliminärt — första resultatet i turen, svaret kan hämta fler
+              Preliminärt - första resultatet i turen, svaret kan hämta fler
             </p>
           )}
         </div>
@@ -66,7 +73,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           onToggleView={setView}
           onDelete={onDelete}
           // A preview is one tool result that a later one may replace, so it is never
-          // savable — here rather than in the caller, so no caller can get it wrong.
+          // savable - here rather than in the caller, so no caller can get it wrong.
           savable={savable && !preview}
           hasRows={(result.data?.rows.length ?? 0) > 0}
         />
@@ -80,7 +87,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
       )}
 
       {/* `pre-line` so the model's own paragraph breaks survive; the narrative is plain text,
-          never markdown — the server strips emphasis markers before it gets here. */}
+          never markdown - the server strips emphasis markers before it gets here. */}
       {prose && (
         <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-ink">{prose}</p>
       )}
@@ -134,7 +141,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </div>
       )}
 
-      {/* A chart without a query_id and without rows has nothing to draw from — the result
+      {/* A chart without a query_id and without rows has nothing to draw from - the result
           query is disabled in that case, so guard here rather than leaving a skeleton
           forever. */}
       {(!card.chart || !(card.query_id || rows)) && card.status === 'ok' && <EmptyState />}
@@ -167,7 +174,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         </ul>
       )}
 
-      {card.provenance && (
+      {showSource && card.provenance && (
         <SourceChip
           provenance={card.provenance}
           sources={card.sources}
@@ -182,13 +189,17 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 function headingFor(card: Card): string {
   if (card.status === 'clarify') return 'Behöver en precisering'
   if (card.status === 'cannot_answer') return 'Det här har jag inte underlag för'
+  // A question about the card, answered from what the card shows. It is not a data answer and
+  // it is not a refusal, and labelling it as either was how "vad betyder den streckade linjen?"
+  // got a correct explanation under the heading "Det här har jag inte underlag för".
+  if (card.status === 'explain') return 'Om diagrammet'
   return 'Svar'
 }
 
 /**
  * The window that actually ran is never dropped, even when the model wrote its own subtitle.
- * The same question resolves to different periods on different runs — the compiler defaults to
- * the last 12 months, the model sometimes passes `all_time` — and a card whose only statement of
+ * The same question resolves to different periods on different runs - the compiler defaults to
+ * the last 12 months, the model sometimes passes `all_time` - and a card whose only statement of
  * its period is the model's prose is a card whose totals can double with nothing explaining why.
  */
 function subtitleFor(card: Card, modelSubtitle: string | null): string | null {

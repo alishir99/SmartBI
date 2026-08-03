@@ -12,7 +12,7 @@ export function DataTable({
   columns: Column[]
   rows: ResultRow[]
   caption?: string
-  /** Makes the first column ask about its row — the keyboard path to the chart's click. */
+  /** Makes the first column ask about its row - the keyboard path to the chart's click. */
   onAsk?: (question: string) => void
 }) {
   return (

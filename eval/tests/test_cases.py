@@ -48,7 +48,7 @@ def adversarial(**overrides) -> dict:
 
 
 def problems(case: dict, suite: str = "golden") -> str:
-    """All problems for a single case, joined — asserting on substrings keeps these tests about the
+    """All problems for a single case, joined - asserting on substrings keeps these tests about the
     rule being enforced rather than about the exact wording of the message."""
     return " | ".join(cases.validate([case], suite))
 
@@ -115,7 +115,7 @@ def test_missing_status_is_required():
 
 
 def test_unknown_status():
-    # `validation_failed` is a real AnswerCard status and still not a legal expectation — the
+    # `validation_failed` is a real AnswerCard status and still not a legal expectation - the
     # system failing its own output check is never the answer we wanted.
     assert "unknown status 'validation_failed'" in problems(
         golden(expects={"status": "validation_failed"}))
@@ -212,7 +212,7 @@ def test_history_of_earlier_questions_is_accepted():
 
 
 def test_empty_history_is_refused():
-    # `history: []` parses, loads and runs — as an ordinary single-turn case.
+    # `history: []` parses, loads and runs - as an ordinary single-turn case.
     assert "single-turn case wearing a multi-turn label" in problems(golden(history=[]))
 
 
@@ -304,7 +304,7 @@ def test_real_suite_loads_and_validates(suite):
 
 
 def test_suites_are_roughly_the_advertised_size():
-    # A floor, not an exact count — the suites are meant to grow.
+    # A floor, not an exact count - the suites are meant to grow.
     golden_suite = cases.load("golden")
     adversarial_suite = cases.load("adversarial")
     assert len(golden_suite) >= 30, f"golden suite shrank to {len(golden_suite)} cases"

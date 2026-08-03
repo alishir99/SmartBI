@@ -84,7 +84,18 @@ async def request_context(request: Request, call_next):
 # `localStorage` (SSE over fetch needs an Authorization header, which an httpOnly cookie cannot
 # carry), and that trade means any injected script is a session takeover: narrowing the script
 # surface to nothing is the other half of the answer.
-_CSP = ("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+
+# Except Swagger UI — the only HTML this API serves, and it loads its bundle from jsdelivr and
+# runs an inline initialiser. Naming that one host on those three paths is what lets the policy
+# above stay absolute everywhere else; the alternative was one policy loose enough for the docs
+# page, applied to every route that carries data.
+_DOCS_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc"}
+_DOCS_CSP = ("default-src 'none'; "
+             "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+             "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+             "img-src 'self' data: https://fastapi.tiangolo.com; "
+             "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
 
 
 @app.middleware("http")
@@ -94,7 +105,9 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
-    response.headers.setdefault("Content-Security-Policy", _CSP)
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        _DOCS_CSP if request.url.path in _DOCS_PATHS else _CSP)
     return response
 
 

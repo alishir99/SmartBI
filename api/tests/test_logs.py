@@ -156,6 +156,19 @@ def test_the_file_rotates_daily_not_by_size(tmp_path, monkeypatch):
     assert handler.backupCount == 3
 
 
+def test_an_unwritable_log_file_does_not_stop_the_api(tmp_path, monkeypatch):
+    """The container runs unprivileged and `logs/` is a bind mount, so this happens for
+    reasons that say nothing about the API's health. stdout carries the same JSON."""
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("")
+    monkeypatch.setattr(logs.settings, "log_file", str(blocker / "api.jsonl"))
+
+    logs.configure()      # must not raise
+
+    assert not any(hasattr(h, "doRollover") for h in logging.getLogger().handlers)
+    assert logging.getLogger().handlers, "stdout logging must survive"
+
+
 def test_a_rotated_file_keeps_its_extension(tmp_path, monkeypatch):
     """The stdlib default is `api.jsonl.2026-07-31`, which no tool recognises as JSON."""
     handler = configured(tmp_path, monkeypatch)

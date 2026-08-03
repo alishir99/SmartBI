@@ -188,7 +188,10 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
         <p className="text-sm leading-relaxed text-ink">{turn.streamedText}</p>
       )}
 
-      {turn.card && <AnswerCardView card={turn.card} onAsk={onAsk} height={220} />}
+      {turn.card && (
+        <AnswerCardView card={turn.card} onAsk={onAsk} height={220}
+                        preview={turn.cardIsPreview} savable={!turn.cardIsPreview} />
+      )}
 
       {turn.error && (
         <p className="rounded-tile bg-notice-bg p-3.5 text-sm text-notice-ink ring-1 ring-inset ring-notice-border">

@@ -108,16 +108,26 @@ def configure() -> None:
         # Midnight UTC, not local: a container's timezone is not a fact anyone should have to
         # know to read a filename, and a DST shift would otherwise produce a 23-hour file.
         path = Path(settings.log_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        rotating = TimedRotatingFileHandler(
-            path, when="midnight", utc=True,
-            backupCount=settings.log_retention_days, encoding="utf-8")
-        # Default naming gives `api.jsonl.2026-07-31`, which no tool recognises as JSON and
-        # which sorts oddly. `api-2026-07-31.jsonl` keeps the suffix where it belongs.
-        rotating.namer = lambda name: str(
-            path.with_name(f"{path.stem}-{name.rsplit('.', 1)[-1]}{path.suffix}"))
-        rotating.setFormatter(JsonFormatter())      # the file is always machine-readable
-        root.addHandler(rotating)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            rotating = TimedRotatingFileHandler(
+                path, when="midnight", utc=True,
+                backupCount=settings.log_retention_days, encoding="utf-8")
+        except OSError as exc:
+            # A second copy of what stdout already carries is not worth the process. The
+            # container runs unprivileged and `logs/` is a bind mount, so the file can be
+            # unwritable for reasons that have nothing to do with the API being healthy —
+            # and an API that refuses to start because it cannot write a duplicate log is
+            # an outage caused by its own bookkeeping.
+            root.warning("file logging disabled: %s", exc, extra={
+                "event": "log.file_unavailable", "path": str(path)})
+        else:
+            # Default naming gives `api.jsonl.2026-07-31`, which no tool recognises as JSON
+            # and which sorts oddly. `api-2026-07-31.jsonl` keeps the suffix where it belongs.
+            rotating.namer = lambda name: str(
+                path.with_name(f"{path.stem}-{name.rsplit('.', 1)[-1]}{path.suffix}"))
+            rotating.setFormatter(JsonFormatter())  # the file is always machine-readable
+            root.addHandler(rotating)
 
     root.setLevel(settings.log_level.upper())
     # These two narrate every request and every connection at INFO and drown the events

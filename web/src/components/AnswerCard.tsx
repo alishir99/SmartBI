@@ -21,9 +21,16 @@ type Props = {
   onDelete?: (cardId: string) => void
   savable?: boolean
   height?: number
+  /**
+   * The chart-first card shown while the prose is still being written. It is one tool result,
+   * and a turn that calls a second one replaces it — so it says so. A card that looks final
+   * and then rewrites its own numbers is worse than a card that waited.
+   */
+  preview?: boolean
 }
 
-export function AnswerCardView({ card, onAsk, onDelete, savable = true, height = 280 }: Props) {
+export function AnswerCardView({ card, onAsk, onDelete, savable = true, height = 280,
+                                preview = false }: Props) {
   const [view, setView] = useState<'chart' | 'table'>('chart')
   const result = useResult(card.query_id)
 
@@ -37,6 +44,12 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
         <div className="min-w-0">
           <h3 className="text-lg font-semibold tracking-tight text-ink">{title}</h3>
           {subtitle && <p className="mt-1 text-xs text-ink-secondary">{subtitle}</p>}
+          {preview && (
+            <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-2xs text-ink-muted">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+              Preliminärt — första resultatet i turen, svaret kan hämta fler
+            </p>
+          )}
         </div>
         <CardActions
           card={card}

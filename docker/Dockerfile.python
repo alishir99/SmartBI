@@ -6,5 +6,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Dependencies before source. `COPY . .` first meant every edit to a route invalidated the pip
+# layer and rebuilt pandas and numpy from the network. The list is read straight out of
+# pyproject.toml rather than duplicated into a requirements.txt, so there is still exactly one
+# place that declares what this image needs.
+COPY pyproject.toml ./
+RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/requirements.txt \
+    && pip install --upgrade pip \
+    && pip install -r /tmp/requirements.txt
+
 COPY . .
-RUN pip install --upgrade pip && pip install .
+RUN pip install --no-deps .
+
+# Not root. uid 1000 because `./logs` and `./data` are bind-mounted from the host in compose
+# and a bind mount keeps the host's ownership — 1000 is the first user on a Linux desktop, and
+# Docker Desktop on macOS and Windows makes the point moot. If your uid differs and the seed
+# step cannot write, either chown those two directories or add `user: root` to the service.
+RUN useradd --uid 1000 --create-home app && chown -R app:app /app
+USER app

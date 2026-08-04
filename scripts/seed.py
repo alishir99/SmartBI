@@ -33,7 +33,7 @@ DEMO_PASSWORD = "demo1234"
 # be *shown* live rather than asserted - log in as Erik and the same question returns a
 # different company's numbers.
 DEMO_USERS = [
-    ("anna@nordstromaudio.se", "Anna Lindqvist", "Nordström Audio AB", "supplier_admin"),
+    ("ali@solvigo.se", "Ali Shirzad", "Solvigo AB", "supplier_admin"),
     ("erik@lagerkvisthem.se", "Erik Sandberg", "Lagerkvist Hem AB", "supplier_viewer"),
 ]
 
@@ -195,9 +195,15 @@ async def build_entity_search(connection: asyncpg.Connection) -> None:
 
 
 async def create_users(connection: asyncpg.Connection) -> None:
-    from argon2 import PasswordHasher
+    # The API's own hasher, not a bare `PasswordHasher()`. The defaults are m=64 MiB, t=3, p=4;
+    # `api.auth` is tuned to OWASP's second Argon2id profile (19 MiB, t=2, p=1). Both verify -
+    # the parameters travel inside the hash string - but two answers to "how expensive is a
+    # login here" is one too many, and the seed was quietly using the wrong one.
+    from api.auth import hash_password
 
-    hasher = PasswordHasher()
+    # Safe here and nowhere else: this function only runs from the seeder, which is building a
+    # demo database from nothing. The cascade takes saved_card and audit_turn with it, so
+    # onboarding a real customer uses scripts/add_user.py instead.
     await connection.execute("TRUNCATE app_user CASCADE")
     for email, display_name, supplier_name, role in DEMO_USERS:
         supplier_id = await connection.fetchval(
@@ -207,7 +213,7 @@ async def create_users(connection: asyncpg.Connection) -> None:
         await connection.execute(
             "INSERT INTO app_user (email, password_hash, supplier_id, role, display_name) "
             "VALUES ($1, $2, $3, $4, $5)",
-            email, hasher.hash(DEMO_PASSWORD), supplier_id, role, display_name)
+            email, hash_password(DEMO_PASSWORD), supplier_id, role, display_name)
         print(f"  user {email} → {supplier_name} ({role})")
 
 

@@ -95,6 +95,26 @@ def clear_login(*, identifier: str, client_ip: str) -> None:
     login_by_ip.reset(client_ip)
 
 
+# ------------------------------------------------------------------------ password reset
+# Tighter than login, because the cost of an unthrottled reset endpoint is not a compromised
+# account but a mailbox: someone can point it at a real address and send that person a hundred
+# mails. Keyed on the address asked about and on the caller, so neither a single victim nor a
+# single script gets far.
+reset_by_identifier = SlidingWindow(3, settings.login_window_seconds)
+reset_by_ip = SlidingWindow(10, settings.login_window_seconds)
+
+RESET_THROTTLED = ("För många återställningsförsök. Vänta en stund och försök igen.")
+
+
+def enforce_password_reset(*, identifier: str, client_ip: str) -> None:
+    """Raise 429 if this address or this caller has asked too often."""
+    waits = [wait for wait in (reset_by_identifier.hit(identifier.strip().lower()),
+                               reset_by_ip.hit(client_ip))
+             if wait is not None]
+    if waits:
+        raise _too_many(max(waits), RESET_THROTTLED)
+
+
 def client_ip(request: Request) -> str:
     """The address to key the IP throttle on."""
     return request.client.host if request.client else "unknown"

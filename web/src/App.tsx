@@ -3,10 +3,11 @@
 import { useEffect } from 'react'
 import { useAuthStore } from './lib/auth'
 import { useChatStore } from './lib/chat'
-import { useRoute, useSharedToken } from './lib/router'
+import { useResetToken, useRoute, useSharedToken } from './lib/router'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/Login'
 import { SharedPage } from './pages/Shared'
+import { ResetPasswordPage } from './pages/ResetPassword'
 import { OverviewPage } from './pages/Overview'
 import { ProductsPage } from './pages/Products'
 import { GeographyPage } from './pages/Geography'
@@ -24,6 +25,12 @@ export function App() {
 
   const [route] = useRoute()
   const shared = useSharedToken()
+  const reset = useResetToken()
+
+  // Before the auth gate, and before the share check: whoever follows a reset link is by
+  // definition someone who cannot sign in, and a stale session must not hide the form from
+  // them either.
+  if (reset) return <ResetPasswordPage token={reset} />
 
   // Before the auth gate: a share link is for someone who has no account here, and the token
   // is what authorises it. A session, if the reader happens to have one, changes nothing -

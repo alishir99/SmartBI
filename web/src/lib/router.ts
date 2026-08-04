@@ -23,23 +23,37 @@ export function useRoute(): [Route, (next: Route) => void] {
   return [route, navigate]
 }
 
-/** The token in `#/delad/<token>`, or null. Not a `Route`: it sits outside the auth gate. */
-export function sharedToken(): string | null {
+/** The token in `#/<prefix>/<token>`, or null. Not `Route`s: both sit outside the auth gate. */
+function tokenAfter(prefix: string): string | null {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
-  const token = raw.startsWith('delad/') ? raw.slice('delad/'.length) : ''
+  const token = raw.startsWith(`${prefix}/`) ? raw.slice(prefix.length + 1) : ''
   return token ? decodeURIComponent(token) : null
 }
 
-export function useSharedToken(): string | null {
-  const [token, setToken] = useState<string | null>(sharedToken)
+export const sharedToken = () => tokenAfter('delad')
+
+/** `#/aterstall/<token>` - a password reset link, opened by someone who cannot log in. */
+export const resetToken = () => tokenAfter('aterstall')
+
+function useHashValue<T>(read: () => T): T {
+  const [value, setValue] = useState<T>(read)
 
   useEffect(() => {
-    const onChange = () => setToken(sharedToken())
+    const onChange = () => setValue(read())
     window.addEventListener('hashchange', onChange)
     return () => window.removeEventListener('hashchange', onChange)
-  }, [])
+    // `read` is a module-level function, stable across renders.
+  }, [read])
 
-  return token
+  return value
+}
+
+export function useSharedToken(): string | null {
+  return useHashValue(sharedToken)
+}
+
+export function useResetToken(): string | null {
+  return useHashValue(resetToken)
 }
 
 export function navigate(next: Route): void {

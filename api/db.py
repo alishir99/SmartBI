@@ -54,6 +54,13 @@ async def user_by_id(user_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+async def set_password_hash(user_id: int, password_hash: str) -> bool:
+    """Store a new hash. False when the user vanished between the check and the write."""
+    result = await pool().execute(
+        "UPDATE app_user SET password_hash = $2 WHERE user_id = $1", user_id, password_hash)
+    return result.endswith(" 1")
+
+
 # ------------------------------------------------------------------------------ audit
 
 async def record_turn(

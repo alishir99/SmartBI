@@ -85,8 +85,8 @@ async def resolve_entities(ctx: Context, text: str,
 @mcp.tool(
     description="Hämta försäljningssiffror: välj mått, gruppera på dimensioner, filtrera, "
                 "och jämför mot föregående period eller samma period förra året. Alla belopp "
-                "i SEK exkl. moms. Använd compare_to hellre än två separata anrop - låt "
-                "databasen räkna, räkna aldrig själv.")
+                f"i {settings.app_currency}, se meta.vat. Använd compare_to hellre än två "
+                "separata anrop - låt databasen räkna, räkna aldrig själv.")
 async def query_sales(ctx: Context,
                       measures: list[MeasureKey],
                       dimensions: list[DimensionKey] | None = None,

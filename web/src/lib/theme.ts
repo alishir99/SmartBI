@@ -2,6 +2,8 @@
 
 import { create } from 'zustand'
 
+import { t } from './i18n'
+
 export type Theme = 'light' | 'dark' | 'system'
 
 const THEME_KEY = 'solvigo.theme'
@@ -49,8 +51,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   },
 }))
 
-export const THEME_LABELS: Record<Theme, string> = {
-  light: 'Ljust läge',
-  dark: 'Mörkt läge',
-  system: 'Följer systemet',
+/** Translated on read, so a language switch relabels the toggle without a store update. */
+export function themeLabel(theme: Theme): string {
+  return t(`theme.${theme}`)
 }

@@ -10,7 +10,9 @@ from typing import Literal, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..agent import render
+from ..config import settings
 from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
+from ..i18n import tr
 from ..mcp_client import McpClient
 from ..models import AnswerCard, ChartSpec, DashboardResponse, Kpi, MoversResponse
 from ..result_cache import ResultCache, from_tool_result
@@ -21,14 +23,17 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 # The dashboard opens on the last 12 months against the same period a year earlier.
 DEFAULT_PERIOD = "last_12_months"
 
+# The trend card is titled with the noun its buckets are, so the grain is the only thing
+# stored: the label and the noun are both `grain.<key>` in api/i18n.py. The client owns the
+# filter chips and never read the label from here.
 PERIODS: dict[str, dict] = {
-    "last_7_days":     {"label": "Senaste veckan",     "grain": "day",     "noun": "dag"},
-    "last_30_days":    {"label": "Senaste 30 dagarna", "grain": "day",     "noun": "dag"},
-    "last_90_days":    {"label": "Senaste kvartalet",  "grain": "week",    "noun": "vecka"},
-    "last_month":      {"label": "Förra månaden",      "grain": "day",     "noun": "dag"},
-    "ytd":             {"label": "Hittills i år",      "grain": "month",   "noun": "månad"},
-    "last_12_months":  {"label": "Senaste 12 mån",     "grain": "month",   "noun": "månad"},
-    "all_time":        {"label": "Hela perioden",      "grain": "quarter", "noun": "kvartal"},
+    "last_7_days":     {"grain": "day"},
+    "last_30_days":    {"grain": "day"},
+    "last_90_days":    {"grain": "week"},
+    "last_month":      {"grain": "day"},
+    "ytd":             {"grain": "month"},
+    "last_12_months":  {"grain": "month"},
+    "all_time":        {"grain": "quarter"},
 }
 
 # The comparison follows the filter: whatever window is selected, the deltas and the overlay are
@@ -36,7 +41,6 @@ PERIODS: dict[str, dict] = {
 # a comparison basis that can disagree with the period filter is a second thing to keep in your
 # head for no gain - every delta on screen is now "vs the period before this one", always.
 COMPARE_TO = "previous_period"
-DELTA_LABEL = "vs föregående period"
 
 
 def _period_spec(period: str) -> tuple[dict, dict]:
@@ -49,13 +53,14 @@ def _period_spec(period: str) -> tuple[dict, dict]:
 async def dashboard(period: str = Query(DEFAULT_PERIOD,
                                         description="Nyckel ur PERIODS; okänt värde faller "
                                                     "tillbaka på standardfönstret."),
+                    lang: str | None = Query(None, description="Svarsspråk; se /api/config."),
                     tenant: ScopedTenant = Depends(get_supplier_scope),
                     mcp: McpClient = Depends(get_mcp),
                     cache: ResultCache = Depends(get_cache)) -> DashboardResponse:
     supplier_id = tenant.supplier_id
     assert supplier_id is not None  # get_supplier_scope guarantees this
 
-    window, settings = _period_spec(period)
+    window, period_settings = _period_spec(period)
     # One window, one comparison: the same `compare_to` reaches the KPI deltas, the trend
     # overlay and the share tile, so no two numbers on screen are measured against different
     # periods.
@@ -71,7 +76,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
         # All three headline measures, so the KPI sparklines cost no extra query. The trend
         # card charts the first of them; `propose_chart` picks measures[0].
         "measures": ["net_sales_sek", "units", "avg_price_sek"],
-        "dimensions": [settings["grain"]],
+        "dimensions": [period_settings["grain"]],
         "time_range": window,
         # `propose_chart` overlays this on the trend line.
         **compare,
@@ -105,7 +110,7 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     except Exception as exc:  # noqa: BLE001
         logger.exception("dashboard failed")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
-                            f"Kunde inte hämta dashboarddata: {exc}") from exc
+                            tr("dash.error", error=exc)) from exc
 
     # Before caching, so the average is part of the frozen result the chart, the table view and
     # the CSV export all read.
@@ -125,16 +130,39 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     return DashboardResponse(
         kpis=_kpis(totals, share, trend),
         cards=[
-            _trend_card(cached["trend"], f"Försäljning per {settings['noun']}",
+            _trend_card(cached["trend"],
+                        tr("dash.trend", noun=tr(f"grain.{period_settings['grain']}")),
                         average=average,
                         markers=campaign_markers(cached["trend"], capabilities),
                         # One window, one comparison: if the tiles cannot honestly show it, the
                         # chart must not draw it either.
                         overlay=comparison_is_covered(totals)),
-            _card(cached["top_products"], "Topp 10 produkter"),
-            _card(cached["by_region"], "Försäljning per län"),
+            _card(cached["top_products"], tr("dash.top_products")),
+            _card(cached["by_region"], tr("dash.by_region")),
         ],
     )
+
+
+@router.get("/regions")
+async def regions(tenant: ScopedTenant = Depends(get_supplier_scope),
+                  mcp: McpClient = Depends(get_mcp)) -> list[dict]:
+    """Every region in the warehouse with its centroid, so the map can be drawn for any market.
+
+    The client used to carry a table of Sweden's 21 counties and their coordinates, which was
+    wrong for every other country and unfixable without redrawing one. These come off
+    `dim_store`, which means a warehouse with no geocoded stores honestly returns nothing and
+    the client hides its map tab rather than inventing positions.
+    """
+    supplier_id = tenant.supplier_id
+    assert supplier_id is not None
+    try:
+        capabilities = await _call(mcp, supplier_id, "get_capabilities", {})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("regions failed")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            tr("dash.error", error=exc)) from exc
+    return [region for region in (capabilities.get("regions") or [])
+            if region.get("lat") is not None and region.get("lon") is not None]
 
 
 MOVERS_LIMIT = 10
@@ -143,12 +171,13 @@ MOVERS_LIMIT = 10
 # to 6 000 kr at +1 400 % on the axis and left the other nine bars invisible beside it - a chart
 # whose caveat explained why it could not be read. The percentage is still on the card, in the
 # table view, where it says something about the product rather than about the axis.
-_MOVERS_CAVEAT = ("Rangordnat efter förändring i kronor. Välj Tabell för den procentuella "
-                  "förändringen - en stor procentrörelse kan komma från en liten utgångsnivå.")
+def _movers_caveat() -> str:
+    return tr("dash.movers_caveat", currency=settings.app_currency)
 
 
 @router.get("/movers", response_model=MoversResponse)
 async def movers(period: str = Query(DEFAULT_PERIOD),
+                 lang: str | None = Query(None),
                  tenant: ScopedTenant = Depends(get_supplier_scope),
                  mcp: McpClient = Depends(get_mcp),
                  cache: ResultCache = Depends(get_cache)) -> MoversResponse:
@@ -160,7 +189,7 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
     supplier_id = tenant.supplier_id
     assert supplier_id is not None
 
-    window, _ = _period_spec(period)
+    window, _period = _period_spec(period)
 
     def args(direction: str) -> dict:
         return {
@@ -180,11 +209,11 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
     except Exception as exc:  # noqa: BLE001
         logger.exception("movers failed")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
-                            f"Kunde inte hämta produktrörelser: {exc}") from exc
+                            tr("dash.movers_error", error=exc)) from exc
 
     return MoversResponse(cards=[
-        _movers_card(cache, supplier_id, risers, "Största uppgångar", "desc", args("desc")),
-        _movers_card(cache, supplier_id, fallers, "Största tapp", "asc", args("asc")),
+        _movers_card(cache, supplier_id, risers, tr("dash.movers_up"), "desc", args("desc")),
+        _movers_card(cache, supplier_id, fallers, tr("dash.movers_down"), "asc", args("asc")),
     ])
 
 
@@ -203,7 +232,7 @@ def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str
         chart=ChartSpec(type="bar", x="product", y=["net_sales_sek_delta"],
                         sort=cast(Literal["asc", "desc"], direction),
                         limit=MOVERS_LIMIT, title=title),
-        caveats=[_MOVERS_CAVEAT],
+        caveats=[_movers_caveat()],
         query_id=result.query_id,
         columns=render.to_columns(result),
         provenance=render.build_provenance(result),
@@ -213,9 +242,6 @@ def _movers_card(cache: ResultCache, supplier_id: int, payload: dict, title: str
 async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict:
     return await mcp.call(supplier_id, tool, args)
 
-
-CAMPAIGN_MARKER_LABEL = ("Streckade linjer markerar perioder med kampanj - handlaren "
-                         "rabatterar tungt då.")
 
 # Three buckets: long enough to take the spike out of a single month, short enough that a real
 # turn still shows up inside a twelve-point window.
@@ -254,7 +280,7 @@ def add_moving_average(payload: dict, measure: str) -> str | None:
 
     unit = next((c.get("unit") for c in columns if c.get("key") == measure), None)
     columns.append({"key": key, "type": "number",
-                    "label": f"Glidande medel ({MA_WINDOW} perioder)", "unit": unit})
+                    "label": tr("dash.moving_average", window=MA_WINDOW), "unit": unit})
     payload["columns"] = columns
     return key
 
@@ -277,7 +303,7 @@ def _trend_card(result, title: str, average: str | None, markers: list[str],
         status="ok",
         chart=ChartSpec(type="bar", x=_date_axis(result.columns), y=y, title=title,
                         markers=markers,
-                        marker_label=CAMPAIGN_MARKER_LABEL if markers else None),
+                        marker_label=tr("dash.campaign_markers") if markers else None),
         query_id=result.query_id,
         columns=render.to_columns(result),
         provenance=render.build_provenance(result),
@@ -395,9 +421,10 @@ def comparison_is_covered(totals: dict) -> bool:
 
 
 def _kpis(totals: dict, share: dict, trend: dict | None = None,
-          delta_label: str | None = DELTA_LABEL) -> list[Kpi]:
+          delta_label: str | None = None) -> list[Kpi]:
     """The four headline numbers. `delta_label` names the window every delta is measured on."""
     trend = trend or {}
+    delta_label = tr("dash.delta_label") if delta_label is None else delta_label
     kpis: list[Kpi] = []
 
     # A delta measured against a window the data does not cover is worse than no delta: it is
@@ -410,7 +437,8 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
 
     net = _first_number(totals, "net_sales_sek")
     if net is not None:
-        kpis.append(Kpi(key="net_sales_sek", label="Försäljning", value=net, unit="SEK",
+        kpis.append(Kpi(key="net_sales_sek", label=tr("kpi.net_sales"), value=net,
+                        unit=settings.app_currency,
                         delta_pct=delta("net_sales_sek_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "net_sales_sek")))
@@ -423,26 +451,27 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
             previous = _weighted_share(rows, "own_net_sek_compare",
                                        "category_net_sek_compare") if covered else None
             kpis.append(Kpi(
-                key="category_share_pct", label="Andel av kategori",
+                key="category_share_pct", label=tr("kpi.category_share"),
                 value=current, unit="%",
                 # Percentage points: the frontend renders a '%' KPI's delta as p.e.
                 delta_pct=None if previous is None else round(current - previous, 1),
                 delta_label=delta_label,
                 # No sparkline: query_market_share aggregates over the whole window and has no
                 # month dimension, so there is no series to draw without a new tool shape.
-                rank_label=(f"#{best['rank']} av {best['n_brands']} varumärken "
-                            f"i {best['subcategory']}")))
+                rank_label=tr("kpi.rank", rank=best["rank"], total=best["n_brands"],
+                             subcategory=best["subcategory"])))
 
     units = _first_number(totals, "units")
     if units is not None:
-        kpis.append(Kpi(key="units", label="Sålda enheter", value=units, unit="st",
+        kpis.append(Kpi(key="units", label=tr("kpi.units"), value=units, unit="st",
                         delta_pct=delta("units_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "units")))
 
     avg_price = _first_number(totals, "avg_price_sek")
     if avg_price is not None:
-        kpis.append(Kpi(key="avg_price_sek", label="Snittpris", value=avg_price, unit="SEK",
+        kpis.append(Kpi(key="avg_price_sek", label=tr("kpi.avg_price"), value=avg_price,
+                        unit=settings.app_currency,
                         delta_pct=delta("avg_price_sek_delta_pct"),
                         delta_label=delta_label,
                         spark=_spark(trend, "avg_price_sek")))

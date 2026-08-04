@@ -12,6 +12,7 @@ from typing import Any
 from anthropic import AsyncAnthropic
 
 from ..config import settings
+from ..i18n import current as current_language
 from ..mcp_client import McpClient, McpToolError
 from ..models import (
     CardEvent,
@@ -25,7 +26,7 @@ from ..models import (
 )
 from ..result_cache import CachedResult, ResultCache, from_tool_result
 from . import render
-from .prompts import SYSTEM, regeneration_prompt
+from .prompts import regeneration_prompt, system_prompt
 from .validate import validate_narrative
 
 logger = logging.getLogger(__name__)
@@ -72,10 +73,11 @@ def resembles_any(asked: str, labels: Sequence[str]) -> bool:
 
 
 def _system() -> list[dict[str, Any]] | str:
-    """The system prompt as a cacheable content block."""
+    """The system prompt as a cacheable content block, in this turn's language."""
+    prompt = system_prompt(current_language())
     if "api.anthropic.com" not in settings.llm_base_url:
-        return SYSTEM
-    return [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}]
+        return prompt
+    return [{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}]
 
 
 def _add_usage(total: dict[str, int], response: Any) -> None:

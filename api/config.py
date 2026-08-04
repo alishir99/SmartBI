@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 30
+    # NIST SP 800-63B: length is the control that matters, and composition rules ("one digit,
+    # one symbol") measurably push people towards weaker, more predictable passwords. So this
+    # is the only rule, and it is checked at every place a password is set.
+    password_min_length: int = 8
+    # Short by design. A reset link sits in an inbox, which is a place a link outlives its
+    # usefulness; an hour is long enough to read mail and short enough to matter if the inbox
+    # is later compromised. Single use is enforced separately - see `password_reset_key`.
+    password_reset_ttl_minutes: int = 60
     # Share links are their own short-lived signed token, deliberately separate from the access
     # token so a leaked share URL cannot be replayed as a login (§10).
     share_link_ttl_hours: int = 72
@@ -98,6 +106,29 @@ class Settings(BaseSettings):
     # files with a retention in days give a window you can actually state, and a filename you
     # can reason about.
     log_retention_days: int = 14
+
+    # --- Mail (api/mail.py) --- How a password-reset link reaches the person who asked for it.
+    # `log` writes it to the application log and sends nothing, which is what a demo or a local
+    # run wants; `smtp` sends for real. Deliberately not a third-party mail SDK: one transport
+    # over stdlib `smtplib` is the whole requirement, and a provider SDK is a dependency plus an
+    # account plus a second way for this to break.
+    mail_backend: str = "log"                       # log | smtp
+    mail_from: str = "no-reply@solvigo.example"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
+    # --- Locale --- What the warehouse is denominated in, and how it is presented. Nothing in
+    # the code below assumes Sweden or kronor; point these three at whatever market the data
+    # actually holds and every amount, date and axis label follows. `app_currency` must match
+    # what the MCP server is told (mcp_server/config.py) - it is the same warehouse, and two
+    # different answers to "what currency is this" is a mislabelled number, not a formatting
+    # nit. One currency per deployment: a warehouse holding several is future work (README).
+    app_currency: str = "SEK"          # ISO-4217, the unit every money column carries
+    app_locale: str = "sv-SE"          # BCP-47, drives grouping, decimals and month names
+    app_language: str = "sv"           # default UI and answer language; see LANGUAGES
 
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

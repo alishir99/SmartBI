@@ -7,25 +7,31 @@ import { AnswerCardView } from '../components/AnswerCard'
 import { RegionMap, type RegionDatum } from '../charts/RegionMap'
 import { EmptyState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/Skeleton'
-import { useResult } from '../lib/queries'
+import { useRegions, useResult } from '../lib/queries'
 import { useChatStore } from '../lib/chat'
+import { columnLabel, useT } from '../lib/i18n'
 
 type Tab = 'ranking' | 'map'
 
+// Keys, and none of them names a place: a suggested question about "Skåne" is unanswerable
+// against a warehouse holding any other market.
+const FOLLOW_UP_KEYS = [
+  'ask.grew_fastest',
+  'ask.weekly_in_region',
+  'ask.best_online',
+  'ask.category_share_region',
+]
+
 export function GeographyPage() {
+  const t = useT()
   const [tab, setTab] = useState<Tab>('ranking')
 
   return (
     <FocusedCardPage
-      title="Geografi"
-      description="Försäljning per län. Rangordningen är det man läser av - kartan visar var efterfrågan ligger."
+      title={t('geography.title')}
+      description={t('geography.description')}
       dimension="region"
-      followUps={[
-        'Var växer vi snabbast jämfört med förra året?',
-        'Visa försäljning per vecka i Skåne',
-        'Vilka län säljer mest online?',
-        'Hur stor är vår andel av kategorin i Stockholms län?',
-      ]}
+      followUps={FOLLOW_UP_KEYS.map((key) => t(key))}
       render={(card) =>
         card ? (
           <section>
@@ -33,10 +39,7 @@ export function GeographyPage() {
             {tab === 'ranking' ? <RankingTab card={card} /> : <MapTab card={card} />}
           </section>
         ) : (
-          <EmptyState
-            title="Ingen regional vy tillgänglig"
-            description="Fråga i chatten så byggs vyn från din data."
-          />
+          <EmptyState title={t('geography.empty_title')} description={t('page.no_view')} />
         )
       }
     />
@@ -44,14 +47,15 @@ export function GeographyPage() {
 }
 
 function TabBar({ value, onChange }: { value: Tab; onChange: (tab: Tab) => void }) {
+  const t = useT()
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'ranking', label: 'Rangordning' },
-    { key: 'map', label: 'Karta' },
+    { key: 'ranking', label: t('geography.tab_ranking') },
+    { key: 'map', label: t('geography.tab_map') },
   ]
   return (
     <div
       role="tablist"
-      aria-label="Vy"
+      aria-label={t('geography.tab_group')}
       className="mb-4 inline-flex gap-0.5 rounded-pill bg-surface-2 p-0.5 ring-hairline"
     >
       {tabs.map((tab) => (
@@ -83,19 +87,32 @@ function RankingTab({ card }: { card: AnswerCard }) {
 
 /** The map reads the same frozen result the bar chart draws from. */
 function MapTab({ card }: { card: AnswerCard }) {
+  const t = useT()
   const result = useResult(card.query_id ?? null)
+  // Coordinates come from the warehouse, not from a table shipped with the client. A market
+  // whose stores are not geocoded gets an honest "no map" rather than invented positions.
+  const regions = useRegions()
 
-  if (result.isPending) return <CardSkeleton height={560} />
+  if (result.isPending || regions.isPending) return <CardSkeleton height={560} />
   if (result.isError || !result.data) {
     return (
       <EmptyState
-        title="Kunde inte läsa resultatet"
-        description="Kartan ritas från samma resultat som stapeldiagrammet."
+        title={t('geography.result_error_title')}
+        description={t('geography.result_error')}
+      />
+    )
+  }
+  if (!regions.data || regions.data.length === 0) {
+    return (
+      <EmptyState
+        title={t('geography.map_unavailable_title')}
+        description={t('geography.map_unavailable')}
       />
     )
   }
 
   const measure = card.chart?.y?.[0] ?? 'net_sales_sek'
+  const measureColumn = result.data.columns.find((column) => column.key === measure)
   const data: RegionDatum[] = result.data.rows
     .map((row) => ({
       region: String(row.region ?? ''),
@@ -105,7 +122,11 @@ function MapTab({ card }: { card: AnswerCard }) {
 
   return (
     <div className="rounded-card bg-surface p-5 shadow-card ring-hairline">
-      <RegionMap data={data} />
+      <RegionMap
+        data={data}
+        places={regions.data}
+        label={columnLabel(measure, measureColumn?.label ?? measure)}
+      />
     </div>
   )
 }

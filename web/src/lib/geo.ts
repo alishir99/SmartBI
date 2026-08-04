@@ -1,74 +1,85 @@
-/** Where the 21 län sit, and how to get them onto an SVG. */
-
-import { OUTLINE_BOUNDS } from './swedenOutline'
+/**
+ * Projecting whatever regions the warehouse actually has onto an SVG.
+ *
+ * This file used to be a table of Sweden's 21 counties and their coordinates, next to a
+ * hand-traced 600-point coastline. Both were wrong the moment the app was pointed at any
+ * other market, and neither could be fixed without redrawing a country.
+ *
+ * So the coordinates come from the data - `dim_store` carries lat/lon, `get_capabilities`
+ * returns the mean position per region - and the projection fits its bounds to whatever
+ * arrives. Sweden, Spain or three warehouses in Ohio all project correctly, because nothing
+ * here knows which one it is looking at. What is lost is the coastline behind the bubbles;
+ * that is what a real basemap is for, and a basemap for one country was never that either.
+ */
 
 export type RegionPoint = { region: string; lat: number; lon: number }
 
-/** Mean store position per county. Sorted north to south. */
-export const REGION_POINTS: RegionPoint[] = [
-  { region: 'Norrbottens län', lat: 65.4602, lon: 21.8345 },
-  { region: 'Västerbottens län', lat: 64.2874, lon: 20.6299 },
-  { region: 'Jämtlands län', lat: 63.1774, lon: 14.6303 },
-  { region: 'Västernorrlands län', lat: 62.8393, lon: 18.0235 },
-  { region: 'Gävleborgs län', lat: 60.6566, lon: 16.9582 },
-  { region: 'Dalarnas län', lat: 60.5446, lon: 15.5184 },
-  { region: 'Uppsala län', lat: 59.863, lon: 17.6141 },
-  { region: 'Västmanlands län', lat: 59.6065, lon: 16.5464 },
-  { region: 'Stockholms län', lat: 59.4304, lon: 18.1294 },
-  { region: 'Värmlands län', lat: 59.4033, lon: 13.5033 },
-  { region: 'Örebro län', lat: 59.2785, lon: 15.2035 },
-  { region: 'Södermanlands län', lat: 59.1628, lon: 16.6929 },
-  { region: 'Östergötlands län', lat: 58.4982, lon: 15.8889 },
-  { region: 'Västra Götalands län', lat: 57.715, lon: 12.4526 },
-  { region: 'Gotlands län', lat: 57.6338, lon: 18.2899 },
-  { region: 'Jönköpings län', lat: 57.4775, lon: 14.1392 },
-  { region: 'Kalmar län', lat: 57.2012, lon: 16.517 },
-  { region: 'Kronobergs län', lat: 56.8735, lon: 14.815 },
-  { region: 'Hallands län', lat: 56.6786, lon: 12.8592 },
-  { region: 'Blekinge län', lat: 56.1537, lon: 15.5822 },
-  { region: 'Skåne län', lat: 55.8263, lon: 13.2404 },
-]
-
-const BY_NAME = new Map(REGION_POINTS.map((point) => [point.region, point]))
-
-/** Look a county up by the label the API returns. */
-export function findRegion(name: string): RegionPoint | undefined {
-  const exact = BY_NAME.get(name)
+/** Look a region up by the label the API returns, tolerating a suffix like " län". */
+export function findRegion(name: string, points: RegionPoint[]): RegionPoint | undefined {
+  const exact = points.find((point) => point.region === name)
   if (exact) return exact
-  const needle = name.toLowerCase().replace(/\s*län$/, '').trim()
-  return REGION_POINTS.find(
-    (point) => point.region.toLowerCase().replace(/\s*län$/, '').trim() === needle,
-  )
+  const needle = normalise(name)
+  return points.find((point) => normalise(point.region) === needle)
 }
 
-/** Equirectangular projection with a cosine correction on longitude. */
-const MEAN_LAT_RAD = ((55.8 + 65.5) / 2) * (Math.PI / 180)
-const LON_SCALE = Math.cos(MEAN_LAT_RAD)
+function normalise(value: string): string {
+  return value.toLowerCase().trim()
+}
 
-export type Projection = { x: (point: RegionPoint) => number; y: (point: RegionPoint) => number }
+export type Projection = {
+  x: (point: RegionPoint) => number
+  y: (point: RegionPoint) => number
+}
 
-/** Project a lon/lat onto the map's viewBox. */
-export function project(): Projection {
-  const { minX, maxX, minY, maxY, width, height, padding } = OUTLINE_BOUNDS
+/**
+ * Fit the given points into `width` × `height`, preserving the aspect ratio.
+ *
+ * Equirectangular with a cosine correction on longitude, taken at the mean latitude of the
+ * points themselves rather than at a constant - the correction is what stops a country from
+ * looking stretched, and how much of it is needed depends entirely on how far from the equator
+ * the data sits.
+ */
+export function project(
+  points: RegionPoint[],
+  width: number,
+  height: number,
+  padding: number,
+): Projection {
+  const lats = points.map((point) => point.lat)
+  const lons = points.map((point) => point.lon)
+  const meanLat = lats.reduce((sum, lat) => sum + lat, 0) / (lats.length || 1)
+  const lonScale = Math.cos((meanLat * Math.PI) / 180)
 
-  // One scale for both axes, so the aspect ratio survives; the country is then centred in
-  // whatever box it did not fill.
-  const scale = Math.min(
-    (width - padding * 2) / (maxX - minX),
-    (height - padding * 2) / (maxY - minY),
-  )
-  const offsetX = (width - (maxX - minX) * scale) / 2
-  const offsetY = (height - (maxY - minY) * scale) / 2
+  const minX = Math.min(...lons) * lonScale
+  const maxX = Math.max(...lons) * lonScale
+  const minY = Math.min(...lats)
+  const maxY = Math.max(...lats)
+
+  // A single region, or several sharing a latitude, gives a zero-width span. Guard it, or the
+  // scale is Infinity and every marker lands in the same pixel.
+  const spanX = maxX - minX || 1
+  const spanY = maxY - minY || 1
+
+  // One scale for both axes, so the shape survives; the points are then centred in whatever
+  // box they did not fill.
+  const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY)
+  const offsetX = (width - spanX * scale) / 2
+  const offsetY = (height - spanY * scale) / 2
 
   return {
-    x: (point) => (point.lon * LON_SCALE - minX) * scale + offsetX,
+    x: (point) => (point.lon * lonScale - minX) * scale + offsetX,
     // SVG y grows downward and latitude grows north, so this flips.
     y: (point) => (maxY - point.lat) * scale + offsetY,
   }
 }
 
 /** Radius for a value, area-proportional rather than radius-proportional. */
-export function radiusFor(value: number, max: number, minRadius: number, maxRadius: number): number {
+export function radiusFor(
+  value: number,
+  max: number,
+  minRadius: number,
+  maxRadius: number,
+): number {
   if (max <= 0 || value <= 0) return minRadius
   return minRadius + (maxRadius - minRadius) * Math.sqrt(value / max)
 }

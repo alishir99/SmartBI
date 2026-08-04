@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from .. import db, logs, ratelimit
+from .. import db, i18n, logs, ratelimit
 from ..agent.loop import run_turn
 from ..deps import ScopedTenant, get_cache, get_mcp, get_supplier_scope
 from ..mcp_client import McpClient
@@ -49,6 +49,10 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                   cache: ResultCache) -> AsyncIterator[str]:
     logs.bind(turn_id=logs.new_turn_id(), supplier_id=tenant.supplier_id,
               user_id=tenant.user_id)
+    # Re-set here, not inherited: the middleware ran in the request task and this generator is
+    # consumed in another, so the answer's language has to be established where the answer is
+    # written. `body.lang` is None for a client that never asks, which resolves to the default.
+    i18n.use(body.lang)
     logger.info("", extra={"event": "turn.start", "history_turns": len(body.history),
                            **logs.redacted(body.question, "question")})
     started = time.monotonic()

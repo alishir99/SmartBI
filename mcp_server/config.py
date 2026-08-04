@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     # Hard ceiling on rows a single tool call may return, independent of the caller's limit.
     statement_timeout_ms: int = 15_000
 
+    # What the money columns are denominated in. Every tool result states it in `meta`, so a
+    # figure can never reach a card without its unit. Must match `app_currency` in
+    # api/config.py - same warehouse, one answer. `prices_include_vat` is the other half of
+    # "what does this number mean"; it is a flag rather than a phrase so the reader's language
+    # picks the words.
+    app_currency: str = "SEK"
+    prices_include_vat: bool = False
+
+    @property
+    def vat_code(self) -> str:
+        return "incl" if self.prices_include_vat else "excl"
+
     @property
     def dsn(self) -> str:
         return (f"postgresql://{self.app_db_user}:{self.app_db_password}"

@@ -335,7 +335,8 @@ def test_provenance_is_built_from_the_tools_own_meta():
     assert card.provenance is not None
     assert card.provenance.source == "mv_sales_daily (rollup)"
     assert card.provenance.scope == "supplier:abcd"
-    assert card.provenance.vat == "exkl. moms"
+    # A code, not a phrase: the reader's language supplies the words.
+    assert card.provenance.vat == "excl"
 
 
 # ------------------------------------------------------------- what a reader is shown (F2)

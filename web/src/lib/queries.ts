@@ -8,10 +8,12 @@ import {
   fetchCards,
   fetchDashboard,
   fetchMovers,
+  fetchRegions,
   fetchResult,
   saveCard,
   shareCard,
 } from './api'
+import { useLanguageStore } from './i18n'
 
 export const queryKeys = {
   // The period is part of the key: two windows are two different results, and sharing one cache
@@ -20,11 +22,20 @@ export const queryKeys = {
   movers: (period: string) => ['movers', period] as const,
   cards: ['cards'] as const,
   result: (queryId: string) => ['result', queryId] as const,
+  regions: ['regions'] as const,
 }
 
+/**
+ * The language is part of the key wherever the server writes text into the response.
+ *
+ * Card titles, KPI labels and caveats are all server-written, so a cached English dashboard
+ * served under a Swedish session would be a page in two languages - and TanStack has no way to
+ * know the request differed unless the key says so.
+ */
 export function useDashboard(period: string = DEFAULT_PERIOD) {
+  const lang = useLanguageStore((state) => state.lang)
   return useQuery({
-    queryKey: queryKeys.dashboard(period),
+    queryKey: [...queryKeys.dashboard(period), lang],
     queryFn: () => fetchDashboard(period),
     staleTime: 5 * 60 * 1000,
     // Keeps the previous window on screen while the next one loads, so switching period does
@@ -34,8 +45,9 @@ export function useDashboard(period: string = DEFAULT_PERIOD) {
 }
 
 export function useMovers(period: string = DEFAULT_PERIOD) {
+  const lang = useLanguageStore((state) => state.lang)
   return useQuery({
-    queryKey: queryKeys.movers(period),
+    queryKey: [...queryKeys.movers(period), lang],
     queryFn: () => fetchMovers(period),
     staleTime: 5 * 60 * 1000,
     placeholderData: (previous) => previous,
@@ -50,6 +62,15 @@ export function useResult(queryId: string | null) {
     enabled: queryId !== null,
     staleTime: Infinity,
     gcTime: 30 * 60 * 1000,
+  })
+}
+
+/** Region centroids. One per deployment and effectively static, so it is fetched once. */
+export function useRegions() {
+  return useQuery({
+    queryKey: queryKeys.regions,
+    queryFn: fetchRegions,
+    staleTime: Infinity,
   })
 }
 

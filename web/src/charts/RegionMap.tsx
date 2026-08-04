@@ -1,27 +1,38 @@
-/** Sales per county as a proportional-symbol map. */
+/**
+ * Sales per region as a proportional-symbol map, positioned from the data's own coordinates.
+ *
+ * ponytail: no basemap. The hand-traced Sweden outline that used to sit behind these bubbles
+ * was 600 points of one country and could not be fixed for any other, so it is gone and the
+ * markers float. Add a real basemap when it matters - region GeoJSON served alongside the
+ * centroids, drawn on the same projection - not another traced coastline.
+ */
 
 import { useId, useMemo, useState } from 'react'
-import { findRegion, project, radiusFor, REGION_POINTS } from '../lib/geo'
-import { SWEDEN_PATH } from '../lib/swedenOutline'
+import { findRegion, project, radiusFor, type RegionPoint } from '../lib/geo'
 import { formatMoneyWithUnit, moneyScale, formatPercent } from '../lib/format'
+import { useT } from '../lib/i18n'
 
 const VIEW_W = 460
 const VIEW_H = 620
+const PADDING = 40
 const MIN_R = 5
 // Capped lower than it could be.
 const MAX_R = 36
-/** Labels are placed for the biggest counties only, and never within this of another. */
+/** Labels are placed for the biggest regions only, and never within this of another. */
 const LABEL_MIN_GAP = 30
 
 export type RegionDatum = { region: string; value: number }
 
 type Props = {
   data: RegionDatum[]
+  /** Every region the warehouse knows, with its centroid. Positions come from here. */
+  places: RegionPoint[]
   /** Accessible caption; also used as the visible unit hint. */
-  label?: string
+  label: string
 }
 
-export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
+export function RegionMap({ data, places, label }: Props) {
+  const t = useT()
   const titleId = useId()
   const [active, setActive] = useState<string | null>(null)
 
@@ -30,7 +41,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
     const total = data.reduce((sum, d) => sum + d.value, 0)
     return data
       .map((datum) => {
-        const point = findRegion(datum.region)
+        const point = findRegion(datum.region, places)
         if (!point) return null
         return {
           ...datum,
@@ -40,13 +51,19 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
         }
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      // Largest first so the small counties draw on top and stay clickable.
+      // Largest first so the small regions draw on top and stay clickable.
       .sort((a, b) => b.radius - a.radius)
-  }, [data])
+  }, [data, places])
 
-  const projection = useMemo(() => project(), [])
+  // Fitted to every region the warehouse has, not only the ones in this result: otherwise a
+  // period where one region sold nothing would re-scale and re-centre the whole map, and the
+  // same country would be a different shape on two cards.
+  const projection = useMemo(
+    () => project(places.length ? places : points.map((p) => p.point), VIEW_W, VIEW_H, PADDING),
+    [places, points],
+  )
 
-  // Greedy label placement: walk the counties largest-value first and keep a label only if it
+  // Greedy label placement: walk the regions largest-value first and keep a label only if it
   // clears every label already placed.
   const labelled = useMemo(() => {
     const placed: { labelX: number; labelY: number }[] = []
@@ -56,8 +73,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
         const labelX = projection.x(entry.point)
         const labelY = projection.y(entry.point) + entry.radius + 13
         const clashes = placed.some(
-          (other) =>
-            Math.hypot(other.labelX - labelX, other.labelY - labelY) < LABEL_MIN_GAP,
+          (other) => Math.hypot(other.labelX - labelX, other.labelY - labelY) < LABEL_MIN_GAP,
         )
         if (clashes) return []
         placed.push({ labelX, labelY })
@@ -65,26 +81,23 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
       })
       .slice(0, 8)
   }, [points, projection])
+
   const scale = useMemo(() => moneyScale(Math.max(...data.map((d) => d.value), 0)), [data])
   const activeEntry = points.find((entry) => entry.region === active) ?? null
 
-  // Counties with no rows at all still get a faint marker: "we sell nothing here" is a finding,
+  // Regions with no rows at all still get a faint marker: "we sell nothing here" is a finding,
   // and an absent dot reads as missing data rather than as a zero.
   const covered = new Set(points.map((entry) => entry.point.region))
-  const empties = REGION_POINTS.filter((point) => !covered.has(point.region))
+  const empties = places.filter((point) => !covered.has(point.region))
 
   if (points.length === 0) {
-    return (
-      <p className="py-16 text-center text-sm text-ink-muted">
-        Ingen regional data i det här resultatet.
-      </p>
-    )
+    return <p className="py-16 text-center text-sm text-ink-muted">{t('card.no_regional_data')}</p>
   }
 
   return (
     <figure className="relative m-0">
       <figcaption className="mb-2 text-xs text-ink-muted">
-        {label} per län · {scale.unit} · cirkelns yta står i proportion till värdet
+        {t('card.map_caption', { label, unit: scale.unit })}
       </figcaption>
 
       <svg
@@ -94,20 +107,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
         aria-labelledby={titleId}
         onMouseLeave={() => setActive(null)}
       >
-        <title id={titleId}>{label} per län, karta över Sverige</title>
-
-        {/* The coastline, beneath the data. Filled with a flat surface tone and outlined
-            rather than shaded: it is context, and a map whose background competes with its
-            marks for attention has stopped being a background. `fillRule` matters - the
-            path carries three separate polygons (mainland, Gotland, Öland). */}
-        <path
-          d={SWEDEN_PATH}
-          fillRule="evenodd"
-          className="fill-[var(--surface-2)] stroke-[var(--axis)]"
-          strokeWidth={0.75}
-          strokeOpacity={0.55}
-          strokeLinejoin="round"
-        />
+        <title id={titleId}>{t('card.map_title', { label })}</title>
 
         {empties.map((point) => (
           <circle
@@ -150,9 +150,9 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
           )
         })}
 
-        {/* Labels for the largest counties only, and only where one will not land on top of
-            another already placed. The south is dense enough that labelling everything
-            produces overlapping text - the hover readout carries the rest. */}
+        {/* Labels for the largest regions only, and only where one will not land on top of
+            another already placed. Dense areas produce overlapping text - the hover readout
+            carries the rest. */}
         {labelled.map((entry) => (
           <text
             key={`label-${entry.region}`}
@@ -161,7 +161,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
             textAnchor="middle"
             className="pointer-events-none fill-[var(--text-secondary)] text-[10px] font-medium"
           >
-            {entry.region.replace(/\s*län$/, '')}
+            {entry.region}
           </text>
         ))}
       </svg>
@@ -176,7 +176,7 @@ export function RegionMap({ data, label = 'Nettoförsäljning' }: Props) {
             {formatMoneyWithUnit(activeEntry.value, scale)}
           </p>
           <p className="text-[11px] text-ink-muted">
-            {formatPercent(activeEntry.share)} av perioden
+            {t('card.map_share', { percent: formatPercent(activeEntry.share) })}
           </p>
         </div>
       )}

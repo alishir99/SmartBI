@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { AnswerCard, ChatEvent, ChatHistoryEntry } from '../types'
 import { streamChat } from './api'
+import { t } from './i18n'
 
 export type ToolChip = {
   id: string
@@ -81,7 +82,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id,
       question: trimmed,
       status: 'streaming',
-      statusMessage: 'Tänker…',
+      statusMessage: t('chat.thinking'),
       chips: [],
       streamedText: '',
       card: null,
@@ -112,7 +113,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...current,
               status: 'error',
               statusMessage: null,
-              error: 'Svaret avbröts innan något kort hade skapats.',
+              error: t('chat.aborted'),
             },
       )
     } catch (error) {
@@ -123,7 +124,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...current,
           status: 'error',
           statusMessage: null,
-          error: error instanceof Error ? error.message : 'Ett oväntat fel inträffade.',
+          error: error instanceof Error ? error.message : t('chat.unexpected'),
         }))
       }
     } finally {

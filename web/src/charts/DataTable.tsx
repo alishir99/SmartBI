@@ -1,6 +1,7 @@
 import type { Column, ResultRow } from '../types'
-import { formatCell } from '../lib/format'
+import { formatCell, isCurrency } from '../lib/format'
 import { pointQuestion } from '../lib/questions'
+import { columnLabel } from '../lib/i18n'
 
 /** The table view every chart can fall back to. */
 export function DataTable({
@@ -29,9 +30,9 @@ export function DataTable({
                   index === 0 ? 'text-left' : 'text-right'
                 }`}
               >
-                {column.label}
-                {column.unit === 'SEK' && (
-                  <span className="ml-1 font-normal normal-case">(kr, exkl. moms)</span>
+                {columnLabel(column.key, column.label)}
+                {isCurrency(column.unit) && (
+                  <span className="ml-1 font-normal normal-case">({column.unit})</span>
                 )}
               </th>
             ))}

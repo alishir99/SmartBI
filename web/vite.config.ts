@@ -27,6 +27,9 @@ export default defineConfig(({ mode }) => {
       // per-file `@vitest-environment` comments would be one more thing to remember.
       environment: 'jsdom',
       restoreMocks: true,
+      // Pins the language, so a suite asserts against strings it chose rather than against
+      // whatever jsdom reports as the browser's preference.
+      setupFiles: ['./src/test-setup.ts'],
     },
   }
 })

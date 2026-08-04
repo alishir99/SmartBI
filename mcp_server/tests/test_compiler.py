@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 import sqlglot
 
+from mcp_server.config import settings
 from mcp_server.semantic.compiler import (
     SpecError,
     compile_query,
@@ -304,12 +305,16 @@ def test_ratio_measures_are_computed_from_sums():
     assert "AVG(" not in compiled.sql
 
 
-def test_columns_carry_units_and_swedish_labels():
+def test_columns_carry_the_configured_currency_and_a_label():
+    """The unit is the deployment's currency, not a literal - the same warehouse pointed at
+    another market must not hand back columns labelled in a currency it does not hold."""
     compiled = compile_ok({"measures": ["net_sales_sek"], "dimensions": ["region"]})
     by_key = {c["key"]: c for c in compiled.columns}
-    assert by_key["net_sales_sek"]["unit"] == "SEK"
+    assert by_key["net_sales_sek"]["unit"] == settings.app_currency
     assert by_key["net_sales_sek"]["label"] == "Nettoförsäljning"
-    assert by_key["region"]["label"] == "Län"
+    # Generic on purpose: "Län" is a Swedish administrative unit, and the same column holds
+    # states, prefectures or provinces elsewhere.
+    assert by_key["region"]["label"] == "Region"
 
 
 # ------------------------------------------------------- post-aggregate stage One narrow layer

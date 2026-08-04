@@ -26,7 +26,7 @@ const PROVENANCE: Provenance = {
   source: 'mv_sales_daily (rollup)',
   scope: 'supplier:abcd',
   currency: 'SEK',
-  vat: 'exkl. moms',
+  vat: 'excl',
   time_range: { from: '2025-07-01', to: '2026-06-30' },
   compare_range: null,
   coverage: { from: '2024-07-01', to: '2026-06-30' },
@@ -119,7 +119,7 @@ describe('the answer card', () => {
     // own subtitle is the only thing on screen that says which one ran.
     show({})
     // Twice over: the card's subtitle and the source chip, which both name the window.
-    expect(screen.getAllByText(/jul 2025–jun 2026/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/juli 2025–juni 2026/).length).toBeGreaterThan(0)
   })
 
   it('names the figures a query licensed, once the chip is opened', () => {

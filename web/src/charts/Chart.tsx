@@ -29,6 +29,7 @@ import { axisCategoryLabel, prepareChart, type PreparedChart } from './prepare'
 import { ChartTooltip } from './ChartTooltip'
 import { DataTable } from './DataTable'
 import { pointQuestion } from '../lib/questions'
+import { columnLabel, plural, t } from '../lib/i18n'
 import { formatCell, formatKpiValue, formatMoneyOnScale, formatNumber } from '../lib/format'
 
 type Props = {
@@ -76,20 +77,25 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
   // previously found nothing at all - the chart was simply absent.
   const description = describeChart(spec, prepared)
 
+  /* The unit sits beside the axis rather than on it - overlaying the top tick is exactly how a
+     chart ends up with an unreadable largest value. Money carries a scale (`tkr`, `Mkr`); every
+     other unit is itself, and a bare percentage axis said nothing at all about what its numbers
+     were. It has to follow the *value* axis: on a sideways chart that is the x-axis along the
+     bottom, and printing it top-left labelled the category names instead. */
+  const unit = prepared.scale?.unit ?? prepared.unit
+  const unitLabel = unit ? (
+    <p className={`text-2xs text-ink-muted ${sideways ? 'mt-1 text-right' : 'mb-1'}`}>{unit}</p>
+  ) : null
+
   return (
     <figure className="m-0">
-      {/* The unit sits above the axis rather than on it - overlaying the top tick is
-          exactly how a chart ends up with an unreadable largest value. Money carries a scale
-          (`tkr`, `Mkr`); every other unit is itself, and a bare percentage axis said nothing
-          at all about what its numbers were. */}
-      {(prepared.scale || prepared.unit) && (
-        <p className="mb-1 text-2xs text-ink-muted">{prepared.scale?.unit ?? prepared.unit}</p>
-      )}
+      {!sideways && unitLabel}
       <div style={{ height: plotHeight }} role="img" aria-label={description}>
         <ResponsiveContainer width="100%" height="100%">
           {plot(spec, prepared, sideways, onAsk && markClick(prepared, onAsk))}
         </ResponsiveContainer>
       </div>
+      {sideways && unitLabel}
       <Legend prepared={prepared} />
       {/* An annotation nobody can read is decoration. The line is only worth drawing if the
           chart also says what it means. */}
@@ -98,7 +104,7 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
       )}
       {prepared.folded && (
         <p className="mt-2 text-2xs text-ink-muted">
-          Mindre poster är summerade till “Övrigt”.
+          {t('chart.folded_note', { other: t('card.other') })}
         </p>
       )}
       {prepared.hidden > 0 && (
@@ -135,15 +141,16 @@ export function describeChart(spec: ChartSpec, prepared: PreparedChart): string 
   if (measures.length > 0) {
     parts.push(`visar ${measures.join(', ')}`)
   }
-  if (prepared.xColumn?.label) {
-    parts.push(`per ${prepared.xColumn.label.toLowerCase()}`)
+  if (prepared.xColumn) {
+    const dimension = columnLabel(prepared.xColumn.key, prepared.xColumn.label).toLowerCase()
+    parts.push(t('tool.per', { dimension }))
   }
-  parts.push(`${prepared.rows.length} ${prepared.rows.length === 1 ? 'värde' : 'värden'}`)
+  parts.push(plural(prepared.rows.length, 'value'))
   if (prepared.scale?.unit) {
     parts.push(`i ${prepared.scale.unit}`)
   }
   if (prepared.folded) {
-    parts.push('mindre poster är summerade till Övrigt')
+    parts.push(t('card.other_note'))
   }
   if (prepared.hidden > 0) {
     parts.push(`${prepared.hidden} rader visas inte i diagrammet`)

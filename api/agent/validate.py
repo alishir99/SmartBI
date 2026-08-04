@@ -8,56 +8,135 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 
+from ..config import settings
+from ..i18n import current as current_language
 from ..result_cache import PREVIEW_ROWS, CachedResult
 
-# --- magnitude suffixes -----------------------------------------------------------------
-# Written as they actually appear in Swedish financial prose.
-SCALES: dict[str, float] = {
-    "mdkr": 1e9, "miljarder": 1e9, "miljard": 1e9,
-    "mkr": 1e6, "msek": 1e6, "miljoner": 1e6, "miljon": 1e6, "mnkr": 1e6,
-    "tkr": 1e3, "ksek": 1e3, "tusen": 1e3,
-}
-UNIT_WORDS = {"kr", "sek", "kronor", "%", "procent", "st", "styck", "enheter",
-              # Percentage points. Longer than "procent" and therefore matched before it, which
-              # is the whole point: "12,2 procentenheter" must not be read as 12,2 %.
-              "procentenheter", "procentenhet", "p.e."}
+# --- number grammar, per language --------------------------------------------------------
+#
+# Extraction has to read the prose the way it was written, and that is not one way. Swedish
+# writes "1 234,5 Mkr"; English writes "1,234.5M". Reading the second with the first's rules
+# turns 1,234,567 into 1.234 and rejects a figure that was in the data all along - a false
+# rejection is the expensive direction here, because it hides a correct answer behind the
+# amber banner. So the separators, the magnitude words and the spans that are never
+# measurements are all properties of the language the answer is in.
+#
+# The Swedish grammar below is unchanged from when this file was Swedish-only, deliberately:
+# the eval suite is Swedish and measures this path.
 
-# Longest first, so "kronor" is not matched as "kr" followed by stray letters. Escaped, because
-# "p.e." carries dots that would otherwise match any character.
-_SUFFIX_ALTERNATIVES = "|".join(
-    re.escape(word) for word in sorted(list(SCALES) + list(UNIT_WORDS),
-                                       key=len, reverse=True))
+# Space, no-break space, narrow no-break space, thin space.
+_SPACES = " \\u00a0\\u202f\\u2009"
 
-# Every character used to group thousands: ordinary space, no-break space, narrow no-break
-# space, thin space - and the period, which a model occasionally reaches for ("12.400.000").
-_THOUSANDS_CLASS = "[ \\u00a0\\u202f\\u2009.]"
 
-# Spans whose digits are never measurements.
-_MONTHS = (r"jan(?:uari)?|feb(?:ruari)?|mar(?:s)?|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|"
-           r"aug(?:usti)?|sep(?:t|tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?")
-_MASKS = [
+@dataclass(frozen=True)
+class NumberGrammar:
+    """How one language writes a measurement."""
+
+    #: suffix -> multiplier, e.g. "mkr" -> 1e6
+    scales: dict[str, float]
+    percent: frozenset[str]
+    percent_points: frozenset[str]
+    money: frozenset[str]
+    count: frozenset[str]
+    #: character class of everything that groups thousands
+    thousands: str
+    #: the decimal separator; anything else in `frac` position groups thousands
+    decimal: str
+    #: spans whose digits are never measurements
+    masks: tuple[re.Pattern[str], ...]
+
+    @property
+    def units(self) -> frozenset[str]:
+        return self.percent | self.percent_points | self.money | self.count
+
+    @property
+    def number(self) -> re.Pattern[str]:
+        # Longest suffix first, so "kronor" is not read as "kr" plus stray letters. Escaped,
+        # because "p.e." carries dots that would otherwise match any character. The trailing
+        # `(?!\w)` is what keeps a one-letter magnitude honest: without it "12 months" reads
+        # as 12 million, because "m" matches and the rest of the word is ignored.
+        alternatives = "|".join(
+            re.escape(word) for word in sorted([*self.scales, *self.units],
+                                               key=len, reverse=True))
+        return re.compile(
+            r"(?<![\d.,])"
+            rf"(?P<int>\d{{1,3}}(?:{self.thousands}\d{{3}})+|\d+)"
+            r"(?P<frac>[.,]\d+)?"
+            rf"(?!\d)(?:\s*(?P<suffix>{alternatives})(?!\w))?",
+            re.I,
+        )
+
+
+_SV_MONTHS = (r"jan(?:uari)?|feb(?:ruari)?|mar(?:s)?|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|"
+              r"aug(?:usti)?|sep(?:t|tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?")
+_EN_MONTHS = (r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
+              r"aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?")
+
+# ISO shapes are language-independent, so both grammars start from these.
+_ISO_MASKS = (
     re.compile(r"\d{4}-\d{2}-\d{2}"),                       # ISO date
     re.compile(r"\d{4}-\d{2}\b"),                           # ISO month
-    re.compile(rf"\d{{1,2}}\s*(?:{_MONTHS})\.?", re.I),     # "14 jan"
-    re.compile(rf"(?:{_MONTHS})\.?\s*\d{{4}}", re.I),        # "jun 2026"
-    re.compile(r"\b(?:v|vecka|vv)\.?\s*\d{1,2}\b", re.I),   # ISO week
-    re.compile(r"\b[qk][1-4]\b", re.I),                      # Q2 / K2
-    re.compile(r"\bkvartal\s*\d\b", re.I),
     re.compile(r"#\s*\d+"),                                  # rank chip
-    re.compile(r"\b(?:nr|plats|placering)\.?\s*\d+\b", re.I),
-    re.compile(r"\btopp\s*\d+\b", re.I),                     # "topp 10" is a limit, not a value
-    re.compile(r"\b\d+:[ae]\b"),                             # ordinal "2:a"
-]
-
-# Integer part: grouped thousands first ("1 234 567", "12.400.000"), otherwise a plain run of
-# digits.
-_NUMBER = re.compile(
-    r"(?<![\d.,])"
-    rf"(?P<int>\d{{1,3}}(?:{_THOUSANDS_CLASS}\d{{3}})+|\d+)"
-    r"(?P<frac>[.,]\d+)?"
-    rf"(?!\d)\s*(?P<suffix>{_SUFFIX_ALTERNATIVES})?",
-    re.I,
 )
+
+
+def _month_masks(months: str) -> tuple[re.Pattern[str], ...]:
+    return (re.compile(rf"\d{{1,2}}\s*(?:{months})\.?", re.I),      # "14 jan"
+            re.compile(rf"(?:{months})\.?\s*\d{{4}}", re.I))         # "jun 2026"
+
+
+SV = NumberGrammar(
+    scales={"mdkr": 1e9, "miljarder": 1e9, "miljard": 1e9,
+            "mkr": 1e6, "msek": 1e6, "miljoner": 1e6, "miljon": 1e6, "mnkr": 1e6,
+            "tkr": 1e3, "ksek": 1e3, "tusen": 1e3},
+    percent=frozenset({"%", "procent"}),
+    # Longer than "procent" and therefore matched before it, which is the whole point:
+    # "12,2 procentenheter" must not be read as 12,2 %.
+    percent_points=frozenset({"p.e.", "procentenheter", "procentenhet"}),
+    money=frozenset({"kr", "sek", "kronor"}),
+    count=frozenset({"st", "styck", "stycken", "enheter"}),
+    # The period is here because a model occasionally reaches for it ("12.400.000").
+    thousands=f"[{_SPACES}.]",
+    decimal=",",
+    masks=(*_ISO_MASKS, *_month_masks(_SV_MONTHS),
+           re.compile(r"\b(?:v|vecka|vv)\.?\s*\d{1,2}\b", re.I),   # ISO week
+           re.compile(r"\b[qk][1-4]\b", re.I),                      # Q2 / K2
+           re.compile(r"\bkvartal\s*\d\b", re.I),
+           re.compile(r"\b(?:nr|plats|placering)\.?\s*\d+\b", re.I),
+           re.compile(r"\btopp\s*\d+\b", re.I),   # "topp 10" is a limit, not a value
+           re.compile(r"\b\d+:[ae]\b")),           # ordinal "2:a"
+)
+
+EN = NumberGrammar(
+    scales={"bn": 1e9, "billion": 1e9, "billions": 1e9,
+            "m": 1e6, "mn": 1e6, "million": 1e6, "millions": 1e6,
+            "k": 1e3, "thousand": 1e3, "thousands": 1e3},
+    percent=frozenset({"%", "percent", "pct"}),
+    percent_points=frozenset({"pp", "p.p.", "percentage point", "percentage points"}),
+    # The deployment's own currency code, plus the words a model reaches for around it. The
+    # code is a setting, so this set is built at import from the same value the tools stamp
+    # onto every result.
+    money=frozenset({settings.app_currency.lower(), "units of currency"}),
+    count=frozenset({"pcs", "units", "unit"}),
+    # No period: in English a period is the decimal point, and treating it as a grouper is
+    # exactly the misread this grammar exists to prevent.
+    thousands=f"[{_SPACES},]",
+    decimal=".",
+    masks=(*_ISO_MASKS, *_month_masks(_EN_MONTHS),
+           re.compile(r"\b(?:w|wk|week)\.?\s*\d{1,2}\b", re.I),
+           re.compile(r"\bq[1-4]\b", re.I),
+           re.compile(r"\bquarter\s*\d\b", re.I),
+           re.compile(r"\b(?:no|rank|position)\.?\s*\d+\b", re.I),
+           re.compile(r"\btop\s*\d+\b", re.I),
+           re.compile(r"\b\d+(?:st|nd|rd|th)\b", re.I)),          # ordinal "2nd"
+)
+
+GRAMMARS: dict[str, NumberGrammar] = {"sv": SV, "en": EN}
+
+
+def grammar() -> NumberGrammar:
+    """The grammar for the language this turn is being answered in."""
+    return GRAMMARS.get(current_language(), SV)
 
 # Bare integers in this range with no unit are read as calendar years, not as measurements.
 _YEAR_MIN, _YEAR_MAX = 1990, 2099
@@ -76,12 +155,6 @@ _FLOAT_EPSILON = 1e-6
 # from 1 % upward - the rate is set by how densely 500 values fill the range, not by this
 # number. So it is set at the tight end of the band that still keeps every honest rounding.
 _ROUND_NUMBER_MAX_REL = 0.02
-
-
-_PERCENT_WORDS = {"%", "procent"}
-_PERCENT_POINT_WORDS = {"p.e.", "procentenheter", "procentenhet"}
-_MONEY_WORDS = {"kr", "sek", "kronor"}
-_COUNT_WORDS = {"st", "styck", "enheter"}
 
 
 @dataclass(frozen=True)
@@ -149,32 +222,37 @@ def mask_entity_names(text: str, results: Iterable[CachedResult],
 
 
 def mask_non_measurements(text: str) -> str:
-    """Blank out dates, ISO weeks, quarters, ranks and `topp N`, preserving length."""
+    """Blank out dates, ISO weeks, quarters, ranks and "top N", preserving length."""
     masked = text
-    for pattern in _MASKS:
+    for pattern in grammar().masks:
         masked = pattern.sub(lambda match: " " * len(match.group(0)), masked)
     return masked
 
 
-def _parse_number(integer_part: str, fraction_part: str | None) -> tuple[float, int]:
-    """Return (value, decimal count), reading sv-SE formatting."""
-    digits = re.sub(rf"{_THOUSANDS_CLASS}|\.", "", integer_part)
+def _parse_number(integer_part: str, fraction_part: str | None,
+                  rules: NumberGrammar) -> tuple[float, int]:
+    """Return (value, decimal count), read the way `rules` writes numbers."""
+    digits = re.sub(rules.thousands, "", integer_part)
     if fraction_part is None:
         return float(digits), 0
 
     separator, fraction = fraction_part[0], fraction_part[1:]
-    if separator == "." and len(fraction) == 3:
+    # Not the decimal separator, and exactly three digits: this is a thousands group the
+    # integer pattern did not swallow, not a fraction. "12.400" in Swedish is twelve
+    # thousand four hundred; in English it is twelve point four.
+    if separator != rules.decimal and len(fraction) == 3:
         return float(digits + fraction), 0
     return float(f"{digits}.{fraction}"), len(fraction)
 
 
 def extract_numbers(text: str) -> list[NumberLiteral]:
     """Every numeric claim in the narrative, with the tolerance its own precision implies."""
+    rules = grammar()
     literals: list[NumberLiteral] = []
-    for match in _NUMBER.finditer(mask_non_measurements(text)):
-        value, decimals = _parse_number(match.group("int"), match.group("frac"))
+    for match in rules.number.finditer(mask_non_measurements(text)):
+        value, decimals = _parse_number(match.group("int"), match.group("frac"), rules)
         suffix = (match.group("suffix") or "").lower()
-        scale = SCALES.get(suffix, 1.0)
+        scale = rules.scales.get(suffix, 1.0)
         has_unit = bool(suffix)
 
         value *= scale
@@ -197,15 +275,15 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
                 tolerance = max(tolerance, min(implied, abs(value) * _ROUND_NUMBER_MAX_REL))
         tolerance += abs(value) * _FLOAT_EPSILON
 
-        if suffix in _PERCENT_WORDS:
+        if suffix in rules.percent:
             unit_class = "percent"
-        elif suffix in _PERCENT_POINT_WORDS:
+        elif suffix in rules.percent_points:
             unit_class = "pe"
-        elif suffix in _MONEY_WORDS or suffix in SCALES:
+        elif suffix in rules.money or suffix in rules.scales:
             # A magnitude suffix is always money here: "3,45 Mkr", "2 tusen". No percentage is
             # written with one.
             unit_class = "money"
-        elif suffix in _COUNT_WORDS:
+        elif suffix in rules.count:
             unit_class = "count"
         else:
             unit_class = "unknown"
@@ -214,7 +292,7 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
             raw=match.group(0).strip(),
             value=value,
             tolerance=tolerance,
-            implicit_scale_allowed=suffix not in SCALES,
+            implicit_scale_allowed=suffix not in rules.scales,
             bare_integer=decimals == 0 and not has_unit,
             unit_class=unit_class,
             position=match.start(),
@@ -352,7 +430,9 @@ def _class_of_unit(unit: str | None) -> str:
         return "percent"
     if unit == "p.e.":
         return "pe"
-    if unit == "SEK":
+    # Anything that is not one of the three fixed units is the warehouse's currency code -
+    # which is a deployment setting, so it cannot be compared against a literal.
+    if unit and unit not in ("st", "%"):
         return "money"
     if unit == "st":
         return "count"

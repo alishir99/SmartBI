@@ -14,8 +14,10 @@ import { formatDateLong } from '../lib/format'
 import { AnswerCardView } from '../components/AnswerCard'
 import { CardSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
+import { useT } from '../lib/i18n'
 
 export function SharedPage({ token }: { token: string }) {
+  const t = useT()
   const [state, setState] = useState<
     { status: 'loading' } | { status: 'ok'; view: SharedView } | { status: 'error'; error: unknown }
   >({ status: 'loading' })
@@ -35,19 +37,20 @@ export function SharedPage({ token }: { token: string }) {
     <div className="mx-auto min-h-dvh w-full max-w-4xl px-5 py-10 sm:px-8">
       <header className="mb-7">
         <p className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
-          Delad vy · Solvigo Insights
+          {t('shared.eyebrow')}
         </p>
         {state.status === 'ok' && (
           <>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
-              {state.view.card.chart?.title ?? 'Delad vy'}
+              {state.view.card.chart?.title ?? t('shared.title')}
             </h1>
             <p className="mt-2 text-sm text-ink-secondary">
-              Delad av {state.view.shared_by}. Siffrorna hämtas färskt ur {state.view.shared_by}s
-              data varje gång länken öppnas, under deras behörighet - aldrig under din.
+              {t('shared.by', { name: state.view.shared_by })}
             </p>
             <p className="mt-1.5 text-2xs text-ink-muted">
-              Länken slutar fungera {formatDateLong(state.view.expires_at.slice(0, 10))}.
+              {t('shared.expires', {
+                date: formatDateLong(state.view.expires_at.slice(0, 10)),
+              })}
             </p>
           </>
         )}
@@ -69,7 +72,7 @@ export function SharedPage({ token }: { token: string }) {
       )}
 
       <footer className="mt-8 text-2xs text-ink-muted">
-        Solvigo Insights - färdiga svar om försäljningen, direkt ur handlarens data.
+        {t('shared.footer')}
       </footer>
     </div>
   )

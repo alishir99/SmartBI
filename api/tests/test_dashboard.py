@@ -293,9 +293,16 @@ def test_the_chart_drops_the_overlay_when_the_tiles_drop_the_delta():
     assert y(False) == ["net_sales_sek"]
 
 
-def test_every_period_carries_the_grain_and_the_noun_its_title_is_built_from():
-    """The trend card's title follows the filter - a literal 'per månad' goes stale on day 1."""
-    assert all({"grain", "noun", "label"} <= set(settings) for settings in PERIODS.values())
+def test_every_period_carries_a_grain_its_title_can_be_built_from():
+    """The trend card's title follows the filter - a literal 'per månad' goes stale on day 1.
+
+    The noun is the grain: both are `grain.<key>` in api/i18n.py, so a period whose grain has
+    no string would title its card with the raw key.
+    """
+    from api.i18n import STRINGS
+    assert all("grain" in settings for settings in PERIODS.values())
+    assert all(f"grain.{settings['grain']}" in table
+               for settings in PERIODS.values() for table in STRINGS.values())
 
 
 # ------------------------------------------------------------------ the moving average

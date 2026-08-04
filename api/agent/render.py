@@ -10,6 +10,8 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any, cast
 
+from ..config import settings
+from ..i18n import STRINGS, tr
 from ..models import (
     AnswerCard,
     CardStatus,
@@ -28,7 +30,6 @@ logger = logging.getLogger(__name__)
 # The model is told to end with exactly one ```json block.
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
-_FALLBACK_TITLE = "Resultat"
 
 # The card renders the narrative as text, not as markdown. The prompt says so; this is the
 # belt-and-braces, because a stray ** reads as broken to the user and glues itself to the
@@ -159,7 +160,7 @@ def _measures(result: CachedResult) -> list[dict]:
     return [c for c in result.columns if c.get("type") == "number" and _plottable(c)]
 
 
-_TOOL_TITLE = {"query_market_share": "Marknadsandel", "query_sales": "Försäljning"}
+_TOOL_TITLE = {"query_market_share": "card.market_share", "query_sales": "card.sales"}
 
 
 def derive_title(result: CachedResult, dimensions: Sequence[dict]) -> str:
@@ -170,11 +171,12 @@ def derive_title(result: CachedResult, dimensions: Sequence[dict]) -> str:
     arriving - and market-share answers, where the prompt tells the model to omit `chart`
     entirely, kept it for good.
     """
-    head = _TOOL_TITLE.get((result.meta or {}).get("tool", result.tool), _FALLBACK_TITLE)
+    head = tr(_TOOL_TITLE.get((result.meta or {}).get("tool", result.tool),
+                             "card.fallback_title"))
     labels = [str(d.get("label", d["key"])).lower() for d in dimensions
               if not str(d["key"]).endswith("_compare")]
     if labels:
-        head = f"{head} per {' och '.join(labels[:2])}"
+        head = tr("card.title_per", head=head, dimensions=tr("card.and").join(labels[:2]))
     period = _period_label(_window((result.meta or {}).get("time_range")))
     return f"{head} · {period}" if period else head
 
@@ -260,10 +262,6 @@ def validate_chart(spec: ChartSpec, result: CachedResult) -> tuple[ChartSpec, li
     return spec.model_copy(update={"markers": [], "marker_label": None}), []
 
 
-_MONTH_SHORT = ("jan", "feb", "mar", "apr", "maj", "jun",
-                "jul", "aug", "sep", "okt", "nov", "dec")
-
-
 def _period_label(window: TimeWindow | None) -> str | None:
     """`jul 2024–jun 2025`. What the comparison series is, rather than what the column is called."""
     if window is None:
@@ -272,7 +270,8 @@ def _period_label(window: TimeWindow | None) -> str | None:
         start, end = date.fromisoformat(window.from_), date.fromisoformat(window.to)
     except ValueError:
         return None
-    tail = f"{_MONTH_SHORT[end.month - 1]} {end.year}"
+    months = tr("months.short").split(",")
+    tail = f"{months[end.month - 1]} {end.year}"
     if (start.year, start.month) == (end.year, end.month):
         # A whole calendar month is named; a few days inside one are not. Collapsing a 7-day
         # comparison to "jun 2026" gave both series of a day-grain chart the same legend label,
@@ -280,7 +279,7 @@ def _period_label(window: TimeWindow | None) -> str | None:
         if start.day == 1 and end.day == monthrange(end.year, end.month)[1]:
             return tail
         return f"{start.day}–{end.day} {tail}"
-    return f"{_MONTH_SHORT[start.month - 1]} {start.year}–{tail}"
+    return f"{months[start.month - 1]} {start.year}–{tail}"
 
 
 def to_columns(result: CachedResult) -> list[Column]:
@@ -319,8 +318,15 @@ def build_provenance(result: CachedResult) -> Provenance | None:
 
     return Provenance(
         tool=meta.get("tool", result.tool),
-        source=meta.get("source", "okänd"),
-        scope=meta.get("scope", "okänt"),
+        source=meta.get("source", tr("unknown.source")),
+        scope=meta.get("scope", tr("unknown.scope")),
+        # Straight off the tool's own meta: a card must not be able to name a currency the
+        # query did not run in.
+        currency=meta.get("currency", settings.app_currency),
+        # Normalised rather than passed through: `vat` used to be the Swedish phrase "exkl.
+        # moms", and a saved card minted before this change still carries it. A 500 on an old
+        # card is a worse answer than reading an unrecognised value as the safe default.
+        vat="incl" if meta.get("vat") == "incl" else "excl",
         time_range=time_range,
         compare_range=_window(meta.get("compare_range")),
         coverage=coverage,
@@ -422,17 +428,13 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
     )
 
 
-_CHART_WORD = {"line": "linjediagram", "bar": "stapeldiagram",
-               "stacked_bar": "staplat stapeldiagram", "area": "ytdiagram",
-               "pie": "cirkeldiagram", "table": "tabell"}
-
-
 def _override_caveat(chart: ChartSpec) -> str:
     """What the user is told when the server picked the chart instead of the model."""
     if chart.type == "kpi":
-        return "Resultatet är ett enda tal - den föreslagna vyn passade inte datan."
-    word = _CHART_WORD.get(chart.type, "diagram")
-    return f"Visar som {word} - den föreslagna vyn passade inte datan."
+        return tr("card.chart_override_kpi")
+    key = f"chart.{chart.type}"
+    word = tr(key) if key in STRINGS["sv"] else tr("chart.generic")
+    return tr("card.chart_override", chart=word)
 
 
 def _title(envelope: dict[str, Any]) -> str | None:

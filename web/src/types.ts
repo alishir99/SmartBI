@@ -17,8 +17,12 @@ export type LoginResponse = {
   user: User
 }
 
-/** `p.e.` is percentage points - a change in a share, which is not a percentage of a percentage. */
-export type ColumnUnit = 'SEK' | 'st' | '%' | 'p.e.'
+/**
+ * `p.e.` is percentage points - a change in a share, which is not a percentage of a percentage.
+ * Anything else is an ISO-4217 currency code, whichever this deployment is denominated in, so
+ * it cannot be a union: use `isCurrency()` from lib/format rather than comparing to 'SEK'.
+ */
+export type ColumnUnit = 'st' | '%' | 'p.e.' | (string & {})
 
 export type Column = {
   key: string
@@ -51,8 +55,10 @@ export type Provenance = {
   tool: string
   source: string
   scope: string
-  currency: 'SEK'
-  vat: 'exkl. moms'
+  /** ISO-4217, off the tool's own meta - never a client-side assumption. */
+  currency: string
+  /** A code, not a phrase: the reader's language supplies the words. */
+  vat: 'excl' | 'incl'
   time_range: DateRange
   compare_range: DateRange | null
   coverage: DateRange

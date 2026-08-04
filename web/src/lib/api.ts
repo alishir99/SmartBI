@@ -13,10 +13,12 @@ import type {
   ShareResponse,
   User,
 } from '../types'
+import type { RegionPoint } from './geo'
 import { apiUrl } from './env'
 import { getToken } from './auth'
 import { streamSse } from './sse'
 import { DEFAULT_PERIOD } from './periods'
+import { currentLanguage, t } from './i18n'
 
 export class ApiError extends Error {
   constructor(
@@ -36,7 +38,12 @@ type RequestOptions = {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = getToken()
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  // Sent on every request, not only the ones with a `lang` parameter: several routes return
+  // server-written text (card titles, caveats, a 502's detail) and the middleware reads this.
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Accept-Language': currentLanguage(),
+  }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
 
@@ -59,10 +66,9 @@ async function errorDetail(response: Response): Promise<string> {
   } catch {
     /* non-JSON body */
   }
-  if (response.status === 401) return 'Sessionen har gått ut. Logga in igen.'
-  if (response.status === 403) return 'Du har inte åtkomst till den här datan.'
-  if (response.status === 404) return 'Kunde inte hitta datan.'
-  return `Något gick fel (HTTP ${response.status}).`
+  if (response.status === 401) return t('error.expired')
+  if (response.status === 403) return t('error.forbidden')
+  return t('error.generic')
 }
 
 // --- auth -------------------------------------------------------------------
@@ -75,14 +81,57 @@ export async function fetchMe(): Promise<User> {
   return request<User>('/api/auth/me')
 }
 
+/** Change your own password. 403 when the current one is wrong. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await request<void>('/api/auth/password', {
+    method: 'POST',
+    body: { current_password: currentPassword, new_password: newPassword },
+  })
+}
+
+/**
+ * Ask for a reset link. Always resolves, whatever the address was: the server answers
+ * identically for a known and an unknown account so the form cannot be used to find out who
+ * has one, and a client that branched on the answer would give that away again.
+ */
+export async function forgotPassword(email: string): Promise<string> {
+  const body = await request<{ detail: string }>('/api/auth/password/forgot', {
+    method: 'POST',
+    body: { email },
+  })
+  return body.detail
+}
+
+/** Redeem a reset link. 400 when it is expired, already used or forged. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await request<void>('/api/auth/password/reset', {
+    method: 'POST',
+    body: { token, new_password: newPassword },
+  })
+}
+
 // --- dashboard, results -----------------------------------------------------
 
 export async function fetchDashboard(period = DEFAULT_PERIOD): Promise<DashboardResponse> {
-  return request<DashboardResponse>(`/api/dashboard?${new URLSearchParams({ period })}`)
+  const query = new URLSearchParams({ period, lang: currentLanguage() })
+  return request<DashboardResponse>(`/api/dashboard?${query}`)
 }
 
 export async function fetchMovers(period = DEFAULT_PERIOD): Promise<MoversResponse> {
-  return request<MoversResponse>(`/api/movers?${new URLSearchParams({ period })}`)
+  const query = new URLSearchParams({ period, lang: currentLanguage() })
+  return request<MoversResponse>(`/api/movers?${query}`)
+}
+
+/**
+ * Every region with a centroid, for the map. Empty is a real answer: a warehouse whose stores
+ * are not geocoded has no map to draw, and the client hides the tab rather than guessing.
+ */
+export async function fetchRegions(): Promise<RegionPoint[]> {
+  const rows = await request<{ name: string; lat: number; lon: number }[]>('/api/regions')
+  return rows.map((row) => ({ region: row.name, lat: row.lat, lon: row.lon }))
 }
 
 export async function fetchResult(queryId: string): Promise<ResultResponse> {
@@ -153,7 +202,9 @@ export async function streamChat(
 ): Promise<void> {
   return streamSse<ChatEvent>(apiUrl('/api/chat'), {
     token: getToken(),
-    body: { question, history },
+    // In the body, not only the header: the answer is written inside a streaming generator,
+    // which is a different task from the one that handled the request.
+    body: { question, history, lang: currentLanguage() },
     signal,
     onEvent,
   })

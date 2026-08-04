@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AnswerCard } from '../types'
 import { downloadCsv } from '../lib/api'
 import { useDeleteCard, useSaveCard, useShareCard } from '../lib/queries'
+import { useT } from '../lib/i18n'
 import { Button } from './Button'
 import { IconCheck, IconDownload, IconPin, IconShare, IconTrash } from './Icons'
 
@@ -23,6 +24,7 @@ type Props = {
 }
 
 export function CardActions({ card, view, onToggleView, onDelete, savable, hasRows }: Props) {
+  const t = useT()
   const save = useSaveCard()
   const remove = useDeleteCard()
   const [saved, setSaved] = useState(false)
@@ -50,14 +52,14 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
       {card.chart && (
         <div
           role="group"
-          aria-label="Visningsläge"
+          aria-label={t('card.view_mode')}
           className="flex items-center gap-0.5 rounded-pill bg-surface-2 p-0.5"
         >
           <ViewTab active={view === 'chart'} onClick={() => onToggleView('chart')}>
-            Diagram
+            {t('card.view_chart')}
           </ViewTab>
           <ViewTab active={view === 'table'} onClick={() => onToggleView('table')}>
-            Tabell
+            {t('card.view_table')}
           </ViewTab>
         </div>
       )}
@@ -67,8 +69,8 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
           variant="ghost"
           size="sm"
           iconOnly
-          aria-label="Exportera som CSV"
-          title="Exportera som CSV"
+          aria-label={t('card.export_csv')}
+          title={t('card.export_csv')}
           icon={<IconDownload className="h-4 w-4" />}
           onClick={() => downloadCsv(card.query_id as string, csvName(card))}
         />
@@ -80,8 +82,8 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
           size="sm"
           iconOnly
           loading={save.isPending}
-          aria-label={saved ? 'Sparad i Mina vyer' : 'Spara i Mina vyer'}
-          title={saved ? 'Sparad i Mina vyer' : 'Spara i Mina vyer'}
+          aria-label={saved ? t('card.saved') : t('card.save')}
+          title={saved ? t('card.saved') : t('card.save')}
           icon={saved ? <IconCheck className="h-4 w-4 text-pos" /> : <IconPin className="h-4 w-4" />}
           onClick={onSave}
           disabled={saved}
@@ -96,8 +98,8 @@ export function CardActions({ card, view, onToggleView, onDelete, savable, hasRo
           size="sm"
           iconOnly
           loading={remove.isPending}
-          aria-label="Ta bort sparad vy"
-          title="Ta bort sparad vy"
+          aria-label={t('card.delete')}
+          title={t('card.delete')}
           icon={<IconTrash className="h-4 w-4" />}
           onClick={() => onDelete(card.card_id as string)}
         />
@@ -130,6 +132,7 @@ function ViewTab({
 }
 
 function ShareMenu({ cardId }: { cardId: string }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const share = useShareCard()
@@ -170,22 +173,22 @@ function ShareMenu({ cardId }: { cardId: string }) {
         variant="ghost"
         size="sm"
         iconOnly
-        aria-label="Dela"
+        aria-label={t('card.share')}
         aria-expanded={open}
-        title="Dela"
+        title={t('card.share')}
         icon={<IconShare className="h-4 w-4" />}
         onClick={() => setOpen((current) => !current)}
       />
 
       {open && (
         <div className="animate-fade-in absolute right-0 top-full z-20 mt-2 w-72 rounded-tile bg-surface p-4 shadow-pop ring-hairline">
-          <p className="text-xs font-medium text-ink">Dela som läslänk</p>
+          <p className="text-xs font-medium text-ink">{t('card.share_title')}</p>
           <div className="mt-3 space-y-2">
             {/* One option, because one is served. A frozen snapshot means storing the rows as
                 they were, which is a table and a retention rule rather than a flag. */}
             <ShareOption
-              title="Skapa länk"
-              description="Körs om mot färsk data vid varje öppning - alltid under din behörighet, aldrig läsarens. Slutar gälla automatiskt."
+              title={t('card.share_create')}
+              description={t('card.share_note')}
               loading={share.isPending}
               onClick={() => share.mutate({ cardId, mode: 'live' })}
             />
@@ -197,12 +200,12 @@ function ShareMenu({ cardId }: { cardId: string }) {
                 {url}
               </p>
               <Button variant="quiet" size="sm" className="mt-2 w-full" onClick={copy}>
-                {copied ? 'Kopierad' : 'Kopiera länk'}
+                {copied ? t('card.share_copied') : t('card.share_copy')}
               </Button>
             </div>
           )}
           {share.isError && (
-            <p className="mt-3 text-2xs text-neg">Kunde inte skapa länken. Försök igen.</p>
+            <p className="mt-3 text-2xs text-neg">{t('card.share_failed')}</p>
           )}
         </div>
       )}
@@ -236,10 +239,13 @@ function ShareOption({
 
 /** `topp-10-produkter-2026-06-30.csv` - readable in a downloads folder a week later. */
 function csvName(card: AnswerCard): string {
+  // NFD splits an accented letter into base + combining mark, and the mark is then
+  // dropped: "Försäljning" becomes "forsaljning" without a per-language table, and Greek,
+  // Cyrillic or Japanese titles fall back to the date rather than to a row of hyphens.
   const base = (card.chart?.title ?? 'export')
     .toLowerCase()
-    .replace(/[åä]/g, 'a')
-    .replace(/ö/g, 'o')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48)

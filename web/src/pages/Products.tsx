@@ -13,12 +13,15 @@ import { AnswerCardView } from '../components/AnswerCard'
 import { PageHeader } from '../components/PageHeader'
 import { CardSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
+import { useT } from '../lib/i18n'
 
-const FOLLOW_UPS = [
-  'Varför tappar produkten som backar mest?',
-  'Vilka produkter säljer bäst online jämfört med i butik?',
-  'Visa topp 10 produkter i Stockholms län',
-  'Vilken produkt har högst snittpris?',
+// Keys, not sentences, and none of them names a place: a suggested question mentioning a
+// Swedish county is unanswerable against a warehouse holding anything else.
+const FOLLOW_UP_KEYS = [
+  'ask.why_falling',
+  'ask.online_vs_store',
+  'ask.top_products',
+  'ask.highest_avg_price',
 ]
 
 /**
@@ -29,14 +32,15 @@ const FOLLOW_UPS = [
 const CARD_GRID = 'grid gap-6 grid-cols-[repeat(auto-fit,minmax(min(26rem,100%),1fr))]'
 
 export function ProductsPage() {
+  const t = useT()
   const [period, setPeriod] = usePeriod()
   const movers = useMovers(period)
   const ask = useChatStore((state) => state.ask)
 
   const header = (provenance: Provenance | null = null) => (
     <PageHeader
-      title="Produkter"
-      description="Vad som rör sig mest upp och ned mot föregående period."
+      title={t('products.title')}
+      description={t('products.description')}
       provenance={provenance}
     >
       <PeriodFilter value={period} onChange={setPeriod} busy={movers.isFetching} />
@@ -79,9 +83,11 @@ export function ProductsPage() {
       </div>
 
       <section className="mt-7">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">Fråga vidare</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+          {t('page.ask_more')}
+        </h2>
         <ul className="mt-3 flex flex-wrap gap-2">
-          {FOLLOW_UPS.map((question) => (
+          {FOLLOW_UP_KEYS.map((key) => t(key)).map((question) => (
             <li key={question}>
               <button
                 type="button"

@@ -1,16 +1,22 @@
 /** The selected period, shared by every page that reads the dashboard. */
 
 import { useSyncExternalStore } from 'react'
-import { DEFAULT_PERIOD, PERIOD_OPTIONS, type PeriodOption } from './periods'
+import { DEFAULT_PERIOD, PERIOD_KEYS } from './periods'
 
-/** One persisted choice out of a fixed set, readable from any page. */
-function choiceStore(storageKey: string, options: PeriodOption[], fallback: string) {
+/**
+ * One persisted choice out of a fixed set, readable from any page.
+ *
+ * Keyed on the option *keys*, not on labelled options: the labels are language-dependent now,
+ * and a validity check that depends on the active language would reject a stored period after
+ * a language switch.
+ */
+function choiceStore(storageKey: string, keys: readonly string[], fallback: string) {
   const listeners = new Set<() => void>()
 
   let current = fallback
   try {
     const stored = localStorage.getItem(storageKey)
-    if (stored && options.some((option) => option.key === stored)) current = stored
+    if (stored && keys.includes(stored)) current = stored
   } catch {
     // Private mode or a blocked origin - the default is a fine answer.
   }
@@ -36,7 +42,7 @@ function choiceStore(storageKey: string, options: PeriodOption[], fallback: stri
   return { subscribe, read, set, fallback }
 }
 
-const periodStore = choiceStore('solvigo.period', PERIOD_OPTIONS, DEFAULT_PERIOD)
+const periodStore = choiceStore('solvigo.period', PERIOD_KEYS, DEFAULT_PERIOD)
 
 export const setPeriod = periodStore.set
 

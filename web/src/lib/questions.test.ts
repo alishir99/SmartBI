@@ -54,11 +54,11 @@ describe('pointQuestion', () => {
   const PRODUCT: Column = { key: 'product', type: 'text', label: 'Produkt' }
 
   it('asks what happened, for a point in time', () => {
-    expect(pointQuestion(MONTH, '2025-11')).toBe('Vad hände i nov 2025?')
+    expect(pointQuestion(MONTH, '2025-11')).toBe('Vad hände i nov. 2025?')
   })
 
   it('asks about the month, not about its first day', () => {
-    expect(pointQuestion(MONTH, '2025-11-01')).toBe('Vad hände i nov 2025?')
+    expect(pointQuestion(MONTH, '2025-11-01')).toBe('Vad hände i nov. 2025?')
   })
 
   it('asks about the thing, for a category', () => {

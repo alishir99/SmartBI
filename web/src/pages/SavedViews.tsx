@@ -6,8 +6,10 @@ import { AnswerCardView } from '../components/AnswerCard'
 import { PageHeader } from '../components/PageHeader'
 import { CardSkeleton } from '../components/Skeleton'
 import { EmptyState, ErrorState } from '../components/ErrorState'
+import { useT } from '../lib/i18n'
 
 export function SavedViewsPage() {
+  const t = useT()
   const cards = useSavedCards()
   const remove = useDeleteCard()
   const ask = useChatStore((state) => state.ask)
@@ -15,7 +17,7 @@ export function SavedViewsPage() {
   if (cards.isPending) {
     return (
       <>
-        <PageHeader title="Mina vyer" description="Kort du har sparat." />
+        <PageHeader title={t('saved.title')} description={t('saved.description')} />
         <CardSkeleton />
       </>
     )
@@ -27,15 +29,12 @@ export function SavedViewsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Mina vyer"
-        description="Sparade kort körs om mot färsk data varje gång du öppnar dem."
-      />
+      <PageHeader title={t('saved.title')} description={t('saved.description')} />
 
       {cards.data.length === 0 ? (
         <EmptyState
-          title="Inga sparade vyer än"
-          description="Fäst ett kort från översikten eller från ett chattsvar, så hamnar det här."
+          title={t('saved.empty_title')}
+          description={t('saved.empty')}
         />
       ) : (
         <div className="space-y-6">

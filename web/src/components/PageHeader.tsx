@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import type { Provenance } from '../types'
 import { formatPeriod } from '../lib/format'
 import { useAuthStore } from '../lib/auth'
+import { useT } from '../lib/i18n'
 
 export function PageHeader({
   title,
@@ -17,6 +18,7 @@ export function PageHeader({
   provenance?: Provenance | null
   children?: ReactNode
 }) {
+  const t = useT()
   const supplier = useAuthStore((state) => state.user?.supplier_name)
 
   return (
@@ -30,9 +32,18 @@ export function PageHeader({
             <span aria-hidden="true">·</span>
             <span>{supplier ?? provenance.scope}</span>
             <span aria-hidden="true">·</span>
-            <span>{provenance.currency}, {provenance.vat}</span>
+            <span>
+              {provenance.currency}, {t(`vat.${provenance.vat}`)}
+            </span>
             <span aria-hidden="true">·</span>
-            <span>data t.o.m. {formatPeriod({ from: provenance.coverage.to, to: provenance.coverage.to })}</span>
+            <span>
+              {t('page.data_through', {
+                date: formatPeriod({
+                  from: provenance.coverage.to,
+                  to: provenance.coverage.to,
+                }),
+              })}
+            </span>
           </p>
         )}
       </div>

@@ -8,6 +8,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from .. import db
+from ..config import settings
 from ..semantic.compiler import compile_query
 from ..tenant import TenantContext
 
@@ -47,8 +48,8 @@ async def query_sales(tenant: TenantContext, spec: dict) -> dict:
             "source": "mv_sales_daily (rollup)" if compiled.source == "rollup"
                       else "fact_sales_line",
             "scope": scope_label(tenant.supplier_id),
-            "currency": "SEK",
-            "vat": "exkl. moms",
+            "currency": settings.app_currency,
+            "vat": settings.vat_code,
             "time_range": {"from": compiled.time_range[0].isoformat(),
                            "to": compiled.time_range[1].isoformat()},
             "compare_range": ({"from": compiled.compare_range[0].isoformat(),

@@ -1,6 +1,7 @@
 import type { TooltipProps } from 'recharts'
 import type { Column } from '../types'
 import { formatCell } from '../lib/format'
+import { columnLabel } from '../lib/i18n'
 
 type Props = TooltipProps<number, string> & {
   columns: Column[]
@@ -40,7 +41,7 @@ export function ChartTooltip({ active, payload, label, columns, labelFormatter }
                   style={{ backgroundColor: entry.color }}
                 />
                 <span className="truncate text-xs text-ink-secondary">
-                  {column?.label ?? key}
+                  {column ? columnLabel(column.key, column.label) : key}
                 </span>
               </span>
               <span className="tabular shrink-0 text-sm font-medium text-ink">

@@ -18,6 +18,7 @@ from .. import db
 from ..agent import render
 from ..auth import decode_access_token
 from ..deps import get_cache, get_mcp
+from ..i18n import tr
 from ..mcp_client import McpClient
 from ..models import ALLOWED_CARD_TOOLS, AnswerCard, ResultPage, SharedView
 from ..result_cache import ResultCache, from_tool_result
@@ -86,7 +87,7 @@ async def shared(token: str,
             row_count=result.row_count,
             truncated=len(result.rows) > MAX_SHARED_ROWS,
         ),
-        shared_by=await db.supplier_name(supplier_id) or "okänd leverantör",
+        shared_by=await db.supplier_name(supplier_id) or tr("unknown.supplier"),
         expires_at=datetime.fromtimestamp(claims["exp"], UTC).isoformat(),
         # ponytail: `snapshot` links resolve live too. Freezing the rows means storing them,
         # which is a table and a retention rule rather than a flag; the mode rides in the token

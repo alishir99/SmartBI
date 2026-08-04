@@ -3,9 +3,11 @@
 import type { Kpi } from '../types'
 import { formatDelta, formatKpiValue } from '../lib/format'
 import { kpiQuestion } from '../lib/questions'
+import { useT } from '../lib/i18n'
 import { IconArrowDown, IconArrowUp, IconMinus } from './Icons'
 
 export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) => void }) {
+  const t = useT()
   const delta = formatDelta(kpi.delta_pct, kpi.delta_label, kpi.unit)
   const question = kpiQuestion(kpi)
 
@@ -47,7 +49,7 @@ export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) =
             <span className="text-ink-muted">{delta.label}</span>
           </>
         ) : (
-          <span className="text-ink-muted">Ingen jämförelseperiod</span>
+          <span className="text-ink-muted">{t('card.no_comparison')}</span>
         )}
       </div>
 

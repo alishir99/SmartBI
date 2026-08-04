@@ -5,18 +5,18 @@ import type { ComponentType } from 'react'
 import { useChatStore, type ChatTurn, type ToolChip } from '../lib/chat'
 import { describeToolCall, toolLabel } from '../lib/tooltext'
 import { formatNumber } from '../lib/format'
+import { t as translate, useT } from '../lib/i18n'
 import { AnswerCardView } from './AnswerCard'
 import { Button } from './Button'
 import { IconCheck, IconDatabase, IconPlug, IconSend, IconSparkle, IconStop } from './Icons'
 
-const EXAMPLES = [
-  'Vilka produkter säljer bäst i Stockholm?',
-  'Hur har försäljningen utvecklats per månad?',
-  'Hur går det för lurar?',
-  'Vad är vår marginal?',
-]
+// Deliberately generic: an example naming a Swedish county was a question nobody could ask
+// of a warehouse holding anything else. "What is our margin?" stays - it is the one that
+// demonstrates a refusal, which is the point of showing it.
+const EXAMPLE_KEYS = ['ask.best_sellers', 'ask.monthly_trend', 'ask.top_products', 'ask.margin']
 
 export function ChatPanel({ onClose }: { onClose?: () => void }) {
+  const t = useT()
   const turns = useChatStore((state) => state.turns)
   const pending = useChatStore((state) => state.pending)
   const ask = useChatStore((state) => state.ask)
@@ -44,18 +44,18 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
     <div className="flex h-full flex-col bg-surface">
       <header className="hairline-b flex items-center justify-between gap-3 px-5 py-4">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Fråga datan</h2>
-          <p className="mt-0.5 text-2xs text-ink-muted">Svar direkt ur din försäljningsdata</p>
+          <h2 className="text-sm font-semibold text-ink">{t('chat.title')}</h2>
+          <p className="mt-0.5 text-2xs text-ink-muted">{t('chat.subtitle')}</p>
         </div>
         <div className="flex items-center gap-1">
           {turns.length > 0 && (
             <Button variant="ghost" size="sm" onClick={reset}>
-              Rensa
+              {t('chat.clear')}
             </Button>
           )}
           {onClose && (
             <Button variant="ghost" size="sm" onClick={onClose} className="xl:hidden">
-              Stäng
+              {t('chat.close')}
             </Button>
           )}
         </div>
@@ -78,7 +78,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
       >
         <div className="flex items-end gap-2 rounded-card bg-surface-2 p-2 pl-3.5 ring-hairline focus-within:ring-1 focus-within:ring-accent">
           <label htmlFor="chat-input" className="sr-only">
-            Ställ en fråga om din försäljning
+            {t('chat.input_label')}
           </label>
           <textarea
             id="chat-input"
@@ -98,7 +98,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
                 submit(draft)
               }
             }}
-            placeholder="Fråga om din försäljning…"
+            placeholder={t('chat.placeholder')}
             className="max-h-[140px] flex-1 resize-none bg-transparent py-2 text-sm text-ink outline-none placeholder:text-ink-muted"
           />
           {pending ? (
@@ -106,7 +106,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
               variant="secondary"
               size="sm"
               iconOnly
-              aria-label="Avbryt"
+              aria-label={t('chat.stop')}
               icon={<IconStop className="h-3.5 w-3.5" />}
               onClick={cancel}
             />
@@ -116,7 +116,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
               variant="primary"
               size="sm"
               iconOnly
-              aria-label="Skicka"
+              aria-label={t('chat.send')}
               disabled={!draft.trim()}
               icon={<IconSend className="h-4 w-4" />}
             />
@@ -128,17 +128,15 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
 }
 
 function Welcome({ onPick }: { onPick: (question: string) => void }) {
+  const t = useT()
   return (
     <div className="animate-fade-in">
-      <p className="text-sm leading-relaxed text-ink-secondary">
-        Ställ frågan på svenska. Varje svar kommer med ett diagram som ritas ur raderna
-        frågan hämtade - aldrig ur en siffra modellen hittat på.
-      </p>
+      <p className="text-sm leading-relaxed text-ink-secondary">{t('chat.welcome')}</p>
       <p className="mt-5 text-2xs font-medium uppercase tracking-wide text-ink-muted">
-        Prova
+        {t('chat.try')}
       </p>
       <ul className="mt-2.5 space-y-2">
-        {EXAMPLES.map((example) => (
+        {EXAMPLE_KEYS.map((key) => t(key)).map((example) => (
           <li key={example}>
             <button
               type="button"
@@ -216,7 +214,8 @@ export function ToolChipRow({ chip }: { chip: ToolChip }) {
       </span>
       <span className="truncate">
         {describeToolCall(chip.tool, chip.args)}
-        {chip.rowCount !== null && ` · ${formatNumber(chip.rowCount)} rader`}
+        {chip.rowCount !== null &&
+          ` · ${translate('source.rows_count', { count: formatNumber(chip.rowCount) })}`}
       </span>
     </li>
   )
@@ -228,12 +227,12 @@ export function ToolChipRow({ chip }: { chip: ToolChip }) {
  * comes back is rows the model then has to put into words. Showing the round trip is the
  * difference between "the assistant knows" and "the assistant asked, and here is who answered".
  */
-const FLOW: { icon: ComponentType<{ className?: string }>; short: string; label: string }[] = [
-  { icon: IconSparkle, short: 'LLM', label: 'Modellen tolkar frågan och väljer verktyg' },
-  { icon: IconPlug, short: 'MCP', label: 'Anropet går genom MCP-servern' },
-  { icon: IconDatabase, short: 'DB', label: 'Databasen körs mot din behörighet' },
-  { icon: IconPlug, short: 'MCP', label: 'Raderna kommer tillbaka genom MCP' },
-  { icon: IconSparkle, short: 'LLM', label: 'Modellen formulerar svaret ur raderna' },
+const FLOW: { icon: ComponentType<{ className?: string }>; short: string; labelKey: string }[] = [
+  { icon: IconSparkle, short: 'LLM', labelKey: 'chat.step_llm' },
+  { icon: IconPlug, short: 'MCP', labelKey: 'chat.step_mcp' },
+  { icon: IconDatabase, short: 'DB', labelKey: 'chat.step_db' },
+  { icon: IconPlug, short: 'MCP', labelKey: 'chat.step_mcp_back' },
+  { icon: IconSparkle, short: 'LLM', labelKey: 'chat.step_llm_writes' },
 ]
 
 /** Which node the turn is on right now; `FLOW.length` once the whole chain has completed. */
@@ -247,6 +246,7 @@ export function flowStage(turn: ChatTurn): number {
 }
 
 function RequestFlow({ turn }: { turn: ChatTurn }) {
+  const t = useT()
   const stage = flowStage(turn)
   const finished = stage >= FLOW.length
 
@@ -254,7 +254,7 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
     <div className="rounded-tile bg-surface-2 px-3 py-2.5">
       {/* Capped: the rail is draggable up to 720 px, and five 28 px nodes stretched across all
           of it stop reading as one chain. */}
-      <ol className="flex max-w-xs items-center" aria-label="Så hanteras frågan">
+      <ol className="flex max-w-xs items-center" aria-label={t('chat.pipeline')}>
         {FLOW.map((step, index) => {
           const done = index < stage
           const active = index === stage
@@ -269,7 +269,7 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
                       ? 'bg-accent-soft text-accent'
                       : 'bg-surface text-ink-muted ring-hairline',
                 ].join(' ')}
-                title={step.label}
+                title={t(step.labelKey)}
               >
                 <step.icon className="h-3.5 w-3.5" />
                 {active && (
@@ -279,8 +279,8 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
                   />
                 )}
                 <span className="sr-only">
-                  {step.label}
-                  {done ? ' - klart' : active ? ' - pågår' : ''}
+                  {t(step.labelKey)}
+                  {done ? t('chat.step_done') : active ? t('chat.step_active') : ''}
                 </span>
               </span>
               {index < FLOW.length - 1 && (
@@ -297,8 +297,8 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
       </ol>
       <p className="mt-2 text-2xs text-ink-muted">
         {finished
-          ? `${FLOW.map((step) => step.short).join(' → ')} · svaret kommer från raderna, inte från modellens minne`
-          : FLOW[stage].label}
+          ? `${FLOW.map((step) => step.short).join(' → ')} · ${t('chat.flow_done')}`
+          : t(FLOW[stage].labelKey)}
       </p>
     </div>
   )

@@ -2,7 +2,8 @@
 
 import type { ChartSpec, Column, ColumnUnit, ResultRow } from '../types'
 import { MAX_SERIES, SERIES_MUTED, seriesColor } from './palette'
-import { moneyScale, truncateLabel, type MoneyScale } from '../lib/format'
+import { isCurrency, MISSING, moneyScale, truncateLabel, type MoneyScale } from '../lib/format'
+import { columnLabel, t } from '../lib/i18n'
 
 export type SeriesDescriptor = {
   /** The key to read off each prepared row. */
@@ -36,7 +37,12 @@ export type PreparedChart = {
   slices: SeriesDescriptor[]
 }
 
-const OTHER_LABEL = 'Övrigt'
+/**
+ * Read per call, not frozen at module load: the fold label appears in the legend and in the
+ * chart's own description, and a constant captured at import would stay in whichever language
+ * happened to load first.
+ */
+const otherLabel = () => t('card.other')
 
 const byKey = (columns: Column[], key: string | null): Column | null =>
   (key ? columns.find((column) => column.key === key) : null) ?? null
@@ -62,7 +68,7 @@ export function prepareChart(
     ...prepared,
     xColumn,
     unit,
-    scale: unit === 'SEK' ? moneyScale(max) : null,
+    scale: isCurrency(unit) ? moneyScale(max) : null,
     slices: spec.type === 'pie' ? sliceDescriptors(prepared.rows, xColumn, prepared.folded) : [],
   }
 }
@@ -75,11 +81,11 @@ function sliceDescriptors(
 ): SeriesDescriptor[] {
   const key = xColumn?.key
   return rows.map((row, index) => {
-    const label = key ? String(row[key] ?? '–') : `#${index + 1}`
+    const label = key ? String(row[key] ?? MISSING) : `#${index + 1}`
     return {
       key: label,
       label,
-      color: folded && label === OTHER_LABEL ? SERIES_MUTED : seriesColor(index),
+      color: folded && label === otherLabel() ? SERIES_MUTED : seriesColor(index),
     }
   })
 }
@@ -98,7 +104,9 @@ function direct(
     const muted = column.key.endsWith('_compare')
     return {
       key: column.key,
-      label: column.label,
+      // Translated off the column's key, falling back to whatever label the server sent: the
+      // semantic layer is monolingual by design, and the key is the stable half of it.
+      label: columnLabel(column.key, column.label),
       color: muted ? SERIES_MUTED : seriesColor(hue++),
       muted,
       line: column.key.endsWith(AVERAGE_SUFFIX),
@@ -131,7 +139,7 @@ function pivot(
 
   const totals = new Map<string, number>()
   for (const row of rows) {
-    const name = String(row[seriesKey] ?? '–')
+    const name = String(row[seriesKey] ?? MISSING)
     totals.set(name, (totals.get(name) ?? 0) + numeric(row[measureKey]))
   }
 
@@ -150,17 +158,18 @@ function pivot(
       buckets.set(x, bucket)
       xOrder.push(x)
     }
-    const name = String(row[seriesKey] ?? '–')
-    const target = keptSet.has(name) ? name : OTHER_LABEL
+    const name = String(row[seriesKey] ?? MISSING)
+    const target = keptSet.has(name) ? name : otherLabel()
     bucket[target] = numeric(bucket[target]) + numeric(row[measureKey])
   }
 
-  const names = folded ? [...kept, OTHER_LABEL] : kept
+  const other = otherLabel()
+  const names = folded ? [...kept, other] : kept
   const series = names.map((name, index) => ({
     key: name,
     label: name,
-    // "Övrigt" is never a real entity, so it never takes a categorical hue.
-    color: name === OTHER_LABEL && folded ? SERIES_MUTED : seriesColor(index),
+    // The fold bucket is never a real entity, so it never takes a categorical hue.
+    color: name === other && folded ? SERIES_MUTED : seriesColor(index),
   }))
 
   const pivoted = xOrder.map((x) => buckets.get(x) as ResultRow)
@@ -220,7 +229,7 @@ function applyLimit(
   }
 
   const tail = rows.slice(limit)
-  const other: ResultRow = { [xColumn.key]: OTHER_LABEL }
+  const other: ResultRow = { [xColumn.key]: otherLabel() }
   for (const descriptor of series) {
     other[descriptor.key] = tail.reduce((sum, row) => sum + numeric(row[descriptor.key]), 0)
   }

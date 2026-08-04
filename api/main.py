@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth, db, logs
+from . import auth, db, i18n, logs
 from .config import settings
 from .mcp_client import McpClient
 from .result_cache import ResultCache
@@ -64,6 +64,10 @@ async def request_context(request: Request, call_next):
     """
     request_id = request.headers.get("X-Request-Id") or logs.new_turn_id()
     logs.bind(request_id=request_id, path=request.url.path, method=request.method)
+    # Every string the server writes under this request picks its language from here. An
+    # explicit `?lang` wins over the browser's header, because the app has a language switcher
+    # and a user who flips it means it for this app, not for every site they visit.
+    i18n.use(request.query_params.get("lang") or request.headers.get("Accept-Language"))
     started = time.monotonic()
     try:
         response = await call_next(request)
@@ -117,6 +121,28 @@ app.include_router(chat.router)
 app.include_router(result.router)
 app.include_router(cards.router)
 app.include_router(shared.router)
+
+
+@app.get("/api/config", tags=["ops"])
+async def config() -> dict:
+    """How to present this deployment's numbers, and in which languages.
+
+    Unauthenticated on purpose: the login screen and the share-link page both need it, and
+    neither has a session. It carries no tenant data - only what currency the warehouse is
+    denominated in and how to format it, which is the same answer for everyone.
+    """
+    return {
+        "currency": settings.app_currency,
+        "locale": settings.app_locale,
+        # The deployment's default, deliberately not "the language of this request": the client
+        # owns the language (it has a switcher and a stored preference) and only needs to know
+        # what it falls back to. Naming it `language` invited reading `?lang=en` back out of it.
+        "default_language": i18n.resolve(None),
+        "languages": list(i18n.LANGUAGES),
+        # So the client can say "at least N characters" before a round trip, and say the same
+        # number the server will enforce. One rule, one source.
+        "password_min_length": settings.password_min_length,
+    }
 
 
 @app.get("/health", tags=["ops"])

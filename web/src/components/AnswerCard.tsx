@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import type { AnswerCard as Card, ResultResponse } from '../types'
 import { useResult } from '../lib/queries'
 import { formatPeriod } from '../lib/format'
+import { t as translate, useT } from '../lib/i18n'
 import { Chart } from '../charts/Chart'
 import { DataTable } from '../charts/DataTable'
 import { Skeleton } from './Skeleton'
@@ -43,6 +44,7 @@ type Props = {
 
 export function AnswerCardView({ card, onAsk, onDelete, savable = true, height = 280,
                                 preview = false, rows = null, showSource = false }: Props) {
+  const t = useT()
   const [view, setView] = useState<'chart' | 'table'>('chart')
   // Disabled when the rows are already here - the hook has to be called either way.
   const fetched = useResult(rows ? null : card.query_id)
@@ -63,7 +65,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           {preview && (
             <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-2xs text-ink-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-              Preliminärt - första resultatet i turen, svaret kan hämta fler
+              {t('card.preview')}
             </p>
           )}
         </div>
@@ -81,8 +83,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 
       {card.status === 'validation_failed' && (
         <Notice tone="warn" icon={<IconShield className="h-4 w-4" />}>
-          Svarstexten kunde inte verifieras mot datan och har därför utelämnats.
-          Diagrammet nedan kommer direkt från databasen.
+          {t('card.validation_failed')}
         </Notice>
       )}
 
@@ -112,7 +113,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           )}
           {result.isError && (
             <Notice tone="warn" icon={<IconInfo className="h-4 w-4" />}>
-              Kunde inte hämta underlaget till diagrammet. {String(result.error)}
+              {t('card.chart_data_failed')} {String(result.error)}
             </Notice>
           )}
           {result.data &&
@@ -134,8 +135,10 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
             ))}
           {result.data?.truncated && (
             <p className="mt-3 text-2xs text-ink-muted">
-              Visar de första {result.data.rows.length} raderna av {result.data.row_count}. Hela
-              underlaget finns i CSV-exporten.
+              {t('card.truncated', {
+                shown: result.data.rows.length,
+                total: result.data.row_count,
+              })}
             </p>
           )}
         </div>
@@ -148,7 +151,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 
       {card.status === 'clarify' && (
         <ChipRow
-          label="Menade du"
+          label={t('card.did_you_mean')}
           items={card.suggestions}
           onPick={onAsk}
           icon={<IconQuestion className="h-4 w-4" />}
@@ -157,7 +160,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 
       {card.status === 'cannot_answer' && (
         <ChipRow
-          label="Det här kan jag svara på"
+          label={t('card.can_answer')}
           items={card.suggestions}
           onPick={onAsk}
           icon={<IconInfo className="h-4 w-4" />}
@@ -187,13 +190,13 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 }
 
 function headingFor(card: Card): string {
-  if (card.status === 'clarify') return 'Behöver en precisering'
-  if (card.status === 'cannot_answer') return 'Det här har jag inte underlag för'
+  if (card.status === 'clarify') return translate('card.clarify')
+  if (card.status === 'cannot_answer') return translate('card.cannot_answer')
   // A question about the card, answered from what the card shows. It is not a data answer and
   // it is not a refusal, and labelling it as either was how "vad betyder den streckade linjen?"
   // got a correct explanation under the heading "Det här har jag inte underlag för".
-  if (card.status === 'explain') return 'Om diagrammet'
-  return 'Svar'
+  if (card.status === 'explain') return translate('card.explain')
+  return translate('card.answer')
 }
 
 /**
@@ -206,7 +209,12 @@ function subtitleFor(card: Card, modelSubtitle: string | null): string | null {
   const provenance = card.provenance
   if (!provenance) return modelSubtitle
   const period = formatPeriod(provenance.time_range)
-  if (!modelSubtitle) return `${period} · nettoförsäljning, ${provenance.vat}`
+  if (!modelSubtitle) {
+    return translate('card.subtitle_vat', {
+      period,
+      vat: translate(`vat.${provenance.vat}`),
+    })
+  }
   return modelSubtitle.includes(period) ? modelSubtitle : `${modelSubtitle} · ${period}`
 }
 
@@ -272,7 +280,7 @@ function EmptyState() {
   return (
     <div className="mt-6 flex flex-col items-center justify-center rounded-tile bg-surface-2 px-6 py-10 text-center">
       <IconEmptyChart className="h-8 w-8 text-ink-muted" />
-      <p className="mt-3 text-sm text-ink-secondary">Inget diagram för det här svaret.</p>
+      <p className="mt-3 text-sm text-ink-secondary">{translate('card.no_chart')}</p>
     </div>
   )
 }

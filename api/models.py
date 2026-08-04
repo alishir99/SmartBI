@@ -7,10 +7,14 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Role = Literal["supplier_viewer", "supplier_admin", "retail_analyst", "system_admin"]
+# A unit is either one of the three fixed kinds below or an ISO-4217 currency code - whichever
+# the warehouse is denominated in, which is a deployment setting and so cannot be a Literal.
 # "p.e." is percentage points, and it is a unit of its own rather than a flavour of "%": a share
 # moving 29,5 → 30,7 has risen 1,2 p.e., and letting the two share one unit is what let the model
-# call that "+1,2 procent" and pass validation (G2).
-Unit = Literal["SEK", "st", "%", "p.e."]
+# call that "+1,2 procent" and pass validation (G2). The client renders "st" and "p.e." in its
+# own language; the currency code it hands to Intl.
+Unit = str
+NON_CURRENCY_UNITS = ("st", "%", "p.e.")
 ChartType = Literal["line", "bar", "stacked_bar", "area", "pie", "kpi", "table"]
 # "explain" is an answer about the card rather than about the data: what a line means, how to
 # read the comparison, which period a series covers. It needs no query, and forcing it into
@@ -26,6 +30,51 @@ CardStatus = Literal["ok", "cannot_answer", "clarify", "validation_failed", "exp
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+# A ceiling as well as a floor. Argon2id at 19 MiB hashes whatever it is given, so an
+# unbounded password field is an unbounded amount of work per request - and nobody's real
+# password is 4 kB.
+_MAX_PASSWORD = 200
+
+
+class NewPassword(BaseModel):
+    """The one place a new password is validated, so every route that sets one agrees.
+
+    Length only, deliberately: composition rules ("one digit, one symbol") measurably push
+    people towards weaker and more predictable passwords, which is why NIST SP 800-63B dropped
+    them. The minimum is a setting so a deployment can raise it without a code change.
+    """
+
+    new_password: str = Field(max_length=_MAX_PASSWORD)
+
+    @field_validator("new_password")
+    @classmethod
+    def _long_enough(cls, value: str) -> str:
+        from .config import settings
+
+        if len(value) < settings.password_min_length:
+            raise ValueError(f"lösenordet måste vara minst {settings.password_min_length} "
+                             f"tecken")
+        return value
+
+
+class ChangePasswordRequest(NewPassword):
+    """Changing a password requires proving you know the current one.
+
+    Without this, a borrowed session - a shared laptop, an unlocked screen - becomes permanent
+    account takeover, because the attacker can lock the owner out.
+    """
+
+    current_password: str = Field(max_length=_MAX_PASSWORD)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(max_length=320)   # RFC 5321 maximum
+
+
+class ResetPasswordRequest(NewPassword):
+    token: str = Field(min_length=1, max_length=4000)
 
 
 class User(BaseModel):
@@ -87,8 +136,10 @@ class Provenance(BaseModel):
     tool: str
     source: str
     scope: str
-    currency: Literal["SEK"] = "SEK"
-    vat: str = "exkl. moms"
+    # ISO-4217, from the tool's own meta - so a card cannot claim a currency the query did not
+    # run in. `vat` is a code, not a phrase: the reader's language decides the words.
+    currency: str = "SEK"
+    vat: Literal["excl", "incl"] = "excl"
     time_range: TimeWindow
     compare_range: TimeWindow | None = None
     coverage: TimeWindow
@@ -177,6 +228,10 @@ MAX_HISTORY_CHARS = 24_000
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     history: list[ChatTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
+    # Carried in the body rather than left to the middleware's context: the answer is written
+    # inside a streaming generator, which is a different task from the one the middleware ran
+    # in, and a language that silently reverts halfway down a stream is worse than none.
+    lang: str | None = None
 
     @field_validator("history")
     @classmethod

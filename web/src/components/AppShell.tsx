@@ -11,8 +11,10 @@ import {
 import { navigate, type Route } from '../lib/router'
 import { useAuthStore } from '../lib/auth'
 import { useChatStore } from '../lib/chat'
-import { THEME_LABELS, useThemeStore } from '../lib/theme'
+import { themeLabel, useThemeStore } from '../lib/theme'
+import { LANGUAGES, LANGUAGE_NAMES, useLanguageStore, useT } from '../lib/i18n'
 import { ChatPanel } from './ChatPanel'
+import { ChangePassword } from './ChangePassword'
 import { Button } from './Button'
 import {
   IconGeo,
@@ -22,16 +24,19 @@ import {
   IconPin,
   IconProducts,
   IconSend,
+  IconShield,
   IconSun,
 } from './Icons'
 
-type NavItem = { route: Route; label: string; icon: ComponentType<{ className?: string }> }
+type NavItem = { route: Route; labelKey: string; icon: ComponentType<{ className?: string }> }
 
+// The route slugs stay Swedish: they are in every bookmark and every shared URL, and changing
+// them by language would make the same page two addresses that break each other's links.
 const NAV: NavItem[] = [
-  { route: 'oversikt', label: 'Översikt', icon: IconOverview },
-  { route: 'produkter', label: 'Produkter', icon: IconProducts },
-  { route: 'geografi', label: 'Geografi', icon: IconGeo },
-  { route: 'mina-vyer', label: 'Mina vyer', icon: IconPin },
+  { route: 'oversikt', labelKey: 'nav.overview', icon: IconOverview },
+  { route: 'produkter', labelKey: 'nav.products', icon: IconProducts },
+  { route: 'geografi', labelKey: 'nav.geography', icon: IconGeo },
+  { route: 'mina-vyer', labelKey: 'nav.saved', icon: IconPin },
 ]
 
 /** Tailwind's default `xl`, where the chat rail becomes permanent. */
@@ -77,6 +82,7 @@ function useRailWidth(): [number, (px: number) => void] {
 }
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
+  const t = useT()
   const [chatOpen, setChatOpen] = useState(false)
   const [railWidth, setRailWidth] = useRailWidth()
   const turnCount = useChatStore((state) => state.turns.length)
@@ -130,7 +136,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Fråga datan"
+            aria-label={t('shell.ask')}
             className="animate-fade-in absolute right-0 top-0 h-full w-full max-w-[26rem] shadow-pop"
           >
             <ChatPanel onClose={() => setChatOpen(false)} />
@@ -145,7 +151,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         onClick={() => setChatOpen(true)}
         className="fixed bottom-6 right-6 z-30 shadow-lift xl:hidden"
       >
-        Fråga datan
+        {t('shell.ask')}
       </Button>
     </div>
   )
@@ -156,11 +162,12 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
  * works from the keyboard too rather than being a mouse-only affordance.
  */
 function RailHandle({ width, onResize }: { width: number; onResize: (px: number) => void }) {
+  const t = useT()
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Ändra chattens bredd"
+      aria-label={t('shell.resize_chat')}
       aria-valuenow={width}
       aria-valuemin={RAIL_MIN}
       aria-valuemax={RAIL_MAX}
@@ -187,6 +194,7 @@ function RailHandle({ width, onResize }: { width: number; onResize: (px: number)
 
 /** Below `md` the sidebar is gone, so navigation, identity and theme move up here. */
 function MobileBar({ route }: { route: Route }) {
+  const t = useT()
   const user = useAuthStore((state) => state.user)
   const signOut = useAuthStore((state) => state.signOut)
   const theme = useThemeStore((state) => state.theme)
@@ -206,8 +214,8 @@ function MobileBar({ route }: { route: Route }) {
             variant="ghost"
             size="sm"
             iconOnly
-            aria-label={THEME_LABELS[theme]}
-            title={THEME_LABELS[theme]}
+            aria-label={themeLabel(theme)}
+            title={themeLabel(theme)}
             icon={
               theme === 'dark' ? <IconMoon className="h-4 w-4" /> : <IconSun className="h-4 w-4" />
             }
@@ -243,7 +251,7 @@ function MobileBar({ route }: { route: Route }) {
                   }`}
                 >
                   <item.icon className={`h-3.5 w-3.5 ${active ? 'text-accent' : 'text-ink-muted'}`} />
-                  {item.label}
+                  {t(item.labelKey)}
                 </a>
               </li>
             )
@@ -255,6 +263,8 @@ function MobileBar({ route }: { route: Route }) {
 }
 
 function Sidebar({ route }: { route: Route }) {
+  const t = useT()
+  const [changingPassword, setChangingPassword] = useState(false)
   const user = useAuthStore((state) => state.user)
   const signOut = useAuthStore((state) => state.signOut)
   const theme = useThemeStore((state) => state.theme)
@@ -262,7 +272,7 @@ function Sidebar({ route }: { route: Route }) {
 
   return (
     <nav
-      aria-label="Huvudmeny"
+      aria-label={t('shell.menu')}
       className="hairline-r sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between px-4 py-6 md:flex"
     >
       <div>
@@ -292,7 +302,7 @@ function Sidebar({ route }: { route: Route }) {
                   }`}
                 >
                   <item.icon className={`h-4 w-4 ${active ? 'text-accent' : 'text-ink-muted'}`} />
-                  {item.label}
+                  {t(item.labelKey)}
                 </a>
               </li>
             )
@@ -304,9 +314,19 @@ function Sidebar({ route }: { route: Route }) {
         {user && (
           <div className="px-3 pb-2">
             <p className="truncate text-xs font-medium text-ink">{user.display_name}</p>
-            <p className="truncate text-2xs text-ink-muted">{roleLabel(user.role)}</p>
+            <p className="truncate text-2xs text-ink-muted">{roleLabel(user.role, t)}</p>
           </div>
         )}
+        <LanguagePicker />
+        <button
+          type="button"
+          onClick={() => setChangingPassword(true)}
+          className="flex w-full items-center gap-3 rounded-tile px-3 py-2 text-sm text-ink-secondary transition-colors duration-200 hover:bg-surface-2 hover:text-ink"
+        >
+          <IconShield className="h-4 w-4 text-ink-muted" />
+          {t('password.change')}
+        </button>
+        {changingPassword && <ChangePassword onClose={() => setChangingPassword(false)} />}
         <button
           type="button"
           onClick={cycle}
@@ -317,7 +337,7 @@ function Sidebar({ route }: { route: Route }) {
           ) : (
             <IconSun className="h-4 w-4 text-ink-muted" />
           )}
-          {THEME_LABELS[theme]}
+          {themeLabel(theme)}
         </button>
         <button
           type="button"
@@ -325,20 +345,52 @@ function Sidebar({ route }: { route: Route }) {
           className="flex w-full items-center gap-3 rounded-tile px-3 py-2 text-sm text-ink-secondary transition-colors duration-200 hover:bg-surface-2 hover:text-ink"
         >
           <IconLogout className="h-4 w-4 text-ink-muted" />
-          Logga ut
+          {t('shell.sign_out')}
         </button>
       </div>
     </nav>
   )
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  supplier_viewer: 'Leverantör · läsare',
-  supplier_admin: 'Leverantör · administratör',
-  retail_analyst: 'Handelsanalytiker',
-  system_admin: 'Systemadministratör',
+function roleLabel(role: string, t: (key: string) => string): string {
+  const label = t(`role.${role}`)
+  return label === `role.${role}` ? role : label
 }
 
-function roleLabel(role: string): string {
-  return ROLE_LABELS[role] ?? role
+/**
+ * The language switcher.
+ *
+ * Two languages, so a segmented control rather than a dropdown: the choice and its current
+ * value are both visible without opening anything, and it sits next to the theme toggle
+ * because they are the same kind of setting.
+ */
+function LanguagePicker() {
+  const t = useT()
+  const lang = useLanguageStore((state) => state.lang)
+  const setLanguage = useLanguageStore((state) => state.setLanguage)
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t('shell.language')}
+      className="mx-3 mb-1 inline-flex gap-0.5 rounded-pill bg-surface-2 p-0.5"
+    >
+      {LANGUAGES.map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={lang === option}
+          onClick={() => setLanguage(option)}
+          className={`rounded-pill px-3 py-1 text-2xs font-medium transition-colors duration-200 ${
+            lang === option
+              ? 'bg-surface text-ink shadow-card'
+              : 'text-ink-secondary hover:text-ink'
+          }`}
+        >
+          {LANGUAGE_NAMES[option]}
+        </button>
+      ))}
+    </div>
+  )
 }

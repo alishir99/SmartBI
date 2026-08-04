@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..config import settings
+
+# Every money measure carries this rather than a literal, so pointing the warehouse at another
+# market is one setting and not a sweep through the registry. The *key* still says `_sek`: it is
+# an identifier the compiler, the eval suite and every saved card resolve against, and renaming
+# it would change nothing a user sees.
+CURRENCY = settings.app_currency
+
 ROLLUP = "rollup"
 FACT = "fact"
 
@@ -95,7 +103,7 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
               expr={ROLLUP: "top.name", FACT: "top.name"},
               joins={ROLLUP: ("product", "subcategory", "category"),
                      FACT: ("product", "subcategory", "category")}),
-    Dimension("region", "Län", "text",
+    Dimension("region", "Region", "text",
               expr={ROLLUP: "s.region", FACT: "st.region"},
               joins={FACT: ("store",)}),
     Dimension("channel", "Kanal", "text",
@@ -132,19 +140,19 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
 
 
 MEASURES: dict[str, Measure] = {m.key: m for m in [
-    Measure("net_sales_sek", "Nettoförsäljning", "SEK",
+    Measure("net_sales_sek", "Nettoförsäljning", CURRENCY,
             expr={ROLLUP: "SUM(s.net_sales_sek)", FACT: "SUM(f.net_amount_sek)"},
             description="Försäljning efter rabatt och returer, exkl. moms."),
-    Measure("gross_sales_sek", "Bruttoförsäljning", "SEK",
+    Measure("gross_sales_sek", "Bruttoförsäljning", CURRENCY,
             expr={ROLLUP: "SUM(s.gross_sales_sek)", FACT: "SUM(f.gross_amount_sek)"},
             description="Försäljning före rabatt, exkl. moms."),
-    Measure("discount_sek", "Rabatt", "SEK",
+    Measure("discount_sek", "Rabatt", CURRENCY,
             expr={ROLLUP: "SUM(s.discount_sek)", FACT: "SUM(f.discount_amount_sek)"},
-            description="Total rabatt i kronor."),
+            description=f"Total rabatt i {CURRENCY}."),
     Measure("units", "Sålda enheter", "st",
             expr={ROLLUP: "SUM(s.qty)", FACT: "SUM(f.quantity)"},
             description="Antal sålda enheter, netto efter returer."),
-    Measure("avg_price_sek", "Snittpris", "SEK",
+    Measure("avg_price_sek", "Snittpris", CURRENCY,
             expr={ROLLUP: "SUM(s.net_sales_sek) / NULLIF(SUM(s.qty), 0)",
                   FACT: "SUM(f.net_amount_sek) / NULLIF(SUM(f.quantity), 0)"},
             description="Nettoförsäljning delat med antal enheter.", additive=False),
@@ -169,7 +177,7 @@ FILTER_FIELDS: dict[str, dict[str, str]] = {
                      "note": "Accepterar både kategori och underkategori; en "
                              "huvudkategori expanderas till sina underkategorier."},
     "store_ids": {"label": "Butiker", "type": "int[]"},
-    "region": {"label": "Län", "type": "text[]"},
+    "region": {"label": "Region", "type": "text[]"},
     "channel": {"label": "Kanal", "type": "text[]"},
 }
 

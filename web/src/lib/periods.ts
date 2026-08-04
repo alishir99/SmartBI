@@ -1,19 +1,33 @@
-/** The period windows the dashboard offers. */
+/** The period windows the dashboard offers. Keys only - the labels live in lib/i18n.ts. */
+
+import { t } from './i18n'
 
 export const DEFAULT_PERIOD = 'last_12_months'
 
+export const PERIOD_KEYS = [
+  'last_7_days',
+  'last_30_days',
+  'last_90_days',
+  'last_month',
+  'ytd',
+  'last_12_months',
+  'all_time',
+] as const
+
+export type PeriodKey = (typeof PERIOD_KEYS)[number]
+
 export type PeriodOption = { key: string; label: string; short: string }
 
-export const PERIOD_OPTIONS: PeriodOption[] = [
-  { key: 'last_7_days', label: 'Senaste veckan', short: 'Vecka' },
-  { key: 'last_30_days', label: 'Senaste 30 dagarna', short: '30 dgr' },
-  { key: 'last_90_days', label: 'Senaste kvartalet', short: 'Kvartal' },
-  { key: 'last_month', label: 'Förra månaden', short: 'Månad' },
-  { key: 'ytd', label: 'Hittills i år', short: 'I år' },
-  { key: 'last_12_months', label: 'Senaste 12 mån', short: '12 mån' },
-  { key: 'all_time', label: 'Hela perioden', short: 'Allt' },
-]
+/** Built per call rather than at module load, so switching language relabels the chips. */
+export function periodOptions(): PeriodOption[] {
+  return PERIOD_KEYS.map((key) => ({
+    key,
+    label: t(`period.${key}`),
+    short: t(`period.${key}.short`),
+  }))
+}
 
 export function periodLabel(key: string): string {
-  return PERIOD_OPTIONS.find((option) => option.key === key)?.label ?? key
+  const label = t(`period.${key}`)
+  return label === `period.${key}` ? key : label
 }

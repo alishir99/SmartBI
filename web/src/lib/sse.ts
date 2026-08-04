@@ -3,6 +3,8 @@
  * request headers, so it cannot send `Authorization: Bearer <token>`, and it cannot POST a body.
  */
 
+import { t } from './i18n'
+
 export type SseOptions<TEvent> = {
   token: string | null
   body: unknown
@@ -44,7 +46,7 @@ export async function streamSse<TEvent>(url: string, options: SseOptions<TEvent>
     }
     throw new SseHttpError(response.status, detail)
   }
-  if (!response.body) throw new SseHttpError(response.status, 'Svaret innehöll ingen ström.')
+  if (!response.body) throw new SseHttpError(response.status, t('chat.no_stream'))
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

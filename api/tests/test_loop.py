@@ -360,7 +360,7 @@ def test_the_cached_prefix_is_only_sent_to_anthropic(monkeypatch):
     blocks = agent_loop._system()
     assert isinstance(blocks, list)
     assert blocks[0]["cache_control"] == {"type": "ephemeral"}
-    assert blocks[0]["text"] == agent_loop.SYSTEM
+    assert blocks[0]["text"] == agent_loop.system_prompt("sv")
 
 
 @pytest.mark.asyncio

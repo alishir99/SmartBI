@@ -1,16 +1,11 @@
-/** Turns a streamed tool_call into the short Swedish line shown on a progress chip. */
+/** Turns a streamed tool_call into the short line shown on a progress chip. */
 
-// The tool's own name is an internal identifier; "query_sales" on a retailer's screen is noise.
-const TOOL_LABELS: Record<string, string> = {
-  get_capabilities: 'Datakatalog',
-  resolve_entities: 'Uppslag',
-  query_sales: 'Försäljning',
-  query_market_share: 'Marknadsandel',
-  dashboard: 'Översikt',
-}
+import { columnLabel, t } from './i18n'
 
+/** The tool's own name is an internal identifier; "query_sales" on a retailer's screen is noise. */
 export function toolLabel(tool: string): string {
-  return TOOL_LABELS[tool] ?? tool
+  const label = t(`tool.${tool}`)
+  return label === `tool.${tool}` ? tool : label
 }
 
 function firstString(value: unknown): string | null {
@@ -22,19 +17,19 @@ function firstString(value: unknown): string | null {
   return null
 }
 
-/** `hämtar Stockholms län…` */
+/** `hämtar Stockholms län…` / `fetching Stockholms län…` */
 export function describeToolCall(tool: string, args: Record<string, unknown>): string {
   switch (tool) {
     case 'get_capabilities':
-      return 'läser vad datan innehåller'
+      return t('tool.doing.capabilities')
 
     case 'resolve_entities': {
       const text = firstString(args.text)
-      return text ? `slår upp "${text}"` : 'slår upp entiteter'
+      return text ? t('tool.doing.resolve', { text }) : t('tool.doing.resolve_generic')
     }
 
     case 'query_market_share':
-      return 'hämtar andel av kategori'
+      return t('tool.doing.market_share')
 
     case 'query_sales':
     default: {
@@ -43,27 +38,20 @@ export function describeToolCall(tool: string, args: Record<string, unknown>): s
       const channel = firstString(filters.channel)
       const dimensions = Array.isArray(args.dimensions) ? (args.dimensions as string[]) : []
       const scope = region ?? (channel ? channelLabel(channel) : null)
-      const grain = dimensions.length ? DIMENSION_LABELS[dimensions[0]] ?? dimensions[0] : null
+      // The dimension names come off the same key table the chart axes use, so a chip and the
+      // axis under it cannot disagree about what "region" is called.
+      const grain = dimensions.length
+        ? t('tool.per', { dimension: columnLabel(dimensions[0], dimensions[0]).toLowerCase() })
+        : null
 
-      if (scope && grain) return `hämtar ${grain} i ${scope}`
-      if (scope) return `hämtar ${scope}`
-      if (grain) return `hämtar ${grain}`
-      return 'hämtar försäljning'
+      if (scope && grain) return t('tool.doing.scoped', { grain, scope })
+      if (scope) return t('tool.doing.scope_only', { scope })
+      if (grain) return t('tool.doing.grain_only', { grain })
+      return t('tool.doing.sales')
     }
   }
 }
 
 function channelLabel(channel: string): string {
-  return channel === 'online' ? 'onlinekanalen' : 'fysiska butiker'
-}
-
-const DIMENSION_LABELS: Record<string, string> = {
-  month: 'per månad',
-  iso_week: 'per vecka',
-  day: 'per dag',
-  product: 'per produkt',
-  category: 'per kategori',
-  region: 'per län',
-  store: 'per butik',
-  channel: 'per kanal',
+  return channel === 'online' ? t('channel.online') : t('channel.physical')
 }

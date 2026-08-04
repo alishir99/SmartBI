@@ -217,7 +217,10 @@ describe('axis scale', () => {
         ['B', 1_000],
       ]),
     )
-    expect(prepared.scale).toEqual({ divisor: 1_000_000, unit: 'Mkr', decimals: 1 })
+    // The unit is built from `Intl`: the locale's own compact marker for a million plus its
+    // own symbol for whatever currency the deployment holds. Hardcoding "Mkr" was the same
+    // assumption as hardcoding kronor.
+    expect(prepared.scale).toEqual({ divisor: 1_000_000, unit: 'mn kr', decimals: 1 })
   })
 
   it('leaves non-money measures unscaled', () => {

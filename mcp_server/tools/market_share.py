@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from .. import db
+from ..config import settings
 from ..semantic.compiler import Params, resolve_time_range, shift_range
 from ..tenant import TenantContext
 from .sales import _jsonable, scope_label
@@ -173,8 +174,8 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
             "tool": "query_market_share",
             "source": "mv_brand_monthly + mv_category_daily (aggregat)",
             "scope": scope_label(tenant.supplier_id),
-            "currency": "SEK",
-            "vat": "exkl. moms",
+            "currency": settings.app_currency,
+            "vat": settings.vat_code,
             # The reported range is the one actually measured, not the one asked for.
             "time_range": {
                 "from": window[0].isoformat(),

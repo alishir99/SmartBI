@@ -2,14 +2,14 @@
 
 import type { ReactNode } from 'react'
 import { ApiError } from '../lib/api'
+import { useT } from '../lib/i18n'
 import { Button } from './Button'
 import { IconInfo } from './Icons'
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const t = useT()
   const message =
-    error instanceof ApiError || error instanceof Error
-      ? error.message
-      : 'Något gick fel när datan skulle hämtas.'
+    error instanceof ApiError || error instanceof Error ? error.message : t('error.generic')
 
   return (
     <div className="rounded-card bg-surface p-8 text-center shadow-card ring-hairline">
@@ -17,7 +17,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
       <p className="mt-3 text-sm text-ink">{message}</p>
       {onRetry && (
         <Button variant="secondary" size="sm" className="mt-5" onClick={onRetry}>
-          Försök igen
+          {t('card.retry')}
         </Button>
       )}
     </div>

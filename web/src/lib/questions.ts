@@ -5,48 +5,50 @@
  */
 
 import type { Column, Kpi } from '../types'
-import { formatCell, formatKpiValue, formatNumber } from './format'
+import { formatCell, formatKpiValue, formatNumber, MISSING } from './format'
+import { t } from './i18n'
 
 /** "vs samma period förra året" is a chip label; a question needs it as a clause. */
 function comparisonClause(deltaLabel: string | null): string {
   if (!deltaLabel) return ''
-  return ` ${deltaLabel.replace(/^vs\s+/, 'jämfört med ')}`
+  // The label is server-written and opens with "vs". Strip that and the rest reads as a clause
+  // rather than as a chip glued onto one.
+  return t('ask.compared_with', { period: deltaLabel.replace(/^vs\s+/i, '') })
 }
 
 /**
- * A question needs the definite form - "varför ökade försäljningen", not "varför ökade
- * försäljning". Four keys, written out, rather than guessing Swedish morphology from the label.
+ * The question a KPI tile asks when you click its number.
+ *
+ * The subject is looked up per measure rather than taken from the tile's label, because a
+ * question needs the definite form: "varför ökade försäljningen", not "varför ökade
+ * försäljning". Four keys written out beats guessing any language's morphology.
  */
-const SUBJECT: Record<string, string> = {
-  net_sales_sek: 'försäljningen',
-  category_share_pct: 'andelen av kategorin',
-  units: 'antalet sålda enheter',
-  avg_price_sek: 'snittpriset',
-}
-
-/** The question a KPI tile asks when you click its number. */
 export function kpiQuestion(kpi: Kpi): string {
-  const subject = SUBJECT[kpi.key] ?? kpi.label.toLowerCase()
+  const key = `ask.measure.${kpi.key}`
+  const translated = t(key)
+  const subject = translated === key ? kpi.label.toLowerCase() : translated
   const value = formatKpiValue(kpi.value, kpi.unit)
 
   if (kpi.delta_pct === null || Math.abs(kpi.delta_pct) < 0.05) {
-    return `Vad ligger bakom ${subject} på ${value} den här perioden?`
+    return t('ask.what_drove', { subject, value })
   }
 
-  const rose = kpi.delta_pct > 0
-  const verb = rose ? 'ökade' : 'minskade'
   // A change in a percentage measure is stated in percentage points, the same distinction the
-  // tile itself makes - asking "varför ökade andelen 4 %" about a 4 p.e. move is a wrong question.
-  const unit = kpi.unit === '%' ? 'procentenheter' : '%'
-  const magnitude = `${formatNumber(Math.abs(kpi.delta_pct), 1)} ${unit}`
-
-  return `Varför ${verb} ${subject} ${magnitude}${comparisonClause(kpi.delta_label)}?`
+  // tile itself makes - asking "varför ökade andelen 4 %" about a 4 p.e. move is a wrong
+  // question.
+  const unit = kpi.unit === '%' ? t('unit.percentage_points_long') : t('unit.percent')
+  return t('ask.why_changed', {
+    measure: subject,
+    direction: kpi.delta_pct > 0 ? t('ask.rose') : t('ask.fell'),
+    magnitude: `${formatNumber(Math.abs(kpi.delta_pct), 1)} ${unit}`,
+    comparison: comparisonClause(kpi.delta_label),
+  })
 }
 
 /** The question a chart mark or a table row asks: what is behind this one value. */
 export function pointQuestion(column: Column | null, value: string): string {
   const label = column ? formatCell(value, column) : value
-  if (!label || label === '–') return 'Berätta mer om den här perioden.'
-  if (column?.type === 'date') return `Vad hände i ${label}?`
-  return `Berätta mer om ${label}.`
+  if (!label || label === MISSING) return t('ask.tell_me_more')
+  if (column?.type === 'date') return t('ask.what_happened', { period: label })
+  return t('ask.tell_me_about', { subject: label })
 }

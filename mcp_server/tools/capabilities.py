@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .. import db
+from ..config import settings
 from ..semantic.model import (
     CHANNELS,
     DIMENSIONS,
@@ -28,8 +29,13 @@ async def get_capabilities(tenant: TenantContext) -> dict:
         categories = await connection.fetch(
             "SELECT category_id, name, level, parent_id FROM dim_category "
             "ORDER BY level, name")
+        # Coordinates come along because they are the only thing that lets a map be drawn for
+        # a warehouse whose regions nobody hardcoded. The mean store position is a good enough
+        # centroid for a proportional-symbol map, and `NULL` where a region has no geocoded
+        # store is an honest answer the client can hide a map tab over.
         regions = await connection.fetch(
-            "SELECT DISTINCT region FROM dim_store ORDER BY region")
+            "SELECT region, AVG(lat) AS lat, AVG(lon) AS lon "
+            "  FROM dim_store GROUP BY region ORDER BY region")
         # Calendar, not sales: dim_date is ~730 rows and carries no tenant data, so this is a
         # dimension read like the four above rather than a trip to the fact table. Each
         # campaign_id is one contiguous run of days, so MIN/MAX is the window.
@@ -61,6 +67,12 @@ async def get_capabilities(tenant: TenantContext) -> dict:
                   **({"allowed_values": CHANNELS} if key == "channel" else {})}
             for key, meta in FILTER_FIELDS.items()
         },
+        # Name plus centroid. The client's map projects whatever comes back and fits its own
+        # bounds to it, so this works for counties, states, prefectures or nothing at all.
+        "regions": [{"name": r["region"],
+                     "lat": float(r["lat"]) if r["lat"] is not None else None,
+                     "lon": float(r["lon"]) if r["lon"] is not None else None}
+                    for r in regions],
         "categories": [
             {"category_id": r["category_id"], "name": r["name"],
              "level": r["level"], "parent_id": r["parent_id"]}
@@ -83,11 +95,11 @@ async def get_capabilities(tenant: TenantContext) -> dict:
                               "ut. Namnen finns inte i datan.",
         },
         "units": {
-            "currency": "SEK",
-            "vat": "exkl. moms",
-            "locale": "sv-SE",
-            "note": "Alla belopp är i svenska kronor exklusive moms. Nettoförsäljning är "
-                    "efter rabatt och efter returer.",
+            "currency": settings.app_currency,
+            "vat": settings.vat_code,
+            "note": f"Alla belopp är i {settings.app_currency} "
+                    f"{'inklusive' if settings.prices_include_vat else 'exklusive'} moms. "
+                    f"Nettoförsäljning är efter rabatt och efter returer.",
         },
         "limits": {
             "max_rows": MAX_ROWS,

@@ -17,17 +17,14 @@ import {
   formatPeriod,
   formatTimestamp,
 } from '../lib/format'
+import { t as translate, useT } from '../lib/i18n'
 import { IconChevronDown, IconDatabase } from './Icons'
 
 /** What each tool read, said as a business fact rather than as a table name. */
-const SOURCE_WORDS: Record<string, string> = {
-  query_sales: 'Din egen försäljning',
-  query_market_share: 'Din försäljning och kategorins totaler',
-  dashboard: 'Din egen försäljning',
-}
-
 function sourceWords(tool: string): string {
-  return SOURCE_WORDS[tool] ?? 'Din egen försäljning'
+  return tool === 'query_market_share'
+    ? translate('source.market_share')
+    : translate('source.own_sales')
 }
 
 type Props = {
@@ -40,6 +37,7 @@ type Props = {
 }
 
 export function SourceChip({ provenance, sources, claims, primaryQueryId }: Props) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const panelId = useId()
 
@@ -60,19 +58,19 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
         <span className="truncate">
           {multiple ? (
             <>
-              <span className="font-medium text-ink">Källor</span>
+              <span className="font-medium text-ink">{t('source.plural')}</span>
               <Dot />
-              {records.length} hämtningar
+              {t('source.fetches', { count: records.length })}
             </>
           ) : (
             <>
-              <span className="font-medium text-ink">Källa</span>
+              <span className="font-medium text-ink">{t('source.singular')}</span>
               <Dot />
               {sourceWords(provenance.tool)}
               <Dot />
               {formatPeriod(provenance.time_range)}
               <Dot />
-              {formatNumber(provenance.row_count)} rader
+              {t('source.rows_count', { count: formatNumber(provenance.row_count) })}
             </>
           )}
           <Dot />
@@ -87,11 +85,7 @@ export function SourceChip({ provenance, sources, claims, primaryQueryId }: Prop
 
       {open && (
         <div id={panelId} className="animate-fade-in mt-3 space-y-3">
-          <p className="text-2xs leading-relaxed text-ink-muted">
-            Talen i svaret kommer härifrån. Språkmodellen väljer vilken fråga som ställs och hur
-            svaret formuleras, men värdena hämtas ur din data och räknas fram innan texten
-            skrivs.
-          </p>
+          <p className="text-2xs leading-relaxed text-ink-muted">{t('source.explainer')}</p>
           {multiple ? (
             records.map((record) => (
               <SourcePanel
@@ -119,6 +113,7 @@ function SourcePanel({
   isPrimary?: boolean
   claims?: Claim[]
 }) {
+  const t = useT()
   const filters = describeFilters(provenance.filters_applied)
 
   return (
@@ -126,29 +121,37 @@ function SourcePanel({
       {isPrimary && (
         <div className="sm:col-span-2">
           <span className="rounded-pill bg-surface px-2 py-0.5 text-ink-secondary ring-hairline">
-            Diagrammet ritas från den här
+            {t('source.is_charted')}
           </span>
         </div>
       )}
-      <Row label="Underlag" value={sourceWords(provenance.tool)} />
-      <Row label="Period" value={formatPeriod(provenance.time_range)} />
+      <Row label={t('source.basis')} value={sourceWords(provenance.tool)} />
+      <Row label={t('source.period')} value={formatPeriod(provenance.time_range)} />
       {provenance.compare_range && (
-        <Row label="Jämförelseperiod" value={formatPeriod(provenance.compare_range)} />
+        <Row label={t('source.compare_period')} value={formatPeriod(provenance.compare_range)} />
       )}
-      <Row label="Datatäckning" value={formatPeriod(provenance.coverage)} />
-      <Row label="Valuta" value={`${provenance.currency}, ${provenance.vat}`} />
+      <Row label={t('source.coverage')} value={formatPeriod(provenance.coverage)} />
+      {/* The currency code comes off the result's own provenance, not off a client-side
+          assumption: a card is allowed to say which currency it was computed in, and only the
+          words around it are translated. */}
       <Row
-        label="Rader"
-        value={`${formatNumber(provenance.row_count)}${provenance.truncated ? ' (trunkerad)' : ''}`}
+        label={t('source.currency')}
+        value={`${provenance.currency}, ${t(`vat.${provenance.vat}`)}`}
       />
-      {filters && <Row label="Urval" value={filters} span />}
-      <Row label="Hämtat" value={formatTimestamp(provenance.executed_at)} span />
+      <Row
+        label={t('source.rows')}
+        value={`${formatNumber(provenance.row_count)}${
+          provenance.truncated ? t('source.truncated') : ''
+        }`}
+      />
+      {filters && <Row label={t('source.selection')} value={filters} span />}
+      <Row label={t('source.fetched')} value={formatTimestamp(provenance.executed_at)} span />
 
       {/* The sentence this whole feature exists to be able to say. Only rendered when the
           card carries attributions, so a saved card from before them is unaffected. */}
       {claims && claims.length > 0 && (
         <div className="sm:col-span-2">
-          <dt className="mb-1.5 text-ink-muted">Siffror i texten som kommer härifrån</dt>
+          <dt className="mb-1.5 text-ink-muted">{t('source.claims')}</dt>
           <dd className="flex flex-wrap gap-1.5">
             {claims.map((claim, index) => (
               <span

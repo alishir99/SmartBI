@@ -1,8 +1,8 @@
 # Solvigo Insights - AI-native försäljningsdashboard
 
-"BI utan BI-avdelning" för leverantörer i svensk detaljhandel. En leverantör loggar in och
+"BI utan BI-avdelning" för leverantörer i detaljhandeln. En leverantör loggar in och
 landar på en **färdig dashboard** - inte en tom chattruta - och kan sedan fördjupa sig genom
-att fråga sin data på vanlig svenska. Både dashboarden och chatten läser data på exakt samma
+att fråga sin data på vanligt språk, svenska eller engelska. Både dashboarden och chatten läser data på exakt samma
 väg: genom en MCP-server.
 
 > **Kärnpåståendet:** siffrorna du ser har aldrig passerat språkmodellen.
@@ -391,6 +391,63 @@ Vad det kostar, sagt rakt ut:
   radförhandsvisning, så jag kan inte hävda dataresidens. För produktion i EU pekar man om
   `base_url`.
 
+### 7. Språk och marknad är inställningar, inte antaganden
+
+Appen var svensk och SEK rakt igenom: `sv-SE` hårdkodat i formateraren, en kr/tkr/Mkr-stege,
+två månadsnamnsarrayer, en tabell över Sveriges 21 län med koordinater och en handritad
+kustlinje. Allt det är nu tre inställningar och `Intl`.
+
+```bash
+APP_CURRENCY=EUR   # ISO-4217. Vad lagret är denominerat i.
+APP_LOCALE=de-DE   # BCP-47. Gruppering, decimaler, månadsnamn.
+APP_LANGUAGE=en    # Standardspråk; UI:t har en växlare och skickar sitt val per anrop.
+```
+
+**Valutan följer datan, inte klienten.** `APP_CURRENCY` sätter `unit` på varje penningmått i
+det semantiska lagret, verktygen stämplar den i `meta`, och den följer med hela vägen ut i
+`provenance.currency` och kolumnernas `unit`. Klienten läser koden och lämnar den till `Intl` -
+den vet aldrig om den visar kronor, euro eller yen. Nyckeln heter fortfarande `net_sales_sek`:
+det är en identifierare som kompilatorn, evalen och varje sparat kort slår upp mot, och att
+byta namn på den syns inte för någon.
+
+**Formatering är `Intl`, inte tabeller.** Det tog bort ~40 rader handskriven skalning och båda
+månadsarrayerna, och gav rätt konventioner för marknader ingen här hade gissat: var
+valutasymbolen står, vilka språk sätter punkt efter månadsförkortningen (CLDR:s svenska är
+"nov." och "juli", inte "nov" och "jul" - det gamla arrayet var en förenkling som råkade vara
+svensk). Två ställen behövde omdöme:
+
+- **En skala per axel, inte per värde.** `notation: 'compact'` är det uppenbara `Intl`-svaret
+  och fel: det skalar varje tick för sig och sätter "900 k" rakt under "1,2 mn" på samma axel.
+  Så magnituden väljs en gång för hela diagrammet, och bara *etiketten* kommer från `Intl`.
+- **Japanska grupperar i myriader.** `Intl` skriver 1 000 000 som "100万", inte som
+  "1 <suffix>". Att lyfta ut suffixet och para det med en miljondelare hade märkt axeln 万
+  medan den delats med hundra gånger det. Heltalsdelen kontrolleras därför, och en lokal som
+  inte kan skriva delaren som ett ensamt 1 får ingen förkortning alls i stället för en fel.
+
+**Validatorn läser svarets språk.** Det här är den delen som kan bli tyst fel. Svenska skriver
+"1 234,5 Mkr"; engelska skriver "1,234.5M". Läser man det andra med det förstas regler blir
+1 234 567 till 1,234 - och en korrekt siffra avvisas, prosan döljs, och grundgarantin brinner
+av på interpunktion. Separatorer, magnitudord och de spann som aldrig är mätvärden ("topp 10",
+"K2" / "top 10", "Q2") är därför egenskaper hos språket. Engelskan behöver ensiffriga suffix
+(M, k), vilket är hur "12 months" blir tolv miljoner om suffixet får matcha början av ett
+längre ord - ett ordgränsvillkor är det som stoppar det, och det finns ett test för just den meningen.
+
+**Kartan ritas ur datan.** Koordinaterna kommer från `dim_store` via `get_capabilities`, och
+projektionen anpassar sig till vad som kommer in. Ett lager utan geokodade butiker svarar
+ärligt med ingenting och klienten döljer kartfliken i stället för att hitta på positioner. Det
+som försvann är kustlinjen: en handritad kontur av ett land var aldrig något annat än det landet.
+
+**Systemprompten är kvar på svenska i båda språken.** Det är den intrimmade texten evalen
+mäter, och att översätta 200 rader regler för att lägga till ett språk hade lagt själva
+grundningskontraktet på en färsk översättning ingen mätt. Det som byter språk är *utdataregeln*
+- vad svaret ska skrivas på, i vilken valuta, formaterat hur. Taket är svarets *stil*, inte dess
+grundning; validatorn läser svarets språk, inte promptens.
+
+**Kvar som framtida arbete:** en tenant med flera valutor i samma lager. Verktygen skulle behöva
+returnera valuta per rad och axeln en omräkningsdag - det är en datamodellfråga, inte en
+formateringsfråga, och att låtsas lösa den i presentationslagret hade gett växelkurser utan
+datum.
+
 ---
 
 ## Repostruktur
@@ -407,7 +464,7 @@ solvigo-insights/
 │  ├─ charts/            spec→diagram, deterministiskt (+ enhetstester)
 │  ├─ components/        kortrenderare, källchip, chattpanel, skal (+ renderingstester)
 │  ├─ pages/             översikt · produkter · geografi · mina vyer
-│  └─ lib/               api, SSE, formatering (sv-SE), stores
+│  └─ lib/               api, SSE, formatering (Intl), i18n, stores
 ├─ scripts/              generate_data · seed · embed_entities
 ├─ eval/                 gyllene frågor + adversariellt + drivrutin
 └─ docs/

@@ -16,6 +16,7 @@ import { CardSkeleton } from '../components/Skeleton'
 import { EmptyState, ErrorState } from '../components/ErrorState'
 import { Button } from '../components/Button'
 import { IconSend } from '../components/Icons'
+import { useT } from '../lib/i18n'
 
 type Props = {
   title: string
@@ -28,6 +29,7 @@ type Props = {
 }
 
 export function FocusedCardPage({ title, description, dimension, followUps, render }: Props) {
+  const t = useT()
   const [period, setPeriod] = usePeriod()
   const dashboard = useDashboard(period)
   const ask = useChatStore((state) => state.ask)
@@ -61,8 +63,8 @@ export function FocusedCardPage({ title, description, dimension, followUps, rend
         <AnswerCardView card={card} onAsk={(question) => void ask(question)} height={380} />
       ) : (
         <EmptyState
-          title="Ingen färdig vy för den här dimensionen"
-          description="Fråga i chatten så byggs vyn från din data."
+          title={t('page.no_view_title')}
+          description={t('page.no_view')}
           action={
             <Button
               variant="primary"
@@ -77,7 +79,9 @@ export function FocusedCardPage({ title, description, dimension, followUps, rend
       )}
 
       <section className="mt-7">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">Fråga vidare</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+          {t('page.ask_more')}
+        </h2>
         <ul className="mt-3 flex flex-wrap gap-2">
           {followUps.map((question) => (
             <li key={question}>

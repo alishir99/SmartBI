@@ -1,6 +1,7 @@
 /** The period switcher. Everything on screen is compared to the window before the one it picks. */
 
-import { PERIOD_OPTIONS, type PeriodOption } from '../lib/periods'
+import { periodOptions, type PeriodOption } from '../lib/periods'
+import { useT } from '../lib/i18n'
 
 type Props = {
   value: string
@@ -11,13 +12,12 @@ type Props = {
   label?: string
 }
 
-export function PeriodFilter({
-  value,
-  onChange,
-  busy = false,
-  options = PERIOD_OPTIONS,
-  label = 'Period',
-}: Props) {
+export function PeriodFilter({ value, onChange, busy = false, options, label }: Props) {
+  const t = useT()
+  // Built inside the component, not at module load: the chips are labelled in the active
+  // language, and a module-level array is frozen in whichever one loaded first.
+  const chips = options ?? periodOptions()
+  label = label ?? t('source.period')
   return (
     <div
       role="radiogroup"
@@ -25,7 +25,7 @@ export function PeriodFilter({
       aria-busy={busy}
       className="inline-flex flex-wrap items-center gap-0.5 rounded-pill bg-surface-2 p-0.5 ring-hairline"
     >
-      {options.map((option) => {
+      {chips.map((option) => {
         const selected = option.key === value
         return (
           <button

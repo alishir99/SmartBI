@@ -9,8 +9,7 @@ import { KpiTile } from '../components/KpiTile'
 import { PageHeader } from '../components/PageHeader'
 import { CardSkeleton, KpiSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
-
-const DESCRIPTION = 'Din försäljning hos handlaren, mot perioden dessförinnan.'
+import { useT } from '../lib/i18n'
 
 /**
  * `auto-fit` rather than a viewport breakpoint: the chat rail is draggable, so how wide the
@@ -20,6 +19,7 @@ const DESCRIPTION = 'Din försäljning hos handlaren, mot perioden dessförinnan
 const KPI_GRID = 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))]'
 
 export function OverviewPage() {
+  const t = useT()
   const [period, setPeriod] = usePeriod()
   const dashboard = useDashboard(period)
   const ask = useChatStore((state) => state.ask)
@@ -27,10 +27,7 @@ export function OverviewPage() {
   if (dashboard.isPending) {
     return (
       <>
-        <PageHeader
-          title="Översikt"
-          description={DESCRIPTION}
-        >
+        <PageHeader title={t('overview.title')} description={t('overview.description')}>
           <PeriodFilter value={period} onChange={setPeriod} busy />
         </PageHeader>
         <div className={KPI_GRID}>
@@ -56,8 +53,8 @@ export function OverviewPage() {
   return (
     <>
       <PageHeader
-        title="Översikt"
-        description={DESCRIPTION}
+        title={t('overview.title')}
+        description={t('overview.description')}
         provenance={provenance}
       >
         <PeriodFilter value={period} onChange={setPeriod} busy={dashboard.isFetching} />

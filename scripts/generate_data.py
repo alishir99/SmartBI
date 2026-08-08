@@ -178,7 +178,7 @@ def build_stores(rng: np.random.Generator, start: date) -> pd.DataFrame:
     stores = pd.DataFrame(rows)
     stores["opened_date"] = pd.to_datetime(stores["opened_date"]).dt.date
 
-    # One physical store opens mid-period, so a naive year-over-year comparison on it would be wrong.
+    # One physical store opens mid-period, so a naive year-over-year comparison on it is wrong.
     physical = stores.index[stores["channel"] == "fysisk"].to_numpy()
     late = int(rng.choice(physical))
     stores.loc[late, "opened_date"] = start + pd.Timedelta(days=400)
@@ -537,7 +537,8 @@ def build_ground_truth(facts: pd.DataFrame, products: pd.DataFrame, brands: pd.D
             ],
         }
 
-    # Market share per brand x subcategory x month, plus the peer count the k-anonymity guard tests against.
+    # Market share per brand x subcategory x month, plus the peer count the k-anonymity guard
+    # tests against.
     by_brand = (df.groupby(["month_start", "category_id", "name_brand"])["net_amount_sek"]
                 .sum().round(2).reset_index())
     totals = (by_brand.groupby(["month_start", "category_id"])

@@ -1,4 +1,3 @@
-/** Changing your own password from inside the app. Opens from the sidebar. */
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
@@ -38,8 +37,8 @@ export function ChangePassword({ onClose }: { onClose: () => void }) {
     try {
       await changePassword(current, value.password)
       setSaved(true)
-      // Cleared rather than left on screen: the form is inside the app, and a filled password
-      // field surviving behind a confirmation is a password sitting on an unlocked laptop.
+      // Cleared rather than left on screen: a filled password field surviving behind a
+      // confirmation is a password sitting on an unlocked laptop.
       setCurrent('')
       setValue(EMPTY_PASSWORD)
     } catch (caught) {
@@ -49,9 +48,8 @@ export function ChangePassword({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // Portalled to <body>. The trigger lives inside the sidebar, which is a `sticky` flex column
-  // - enough of an ancestor context to clip a `fixed` child, and it did: the dialog rendered
-  // with its lower half cut off. A modal has no business depending on where its button sits.
+  // Portalled to <body>: the trigger sits in a `sticky` sidebar, an ancestor context that clips
+  // `fixed` children - the dialog used to render with its lower half cut off.
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-5">
       <div

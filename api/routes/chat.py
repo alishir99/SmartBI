@@ -26,9 +26,8 @@ async def chat(body: ChatRequest,
                tenant: ScopedTenant = Depends(get_supplier_scope),
                mcp: McpClient = Depends(get_mcp),
                cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
-    # Both refusals happen before the response starts, so they are a plain 429 with a Swedish
-    # `detail` - which the frontend renders verbatim (web/src/lib/api.ts) - rather than an error
-    # frame inside a 200 stream that a client has to know to look for.
+    # Both refusals happen before the stream starts, so they're a plain 429 with a Swedish
+    # `detail` (rendered verbatim by the frontend), not an error frame buried in a 200 stream.
     ratelimit.enforce_chat_turn(tenant.user_id)
     await ratelimit.enforce_tenant_budget(tenant.supplier_id)
 
@@ -37,8 +36,8 @@ async def chat(body: ChatRequest,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            # Without this, nginx and most managed proxies buffer the whole response and the
-            # streaming is invisible to the user.
+            # Without this, nginx and most managed proxies buffer the whole response, hiding
+            # the stream from the user.
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
@@ -49,9 +48,8 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                   cache: ResultCache) -> AsyncIterator[str]:
     logs.bind(turn_id=logs.new_turn_id(), supplier_id=tenant.supplier_id,
               user_id=tenant.user_id)
-    # Re-set here, not inherited: the middleware ran in the request task and this generator is
-    # consumed in another, so the answer's language has to be established where the answer is
-    # written. `body.lang` is None for a client that never asks, which resolves to the default.
+    # Re-set here, not inherited: middleware ran in the request task, but this generator is
+    # consumed in a different task, so the language has to be set where the answer is written.
     i18n.use(body.lang)
     logger.info("", extra={"event": "turn.start", "history_turns": len(body.history),
                            **logs.redacted(body.question, "question")})
@@ -81,16 +79,14 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
             elif isinstance(event, ErrorEvent):
                 status = "error"
 
-            # `by_alias` is load-bearing: TimeWindow's field is `from_`, because `from` is a
-            # Python keyword, and without this the wire carries `from_` while every other
-            # producer of an AnswerCard - all of which go through a FastAPI response_model -
-            # carries `from`. The client then reads undefined for the start of every window.
+            # by_alias is load-bearing: TimeWindow's field is `from_` (from is a keyword);
+            # without it the wire sends from_ while every other AnswerCard producer sends from.
             yield f"data: {event.model_dump_json(by_alias=True)}\n\n"
     except Exception as exc:  # noqa: BLE001 - the client is waiting on this stream
         logger.exception("chat stream failed")
         yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
     finally:
-        # Audit after the fact, and never let a logging failure break a delivered answer.
+        # Audit after the fact; a logging failure must never break a delivered answer.
         try:
             await db.record_turn(
                 user_id=tenant.user_id,
@@ -99,16 +95,15 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                 tool_calls=tool_calls,
                 row_counts={"queries": len(tool_calls),
                             "query_id": card.query_id if card else None,
-                            # Cache hits are the difference between ~$0.17 and ~$0.04 a
-                            # question, so the split is worth keeping next to the totals rather
-                            # than folding into input_tokens and losing it.
+                            # Cache hits are the difference between ~$0.17 and ~$0.04 a question,
+                            # so the split is kept next to the totals rather than folded away.
                             **({"llm_calls": usage.llm_calls,
                                 "cache_read_tokens": usage.cache_read_tokens,
                                 "cache_write_tokens": usage.cache_write_tokens}
                                if usage else {})},
                 latency_ms=int((time.monotonic() - started) * 1000),
-                # Null rather than zero when the loop reported nothing: a zero would read as
-                # "this turn was free" in any cost rollup, which is a worse lie than a gap.
+                # Null, not zero, when the loop reported nothing: a zero would read as "this
+                # turn was free" in any cost rollup - a worse lie than a gap.
                 input_tokens=usage.input_tokens if usage else None,
                 output_tokens=usage.output_tokens if usage else None,
                 status=status,
@@ -122,5 +117,5 @@ async def _stream(body: ChatRequest, tenant: ScopedTenant, mcp: McpClient,
                 "input_tokens": usage.input_tokens if usage else None,
                 "output_tokens": usage.output_tokens if usage else None,
                 "llm_calls": usage.llm_calls if usage else None})
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("could not write audit row", exc_info=True)

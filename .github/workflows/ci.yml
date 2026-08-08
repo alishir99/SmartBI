@@ -9,9 +9,8 @@ jobs:
   python:
     runs-on: ubuntu-latest
 
-    # A real Postgres with pgvector, so CI verifies what a laptop without Docker cannot:
-    # that the schema applies, the RLS policies are accepted, the barrier views compile, and
-    # the tools return the numbers ground_truth.json says they should.
+    # A real Postgres with pgvector, so CI verifies what a laptop without Docker can't: the
+    # schema applies, RLS is accepted, and tools return what ground_truth.json expects.
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -41,11 +40,10 @@ jobs:
       - name: Lint
         run: |
           ruff check mcp_server api scripts eval
-          # Settings live in pyproject's [tool.mypy] so this and a local run agree.
-          mypy mcp_server api
+          mypy mcp_server api  # settings live in pyproject's [tool.mypy], so this matches a local run
 
-      # Deselected rather than skipped: the Postgres service is up at this point but the
-      # schema has not been applied yet, so the integration suite has nothing to talk to.
+      # Deselected, not skipped: Postgres is up but the schema isn't applied yet, so
+      # the integration suite has nothing to talk to at this point.
       - name: Unit tests (no database needed)
         run: pytest mcp_server/tests api/tests eval/tests -q -m "not integration"
 
@@ -64,8 +62,8 @@ jobs:
       - name: Prove tenant isolation at the database level
         run: PGPASSWORD=solvigo psql -h localhost -U solvigo -d solvigo -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
 
-      # The tools connect as app_readonly, so RLS applies to them exactly as it does in
-      # production - which is the whole point of running them here rather than mocking.
+      # Tools connect as app_readonly, so RLS applies exactly as in production - the point
+      # of running them here rather than mocking.
       - name: Integration tests (against the seeded database)
         run: pytest -q -m integration
 
@@ -81,7 +79,6 @@ jobs:
           node-version: "24"
       - run: npm install
       - run: npx tsc --noEmit
-      # The chart contract (§8) is deterministic frontend logic - order, limit, series
-      # ranking, colour, scale - so it is unit-tested rather than eyeballed.
+      # Chart contract (§8) is deterministic frontend logic, so it's unit-tested, not eyeballed.
       - run: npm test
       - run: npm run build

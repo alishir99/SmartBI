@@ -1,17 +1,11 @@
--- Proof of tenant isolation at the database level.
---
--- Deliberately pure SQL with no application code in the way. The claim in the README is that
--- a bug in the MCP server or the API still cannot leak another supplier's rows; that claim is
--- about Postgres, so it should be tested in Postgres.
---
--- Run against a seeded database:
---     psql -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
--- Raises an exception on the first failure, so a non-zero exit means isolation is broken.
+-- Proof of tenant isolation at the DB level: deliberately pure SQL, no application code in
+-- the way, since the claim (a bug in the MCP server/API still can't leak rows) is about Postgres.
+-- Run: psql -v ON_ERROR_STOP=1 -f db/sql/tests/isolation.sql
 
 \set ON_ERROR_STOP on
 
--- Become the role the MCP server actually connects as. As the owner, RLS would be bypassed
--- (policies are ENABLE, not FORCE) and every assertion below would pass for the wrong reason.
+-- The role the MCP server connects as. As owner, RLS would be bypassed (ENABLE not FORCE)
+-- and every assertion below would pass for the wrong reason.
 SET ROLE app_readonly;
 
 DO $$
@@ -24,7 +18,6 @@ BEGIN
         RAISE EXCEPTION 'test must run as app_readonly, not %', current_user;
     END IF;
 
-    -- ---------------------------------------------------------------- scoped reads
     PERFORM set_config('app.supplier_id', '1', false);
     SELECT COUNT(*) INTO rows_supplier_1 FROM fact_sales_line;
 
@@ -36,24 +29,20 @@ BEGIN
             rows_supplier_1, rows_supplier_2;
     END IF;
 
-    -- Every visible row must belong to the scoped supplier. This is the assertion that
-    -- actually matters: not "how many rows" but "whose".
+    -- Every visible row must belong to the scoped supplier - "whose", not just "how many".
     PERFORM set_config('app.supplier_id', '1', false);
     SELECT COUNT(*) INTO leaked FROM fact_sales_line WHERE supplier_id <> 1;
     IF leaked <> 0 THEN
         RAISE EXCEPTION 'fact_sales_line leaked % rows from other suppliers', leaked;
     END IF;
 
-    -- ------------------------------------------------------------- unscoped = closed
-    -- An unset scope must return nothing. Failing closed is the whole design: forgetting to
-    -- scope has to be a visibly empty result, never a full-table read.
+    -- Unset scope must return nothing: failing closed, never a full-table read.
     PERFORM set_config('app.supplier_id', '', false);
     SELECT COUNT(*) INTO leaked FROM fact_sales_line;
     IF leaked <> 0 THEN
         RAISE EXCEPTION 'unscoped connection saw % fact rows; must see 0', leaked;
     END IF;
 
-    -- ------------------------------------------------------------- scoped dimensions
     PERFORM set_config('app.supplier_id', '1', false);
 
     SELECT COUNT(*) INTO leaked FROM dim_brand WHERE supplier_id <> 1;
@@ -61,8 +50,8 @@ BEGIN
         RAISE EXCEPTION 'dim_brand leaked % competitor brands', leaked;
     END IF;
 
-    -- Brand names are what would make an anonymised competitor figure identifiable, so this
-    -- is the policy that keeps v_category_brand_monthly safe to expose.
+    -- Brand names would make an anonymised competitor figure identifiable - this policy
+    -- is what keeps v_category_brand_monthly safe to expose.
     SELECT COUNT(*) INTO leaked FROM dim_brand;
     IF leaked = 0 THEN
         RAISE EXCEPTION 'supplier 1 cannot see its own brands';
@@ -81,7 +70,6 @@ BEGIN
         RAISE EXCEPTION 'dim_supplier leaked % other suppliers', leaked;
     END IF;
 
-    -- ----------------------------------------------------------- barrier views scope
     SELECT COUNT(*) INTO leaked FROM v_sales_daily WHERE supplier_id <> 1;
     IF leaked <> 0 THEN
         RAISE EXCEPTION 'v_sales_daily leaked % rows', leaked;
@@ -92,9 +80,8 @@ BEGIN
         RAISE EXCEPTION 'v_brand_monthly leaked % rows', leaked;
     END IF;
 
-    -- The category rollup is intentionally unscoped: it holds no brand or supplier identity,
-    -- and market share is unanswerable without it. Assert it still returns data, so a future
-    -- over-tightening shows up here rather than as a silently broken feature.
+    -- Category rollup is intentionally unscoped (no brand/supplier identity); assert it
+    -- still returns data so a future over-tightening shows up here, not as a broken feature.
     SELECT COUNT(*) INTO leaked FROM v_category_daily;
     IF leaked = 0 THEN
         RAISE EXCEPTION 'v_category_daily returned nothing; market share cannot work';
@@ -105,10 +92,8 @@ BEGIN
 END $$;
 
 
--- ------------------------------------------------------- materialised views are closed
---
--- The rollups carry every supplier's data. They are never granted; the barrier views are the
--- only route in. If a GRANT is ever added carelessly, these three blocks fail.
+-- Rollups carry every supplier's data and are never granted; barrier views are the only
+-- route in. A careless GRANT makes these three blocks fail.
 
 DO $$
 BEGIN
@@ -137,8 +122,7 @@ EXCEPTION
         RAISE NOTICE 'ok: app_user is not readable by the analytics role';
 END $$;
 
-
--- ------------------------------------------------------------------ read-only is read-only
+-- Read-only is read-only.
 DO $$
 BEGIN
     PERFORM set_config('app.supplier_id', '1', false);
@@ -149,26 +133,11 @@ EXCEPTION
         RAISE NOTICE 'ok: app_readonly cannot write';
 END $$;
 
+-- Adversarial assertions: everything above proves RLS works, not that RLS is what's doing
+-- the work or that it can't be walked around. These four pin the assumptions the rest rests on.
 
--- ==========================================================================================
--- Adversarial assertions: the three ways this proof could be true and worthless.
---
--- Everything above proves that RLS *works*. None of it proves that RLS is what is doing the
--- work, or that it cannot be walked around. These three do - each one pins an assumption the
--- rest of the file silently rests on.
--- ==========================================================================================
-
--- 1 -------------------------------------------------------- the role cannot ignore policies
---
--- Every assertion above is conditional on app_readonly being an ordinary role. A superuser
--- bypasses RLS entirely, and so does BYPASSRLS - and either would make this whole file pass
--- while isolating nothing at all. That is currently true and nothing enforced it, which is
--- the definition of an assumption rather than a guarantee.
---
--- It is also the sharpest way to state the risk in the compose file: the API connects as the
--- owner, which IS a superuser, and is safe only because every statement it issues carries an
--- explicit supplier_id predicate. The read path is safe structurally; the write path is safe
--- by discipline. This assertion is why that distinction is worth making out loud.
+-- 1: the role cannot ignore policies. A superuser/BYPASSRLS role skips RLS entirely, which
+-- would make this whole file pass while isolating nothing.
 DO $$
 DECLARE
     is_super   boolean;
@@ -193,16 +162,8 @@ BEGIN
 END $$;
 
 
--- 2 ------------------------------------------------------ the scope cannot be made to widen
---
--- app.supplier_id is a text GUC that the policy casts to INT. A text setting that reaches a
--- comparison is the classic place an injected predicate would be smuggled in, so the question
--- is what the cast does with something that is not a number. The requirement is not that it
--- errors - it is that it never yields a WIDER set. Erroring is one acceptable outcome; zero
--- rows is another; anything that returns rows for a supplier the caller did not name is not.
---
--- Tested with the three shapes that would matter: a SQL fragment, a comma list, and a value
--- with trailing text that a lenient cast might truncate rather than reject.
+-- 2: the scope cannot be made to widen. app.supplier_id is a text GUC cast to INT by the
+-- policy - the requirement isn't that a bad value errors, only that it never yields more rows.
 DO $$
 DECLARE
     payload   text;
@@ -214,8 +175,6 @@ BEGIN
             PERFORM set_config('app.supplier_id', payload, false);
             SELECT COUNT(DISTINCT supplier_id) INTO visible FROM fact_sales_line;
 
-            -- The cast did not error. Then it must have produced at most one supplier, and
-            -- never a second one the caller never named.
             IF visible > 1 THEN
                 RAISE EXCEPTION 'app.supplier_id = % widened the scope to % suppliers',
                     payload, visible;
@@ -223,13 +182,12 @@ BEGIN
             RAISE NOTICE 'ok: app.supplier_id = % yielded % supplier(s)', payload, visible;
         EXCEPTION
             WHEN invalid_text_representation THEN
-                -- The ::INT cast rejected it. The strongest possible outcome.
+                -- The ::INT cast rejected it - the strongest possible outcome.
                 RAISE NOTICE 'ok: app.supplier_id = % was rejected by the cast', payload;
         END;
     END LOOP;
 
-    -- And the scope still works afterwards, so the loop above cannot have passed by
-    -- leaving the session in a permanently broken state.
+    -- Scope still works afterwards, so the loop above didn't pass by leaving the session broken.
     PERFORM set_config('app.supplier_id', '1', false);
     SELECT COUNT(DISTINCT supplier_id) INTO visible FROM fact_sales_line;
     IF visible <> 1 THEN
@@ -239,21 +197,16 @@ BEGIN
 END $$;
 
 
--- 3 ------------------------------------------------ the barrier views cannot be pushed past
---
--- 04_rls.sql marks the views security_barrier, and names the reason: without it Postgres may
--- push a user-supplied function INTO the view, where it runs against rows the caller was
--- never meant to see and can leak them through an error message or a side effect. The barrier
--- is the mitigation. Not being able to create a function at all is the reason the mitigation
--- never has to hold - defence in depth, tested rather than assumed.
+-- 3: the barrier views cannot be pushed past. security_barrier (04_rls.sql) exists because
+-- Postgres may otherwise push a user-supplied function into the view and leak scoped rows.
 DO $$
 BEGIN
     EXECUTE $fn$
         CREATE FUNCTION leak_probe(anyelement) RETURNS boolean AS
         $body$ SELECT true $body$ LANGUAGE sql COST 0.0000001
     $fn$;
-    -- If we get here the function exists, which is the failure. Drop it before raising so a
-    -- failing run does not leave an artefact behind for the next one.
+    -- Reaching here means the function exists - the failure. Drop it before raising so a
+    -- failing run leaves no artefact for the next one.
     EXECUTE 'DROP FUNCTION IF EXISTS leak_probe(anyelement)';
     RAISE EXCEPTION 'app_readonly could CREATE FUNCTION - a cheap function can be pushed '
                     'into a barrier view and used to read rows the policy excludes';
@@ -263,12 +216,8 @@ EXCEPTION
 END $$;
 
 
--- 4 ------------------------------------------------------------ the policies are still on
---
--- The cheapest way to silently undo all of the above is ALTER TABLE ... DISABLE ROW LEVEL
--- SECURITY. Nothing in the assertions above distinguishes "the policy allowed exactly the
--- caller's rows" from "the policy is off and the caller happens to be scoped anyway", because
--- the application always sets the GUC. Asserting relrowsecurity directly closes that.
+-- 4: the policies are still on. Nothing above distinguishes "policy allowed exactly the
+-- caller's rows" from "policy is off and the caller happens to be scoped anyway" - check directly.
 DO $$
 DECLARE
     unprotected text;

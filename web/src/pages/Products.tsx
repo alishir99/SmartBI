@@ -1,8 +1,5 @@
-/**
- * Produkter - the movers page. It used to be the same "Topp 10 produkter" chart that is already
- * on the overview, which gave it no reason to exist. "What is rising and what is falling" is the
- * question a supplier opens a product page to ask.
- */
+/** Produkter - the movers page. "What is rising and what is falling" is the question a
+ * supplier opens a product page to ask; a repeat of the overview's top-10 chart wasn't. */
 
 import type { Provenance } from '../types'
 import { useMovers } from '../lib/queries'
@@ -15,8 +12,8 @@ import { CardSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
 import { useT } from '../lib/i18n'
 
-// Keys, not sentences, and none of them names a place: a suggested question mentioning a
-// Swedish county is unanswerable against a warehouse holding anything else.
+// Keys, not sentences, and none names a place: a suggested question mentioning a Swedish
+// county is unanswerable against a warehouse holding anything else.
 const FOLLOW_UP_KEYS = [
   'ask.why_falling',
   'ask.online_vs_store',
@@ -24,11 +21,8 @@ const FOLLOW_UP_KEYS = [
   'ask.highest_avg_price',
 ]
 
-/**
- * `auto-fit` rather than `xl:grid-cols-2`: the chat rail is draggable, so a viewport breakpoint
- * says nothing about how much width these two cards actually have. Below the track's minimum
- * they stack instead of squeezing a ten-row ranking into 200 px.
- */
+// auto-fit, not xl:grid-cols-2: the chat rail is draggable, so a viewport breakpoint says
+// nothing about actual width - below the track's minimum, cards stack instead of squeezing.
 const CARD_GRID = 'grid gap-6 grid-cols-[repeat(auto-fit,minmax(min(26rem,100%),1fr))]'
 
 export function ProductsPage() {
@@ -69,8 +63,8 @@ export function ProductsPage() {
     <>
       {header(cards[0]?.provenance ?? null)}
 
-      {/* Side by side when there is room, stacked when there is not: two ranked lists of ten
-          each need the width. */}
+      {/* Side by side when there's room, stacked when not: two ranked lists of ten each
+          need the width. */}
       <div className={CARD_GRID}>
         {cards.map((card) => (
           <AnswerCardView

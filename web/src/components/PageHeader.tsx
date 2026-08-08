@@ -1,4 +1,3 @@
-/** Page heading. */
 
 import type { ReactNode } from 'react'
 import type { Provenance } from '../types'

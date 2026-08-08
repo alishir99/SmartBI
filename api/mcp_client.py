@@ -42,8 +42,7 @@ def parse_tool_result(result: CallToolResult) -> dict[str, Any]:
 
     structured = result.structuredContent
     if isinstance(structured, dict):
-        # FastMCP wraps a non-object return value as {"result": ...}; a dict return comes
-        # through as itself.
+        # FastMCP wraps a non-dict return as {"result": ...}; a dict return comes through as itself.
         if set(structured) == {"result"} and isinstance(structured["result"], dict):
             return structured["result"]
         return structured
@@ -70,10 +69,8 @@ class McpClient:
     def __init__(self, url: str | None = None, internal_token: str | None = None) -> None:
         self.url = url or settings.mcp_url
         self.internal_token = internal_token or settings.internal_token
-        # Tool descriptors are the same for every tenant, so they are fetched once.
-        # ponytail: cached for the process lifetime with no invalidation, so a tool-schema
-        # change needs an API restart. A TTL is the fix if the MCP server ever deploys
-        # independently of this one; in one compose stack they restart together anyway.
+        # Tool descriptors are identical for every tenant, so fetched once and cached for the
+        # process lifetime. ponytail: no invalidation, so a schema change needs a restart.
         self._tools: list[dict[str, Any]] | None = None
 
     def _headers(self, supplier_id: int) -> dict[str, str]:

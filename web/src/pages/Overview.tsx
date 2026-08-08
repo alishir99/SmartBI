@@ -1,4 +1,3 @@
-/** Översikt - the deterministic dashboard. */
 
 import { useDashboard } from '../lib/queries'
 import { usePeriod } from '../lib/usePeriod'
@@ -11,11 +10,8 @@ import { CardSkeleton, KpiSkeleton } from '../components/Skeleton'
 import { ErrorState } from '../components/ErrorState'
 import { useT } from '../lib/i18n'
 
-/**
- * `auto-fit` rather than a viewport breakpoint: the chat rail is draggable, so how wide the
- * viewport is says nothing about how wide this column is. `min(…, 100%)` is what stops a track
- * wider than its container overflowing when the rail is pulled out.
- */
+// auto-fit, not a viewport breakpoint: the chat rail is draggable, so viewport width says
+// nothing about how wide this column actually is.
 const KPI_GRID = 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))]'
 
 export function OverviewPage() {

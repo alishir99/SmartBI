@@ -31,9 +31,8 @@ logger = logging.getLogger(__name__)
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
 
-# The card renders the narrative as text, not as markdown. The prompt says so; this is the
-# belt-and-braces, because a stray ** reads as broken to the user and glues itself to the
-# number the validator is trying to match.
+# Card renders narrative as plain text; belt-and-braces because a stray ** reads as broken
+# and can glue itself to the number the validator is trying to match.
 _EMPHASIS = re.compile(r"(\*\*|__)(\S.*?\S|\S)\1", re.DOTALL)
 
 
@@ -41,15 +40,12 @@ _EMPHASIS = re.compile(r"(\*\*|__)(\S.*?\S|\S)\1", re.DOTALL)
 # built for exactly that; under `whitespace-pre-line` they render as literal hyphens.
 _BULLET = re.compile(r"^[ \t]*[-*•]\s+", re.MULTILINE)
 
-# And headings: "## Hörlurar - juli 2025 till juni 2026" arrived on a card that already
-# carried that exact title and period in its header. The hashes render literally, and the
-# line was noise even without them.
+# Headings arrive duplicating the title/period already in the card header; the hashes also
+# render literally, so the whole line is noise.
 _HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]+", re.MULTILINE)
 
-# A dash used as a pause mid-sentence is the single clearest tell that nobody typed this. Both
-# characters go, but only where they are punctuation: an en dash with a space either side is a
-# pause, while "jul 2025-jun 2026" is a range and every period label on the card is written
-# that way. A hyphen carries the same pause and reads as a person typing.
+# Strips dashes used as a mid-sentence pause (the AI tell), but not "jul 2025-jun 2026"
+# range hyphens - every period label on the card uses that exact form.
 _PAUSE_DASH = re.compile(r"\s+[–—]\s+|—")
 
 
@@ -61,17 +57,13 @@ def strip_markdown(text: str) -> str:
     return _PAUSE_DASH.sub(lambda m: " - " if m.group().strip() != m.group() else "-", text)
 
 
-# What an unresolvable name is replaced by. The prompt already says not to repeat the name a
-# refusal is about; this is the same rule in code, because a guarantee that lives only in a
-# prompt is a guarantee the model gets to decide about.
+# Replacement for an unresolvable name: enforces in code the same rule the prompt states,
+# because a guarantee that lives only in a prompt is one the model can ignore.
 _REDACTED_NAME = "det efterfrågade namnet"
 _SENTENCE_START = re.compile(rf"(\A|[.!?]\s+){re.escape(_REDACTED_NAME)}")
 _QUOTE = "[\"'«»‘’“”]?"
-# The words the model looked up are rarely the whole name it then writes: it resolves "Lumia"
-# and writes "Lumia Nordic". Redacting only the looked-up part left `det efterfrågade namnet
-# Nordic"` in the prose - the competitor still named, and the sentence broken as well. So the
-# capitalised run continuing the name goes with it. Not case-insensitive, deliberately: this
-# part must match capitalisation or it swallows the rest of the sentence.
+# Matches the capitalised words continuing a name ("Lumia" -> "Lumia Nordic"), since redacting
+# only the looked-up part left the rest of the name exposed. Case-sensitive on purpose.
 _NAME_TAIL = r"(?:[-\s]+[A-ZÅÄÖ][\w]*)*"
 _REPEATS = re.compile(rf"{re.escape(_REDACTED_NAME)}(\s+{re.escape(_REDACTED_NAME)})+")
 
@@ -127,9 +119,8 @@ def presentable_row(row: dict) -> dict:
 
 
 def _plottable(column: dict) -> bool:
-    # The comparison *date* column is not a dimension: reading it as one splits a 12-month line
-    # into twelve one-point series. The comparison *measure* is real data in the same unit as
-    # the current period, and putting it on the same axis is the point of `compare_to`.
+    # Comparison *date* column is not a dimension (would split a line into one-point series);
+    # comparison *measure* is real data on the same axis - that's the point of `compare_to`.
     key = column.get("key", "")
     return _presentable(column) and not (
         key.endswith("_compare") and column.get("type") != "number")
@@ -187,7 +178,7 @@ def propose_chart(result: CachedResult, title: str | None = None,
     dimensions = _dimensions(result)
     plottable = _measures(result)
     # The current period leads. `_delta_pct` never joins it - a percentage on a kronor axis is
-    # the bug the filter was written for - and `_compare` only joins it on a time axis, below.
+    # the bug this filter exists for - and `_compare` only joins it on a time axis, below.
     measures = [m for m in plottable
                 if not m["key"].endswith(("_compare", "_delta", "_delta_pct", "_delta_pe"))]
 
@@ -273,9 +264,8 @@ def _period_label(window: TimeWindow | None) -> str | None:
     months = tr("months.short").split(",")
     tail = f"{months[end.month - 1]} {end.year}"
     if (start.year, start.month) == (end.year, end.month):
-        # A whole calendar month is named; a few days inside one are not. Collapsing a 7-day
-        # comparison to "jun 2026" gave both series of a day-grain chart the same legend label,
-        # and a 7-day window always sits inside one month.
+        # Only a whole calendar month gets a bare month label; collapsing a partial-month range
+        # to "jun 2026" gave two series the same legend label on a day-grain chart.
         if start.day == 1 and end.day == monthrange(end.year, end.month)[1]:
             return tail
         return f"{start.day}–{end.day} {tail}"
@@ -324,8 +314,7 @@ def build_provenance(result: CachedResult) -> Provenance | None:
         # query did not run in.
         currency=meta.get("currency", settings.app_currency),
         # Normalised rather than passed through: `vat` used to be the Swedish phrase "exkl.
-        # moms", and a saved card minted before this change still carries it. A 500 on an old
-        # card is a worse answer than reading an unrecognised value as the safe default.
+        # moms" on older saved cards; defaulting an unrecognised value beats a 500 on an old card.
         vat="incl" if meta.get("vat") == "incl" else "excl",
         time_range=time_range,
         compare_range=_window(meta.get("compare_range")),
@@ -366,16 +355,12 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
     claims = [Claim(literal=a.literal, query_id=a.query_id) for a in attributions]
 
     if result is None:
-        # clarify / cannot_answer paths: no data was returned, so there is nothing to chart and
-        # nothing to prove - only the explanation and what to try instead. An "ok" here would be
-        # an answer given from memory, so it is downgraded. "explain" is exempt: it answers a
-        # question about the card, needs no query by definition, and any figure it states is
-        # caught by the numeric check running against an empty result set.
+        # No data means nothing to chart or prove; an "ok" status here would be an answer from
+        # memory, so it's downgraded (except "explain", which needs no query by definition).
         if status == "ok":
             status = "cannot_answer"
-        # A suppressed narrative is suppressed here too. Without this the chartless path was a
-        # way for unverified prose to reach the card with an amber banner over it and nothing
-        # else changed.
+        # Suppress the narrative here too - otherwise the chartless path let unverified prose
+        # reach the card under the amber banner unchanged.
         failed = status == "validation_failed"
         return AnswerCard(
             status=cast(CardStatus, status), narrative="" if failed else narrative,
@@ -409,7 +394,6 @@ def build_card(*, result: CachedResult | None, narrative: str, envelope: dict[st
 
     # No caveat for `validation_failed`: the card renders that sentence from the status itself,
     # in the amber notice at the top. Adding it here printed it twice, verbatim.
-
     return AnswerCard(
         status=cast(CardStatus, status),
         narrative="" if status == "validation_failed" else narrative,

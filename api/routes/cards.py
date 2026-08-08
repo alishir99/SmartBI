@@ -21,19 +21,19 @@ from ..models import (
     ShareResponse,
 )
 from ..result_cache import ResultCache, from_tool_result
+from .dashboard import add_moving_average
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["cards"])
 
 
-# One GET here used to fan out into one MCP round-trip per saved card, serially and without a
-# ceiling: 200 saved views meant 200 queries on one request, and a client could hold the
-# database busy for minutes with a single authenticated GET.
+# A GET here used to fan out into one serial, uncapped MCP round-trip per saved card - 200
+# saved views could hold the database busy for minutes on a single authenticated GET.
 MAX_REFRESHED_CARDS = 12
 REFRESH_CONCURRENCY = 4
 
-# Reads were capped; writes were not, so one authenticated client could grow a tenant's card
-# table without limit. Well above what a supplier pins by hand, and below "unbounded".
+# Reads were capped above; writes were not, so one client could grow a tenant's card table
+# without limit. Well above what a supplier pins by hand.
 MAX_SAVED_CARDS = 200
 
 
@@ -56,8 +56,8 @@ async def get_cards(tenant: ScopedTenant = Depends(get_supplier_scope),
 async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
                         cache: ResultCache) -> AnswerCard:
     if row["tool_name"] not in ALLOWED_CARD_TOOLS:
-        # Belt and braces against rows that predate the allowlist on SaveCardRequest, or that
-        # arrived by any path other than POST /api/cards.
+        # Belt and braces: guards rows that predate the allowlist, or arrived by any path
+        # other than POST /api/cards.
         logger.warning("saved card %s names unknown tool %r", row["card_id"], row["tool_name"])
         return AnswerCard(
             card_id=str(row["card_id"]), status="cannot_answer",
@@ -71,19 +71,22 @@ async def _refresh_card(row: dict, supplier_id: int, mcp: McpClient,
             card_id=str(row["card_id"]), status="cannot_answer",
             narrative=f"Kunde inte uppdatera '{row['title']}' mot aktuell data.")
 
+    measures = row["tool_args"].get("measures") or []
+    if row["tool_name"] == "query_sales" and measures:
+        add_moving_average(payload, measures[0])
+
     result = cache.put(from_tool_result(
         supplier_id=supplier_id, tool=row["tool_name"],
         tool_args=row["tool_args"], payload=payload))
     chart = render.propose_chart(result, title=row["title"])
     if row.get("chart_spec"):
-        # The saved spec is re-validated against today's result: a column that existed when the
-        # card was saved may not exist now.
+        # Re-validated against today's result: a column that existed when saved may not now.
         try:
             saved = AnswerCard.model_validate(
                 {"chart": row["chart_spec"], "status": "ok"}).chart
             if saved is not None:
                 chart, _ = render.validate_chart(saved, result)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     return AnswerCard(
@@ -118,19 +121,18 @@ async def remove_card(card_id: int,
 async def share(body: ShareRequest,
                 tenant: ScopedTenant = Depends(get_supplier_scope)) -> ShareResponse:
     """Signed, expiring, read-only link."""
-    # int(): card_id crosses the wire as a string but the column is a bigint, and asyncpg does
-    # not coerce.
+    # card_id crosses the wire as a string but the column is a bigint; asyncpg does not coerce.
     card = await db.get_card(int(body.card_id), tenant.supplier_id)
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Okänt card_id")
 
     token, expires_at = create_share_token(
         card_id=str(body.card_id), supplier_id=tenant.supplier_id, mode=body.mode)
-    # The contract is {url, expires_at}; `mode` was being passed and silently dropped, since the
+    # Contract is {url, expires_at}; `mode` was being passed and silently dropped since the
     # model does not declare it.
     return ShareResponse(
-        # A hash route, because the router is one: `/delad/…` as a path would need a server-side
-        # fallback, and the static image that serves the app deliberately has none.
+        # Hash route: `/delad/…` as a path would need a server-side fallback, and the static
+        # image serving the app deliberately has none.
         url=f"{settings.public_web_url}/#/delad/{token}",
         expires_at=expires_at.isoformat(),
     )

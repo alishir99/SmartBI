@@ -1,6 +1,6 @@
-﻿# AI-native försäljningsdashboard   Design rationale
+# AI-native försäljningsdashboard — Design rationale
 
-**Case:** Solvigo utvecklarcase   "BI utan BI-avdelning"
+**Case:** Solvigo utvecklarcase — "BI utan BI-avdelning"
 **Author:** Ali Shirzad
 **Written:** 2026-07-27, before the code
 
@@ -17,15 +17,15 @@ Restated from `utvecklarcase-solvigo.pdf`, in the order it will be graded:
 
 | # | Requirement | Where it's addressed |
 |---|---|---|
-| 1 | Ready-made answers on arrival   a standard dashboard per supplier (trend, market share, top lists) with zero configuration | §7 Frontend, §5 Data model |
+| 1 | Ready-made answers on arrival — a standard dashboard per supplier (trend, market share, top lists) with zero configuration | §7 Frontend, §5 Data model |
 | 2 | Natural-language questions **with charts generated on demand** | §6 Agent, §8 Chart contract |
 | 3 | Numbers must be trustworthy, in a unit that means something to the customer | §9 Grounding |
 | 4 | Save / export / share views | §10 |
 | 5 | Frontend React/Vite, backend Python/FastAPI | §4 |
-| 6 | **Data only reachable through an MCP server**   the LLM must use it | §4, §6 |
+| 6 | **Data only reachable through an MCP server** — the LLM must use it | §4, §6 |
 | 7 | A data source the MCP server reads from | §5 |
 
-The five questions they deliberately left unanswered   and my short answers:
+The five questions they deliberately left unanswered — and my short answers:
 
 | Their question | My answer in one line |
 |---|---|
@@ -40,7 +40,7 @@ The five questions they deliberately left unanswered   and my short answers:
 ## 2. Product concept (what the user sees)
 
 A supplier (e.g. a manufacturer whose brand is sold through the retailer) logs in and lands on
-a **finished dashboard**   not an empty chat box.
+a **finished dashboard** — not an empty chat box.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -57,8 +57,8 @@ a **finished dashboard**   not an empty chat box.
 │            └──────────────────────────┴──────────────────────────────┘
 │            ┌─── Fråga din data ─────────────────────────────────────┐ │
 │            │ "Vilka produkter säljer bäst i Stockholm?"             │ │
-│            │  ⚙ resolve_entities → ⚙ query_sales (1 243 rader)      │ │
-│            │  [ genererat stapeldiagram ]      [📌 Spara] [⬇ CSV]   │ │
+│            │   resolve_entities →  query_sales (1 243 rader)      │ │
+│            │  [ genererat stapeldiagram ]      [ Spara] [⬇ CSV]   │ │
 │            │  Källa: query_sales · Sthlm län · 2026-01→06 · 14:32   │ │
 │            └────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────┘
@@ -66,8 +66,8 @@ a **finished dashboard**   not an empty chat box.
 
 **The product thesis, stated for the video:** "BI without a BI department" means the user must
 never *build* anything. The dashboard is the answer to the questions we already know they have.
-The chat is a **deepening mechanism**, not the entry point. Both produce the same object   a
-**card**   so anything the chat produces can be pinned next to the standard tiles. That single
+The chat is a **deepening mechanism**, not the entry point. Both produce the same object — a
+**card** — so anything the chat produces can be pinned next to the standard tiles. That single
 decision (one card type, two producers) is what keeps the product from feeling like "a chatbot
 bolted onto a dashboard".
 
@@ -77,13 +77,13 @@ bolted onto a dashboard".
 
 | # | Decision | Chosen | Rejected alternatives | Why |
 |---|---|---|---|---|
-| D1 | LLM provider | **DeepSeek `deepseek-v4-pro`, driven through the Anthropic SDK** against `https://api.deepseek.com/anthropic` | Claude direct; Gemini + Google ADK; OpenAI | Availability decided this: the API key I have is DeepSeek's. DeepSeek ships an Anthropic-compatible endpoint with full `tools` support (`name` / `input_schema` / `description`), which is near-1:1 with MCP's own tool schema   so the code stays Anthropic-shaped and moving to real Claude is a `base_url` plus model-name change, nothing more. That makes "the provider is swappable at one file" a demonstrable fact rather than a claim. Costs, stated honestly: `cache_control` is ignored on this endpoint, so the prompt-caching saving in §6.4 does not apply; and the data leaves the EU, which weakens the residency half of §15. |
-| D2 | Agent orchestration | **Explicit bounded tool loop + a thin 3-stage pipeline** (plan → execute → validate/render) | LangGraph, Google ADK, Anthropic SDK Tool Runner | The Tool Runner is the natural choice against real Claude, but it rides on `anthropic-beta` headers that the DeepSeek endpoint does not accept   so the loop is written out by hand, roughly 40 lines with a tool-call cap and a retry. LangGraph/ADK add graph and state machinery for what is a single bounded loop. |
+| D1 | LLM provider | **DeepSeek `deepseek-v4-pro`, driven through the Anthropic SDK** against `https://api.deepseek.com/anthropic` | Claude direct; Gemini + Google ADK; OpenAI | Availability decided this: the API key I have is DeepSeek's. DeepSeek ships an Anthropic-compatible endpoint with full `tools` support (`name` / `input_schema` / `description`), which is near-1:1 with MCP's own tool schema — so the code stays Anthropic-shaped and moving to real Claude is a `base_url` plus model-name change, nothing more. That makes "the provider is swappable at one file" a demonstrable fact rather than a claim. Costs, stated honestly: `cache_control` is ignored on this endpoint, so the prompt-caching saving in §6.4 does not apply; and the data leaves the EU, which weakens the residency half of §15. |
+| D2 | Agent orchestration | **Explicit bounded tool loop + a thin 3-stage pipeline** (plan → execute → validate/render) | LangGraph, Google ADK, Anthropic SDK Tool Runner | The Tool Runner is the natural choice against real Claude, but it rides on `anthropic-beta` headers that the DeepSeek endpoint does not accept — so the loop is written out by hand, roughly 40 lines with a tool-call cap and a retry. LangGraph/ADK add graph and state machinery for what is a single bounded loop. |
 | D3 | **MCP wiring** | Backend is the **MCP client**; MCP server is an internal service | Anthropic's hosted MCP connector (`mcp_servers` param) | The connector requires a publicly reachable MCP server and moves tenant credentials to the model provider. Being the client ourselves is what lets us inject `supplier_id` server-side and intercept every result before the model sees it. **This is the load-bearing security decision.** |
 | D4 | MCP transport | **Streamable HTTP** | stdio | stdio couples the MCP server to the API process lifecycle. HTTP lets it be its own container, its own Cloud Run service with `ingress: internal`, and independently scalable/testable. |
-| D5 | **Tool surface shape** | **One flexible, typed semantic-layer query tool** (`query_sales`) + 3 supporting tools | (a) Text-to-SQL tool; (b) one tool per question type (`get_top_products`, `get_trend`, …) | (a) is unsafe and untestable: injection, fan-out double counting on a star schema, no place to attach units, and tenant scoping via string-injected `WHERE` is fragile. (b) cannot answer questions we didn't anticipate   and **they will ask unseen questions live**. A cube-style query tool is bounded *and* composable. |
-| D6 | Database | **PostgreSQL 16 + pgvector + pg_trgm** | DuckDB/Parquet, SQLite, ClickHouse | Matches the stack in the ad (Postgres + pgvector, Cloud SQL). RLS gives defence-in-depth on tenancy   no analytical DB in this class offers that. pgvector earns its place on entity resolution (§5.4), not as decoration. |
-| D7 | Dataset | **Generated synthetic Swedish retail data (seeded, deterministic)** | Online Retail II (UCI), Olist, Superstore | See §5.1   the deciding factor is that a generator gives me a **ground-truth oracle** for an automated eval suite. No public set has the supplier↔competing-brand structure market share requires. |
+| D5 | **Tool surface shape** | **One flexible, typed semantic-layer query tool** (`query_sales`) + 3 supporting tools | (a) Text-to-SQL tool; (b) one tool per question type (`get_top_products`, `get_trend`, …) | (a) is unsafe and untestable: injection, fan-out double counting on a star schema, no place to attach units, and tenant scoping via string-injected `WHERE` is fragile. (b) cannot answer questions we didn't anticipate — and **they will ask unseen questions live**. A cube-style query tool is bounded *and* composable. |
+| D6 | Database | **PostgreSQL 16 + pgvector + pg_trgm** | DuckDB/Parquet, SQLite, ClickHouse | Matches the stack in the ad (Postgres + pgvector, Cloud SQL). RLS gives defence-in-depth on tenancy — no analytical DB in this class offers that. pgvector earns its place on entity resolution (§5.4), not as decoration. |
+| D7 | Dataset | **Generated synthetic Swedish retail data (seeded, deterministic)** | Online Retail II (UCI), Olist, Superstore | See §5.1 — the deciding factor is that a generator gives me a **ground-truth oracle** for an automated eval suite. No public set has the supplier↔competing-brand structure market share requires. |
 | D8 | Chart contract | **Constrained internal `ChartSpec` JSON, Pydantic-validated, rendered with Recharts** | Vega-Lite spec from the model; model-generated plotting code | Vega-Lite is more expressive but far harder to validate and lets the model produce charts that look nothing like the dashboard. Generated code means arbitrary execution. A closed spec = every chart is consistent and every spec is verifiable. |
 | D9 | Grounding | **Values never pass through the model** (§9) | "Just prompt it not to hallucinate"; post-hoc checking only | The strongest guarantee is structural, not behavioural. The model picks the query and the presentation; the numbers travel Postgres → MCP → API → chart on a path the model never touches. |
 | D10 | Dashboard data path | The standard dashboard **also goes through MCP** (server-side, no LLM) | A separate direct-SQL path for the dashboard | Makes MCP the app's actual data API rather than an LLM side-car, and guarantees the chat and the dashboard can never disagree about a number. Also honours the case's "you don't reach the data directly". |
@@ -144,9 +144,9 @@ I evaluated three well-known public retail sets against what this case needs:
 
 | Dataset | Orders | Geography | Product hierarchy | **Brand / supplier** | Verdict |
 |---|---|---|---|---|---|
-| [Online Retail II (UCI)](https://archive.ics.uci.edu/dataset/502/online+retail+ii) | ✅ ~1M lines | Country only | ✗ (free-text descriptions) | ✗ none | No brand ⇒ no market share, which is half the case |
-| [Olist (Brazilian e-com)](https://www.kaggle.com/datasets/terencicp/e-commerce-dataset-by-olist-as-an-sqlite-database) | ✅ 100k orders | ✅ good (state/zip) | ✅ categories | ~ sellers ≈ suppliers, but no competing brands per category | Closest structurally; Brazilian geography kills the "Stockholm" demo |
-| [Superstore](https://www.kaggle.com/datasets/nayakganesh007/superstore-sales-dataset) | ✅ 5k orders | US | ✅ cat/subcat | ✗ none | Too small, fictional anyway, no brand |
+| [Online Retail II (UCI)](https://archive.ics.uci.edu/dataset/502/online+retail+ii) | ~1M lines | Country only | no (free-text descriptions) | none | No brand ⇒ no market share, which is half the case |
+| [Olist (Brazilian e-com)](https://www.kaggle.com/datasets/terencicp/e-commerce-dataset-by-olist-as-an-sqlite-database) | 100k orders | good (state/zip) | categories | ~ sellers ≈ suppliers, but no competing brands per category | Closest structurally; Brazilian geography kills the "Stockholm" demo |
+| [Superstore](https://www.kaggle.com/datasets/nayakganesh007/superstore-sales-dataset) | 5k orders | US | cat/subcat | none | Too small, fictional anyway, no brand |
 
 **Decision: generate a synthetic Swedish retail dataset** with a seeded, deterministic
 generator (`scripts/generate_data.py`, `--seed 42`). Three reasons, in priority order:
@@ -193,15 +193,15 @@ fact_sales_line(sale_line_id, order_id, date_id, store_id, customer_id,
 ```
 
 Grain: **one row per order line**. Everything else is derivable. Money in `SEK`, excl. VAT,
-stated in the column name and re-stated in every tool response's `meta.unit`   the case
+stated in the column name and re-stated in every tool response's `meta.unit` — the case
 explicitly asks about "en enhet som är meningsfull för kunden" (§9.3).
 
-### 5.3 Raw vs precomputed   and why that's a privacy decision
+### 5.3 Raw vs precomputed — and why that's a privacy decision
 
 Their question: *"vad lägger MCP-servern bakom sig (rådata vs förberäknat)?"*
 
 The fact table is the source of truth. The MCP server serves from **materialised rollups**
-where one exists and falls back to the fact table otherwise, transparently   the tool
+where one exists and falls back to the fact table otherwise, transparently — the tool
 response reports which in `meta.source`.
 
 ```sql
@@ -216,17 +216,17 @@ Rollups exist for two distinct reasons and I want both on the record:
   load is wasteful when the answer changes once a day.
 - **It is the privacy boundary.** `mv_category_daily` and `mv_brand_monthly` are the *only*
   objects `query_market_share` may read. Competitor data is therefore not "filtered out" by
-  application logic   it was never in the object the tool can reach. A rollup that aggregates
+  application logic — it was never in the object the tool can reach. A rollup that aggregates
   away identity is a structurally stronger guarantee than a `WHERE` clause.
 
 Refresh: `REFRESH MATERIALIZED VIEW CONCURRENTLY` after seed and via an authenticated
 `POST /admin/refresh`. In production this belongs in the ingest pipeline (§14).
 
-### 5.4 pgvector   used for something real
+### 5.4 pgvector — used for something real
 
 pgvector is in the job ad; I refuse to add it as decoration. Its actual job here is
 **entity resolution**, which is a genuine failure mode: a user types *"hörlurar"*,
-*"sthlm"*, *"vårt bästa märke"*, *"trådlösa lurar"*   none of which are column values.
+*"sthlm"*, *"vårt bästa märke"*, *"trådlösa lurar"* — none of which are column values.
 
 `resolve_entities()` runs a hybrid retrieval over `dim_product`, `dim_category`,
 `dim_store`, `dim_brand`:
@@ -239,11 +239,11 @@ pgvector is in the job ad; I refuse to add it as decoration. Its actual job here
 Embeddings from a local `intfloat/multilingual-e5-small` (handles Swedish, no API cost,
 no data leaves the box). If it returns nothing above threshold, the tool returns
 `{"matches": [], "hint": "..."}` and the agent must ask a clarifying question rather than
-invent an entity   this is one of the two main hallucination entry points closed.
+invent an entity — this is one of the two main hallucination entry points closed.
 
 ---
 
-## 6. The MCP server   the heart of the design
+## 6. The MCP server — the heart of the design
 
 ### 6.1 Why a semantic layer and not text-to-SQL
 
@@ -251,22 +251,22 @@ This is the single decision I expect to be interrogated hardest, so:
 
 | | Text-to-SQL | One tool per question | **Semantic-layer query tool** |
 |---|---|---|---|
-| Handles unseen questions | ✅ | ❌ | ✅ |
-| Cannot produce an invalid join / fan-out double count | ❌ | ✅ | ✅ |
-| Tenant scope enforceable server-side | ⚠️ string injection | ✅ | ✅ |
-| Units/currency attachable to the result | ❌ | ✅ | ✅ |
-| Unit-testable in isolation | ❌ | ✅ | ✅ |
-| Bounded blast radius | ❌ | ✅ | ✅ |
+| Handles unseen questions | yes | no | **yes** |
+| Cannot produce an invalid join / fan-out double count | no | yes | **yes** |
+| Tenant scope enforceable server-side | string injection | yes | **yes** |
+| Units/currency attachable to the result | no | yes | **yes** |
+| Unit-testable in isolation | no | yes | **yes** |
+| Bounded blast radius | no | yes | **yes** |
 
 They said they will ask their own questions live. That eliminates column 2. Everything else
 eliminates column 1. The semantic layer is the only cell that is both open-ended and safe.
 
-### 6.2 Tool surface (deliberately small   4 tools)
+### 6.2 Tool surface (deliberately small — 4 tools)
 
 A small, orthogonal tool set measurably outperforms a large one. All schemas use
 `strict: true` with enum-constrained fields and `additionalProperties: false`.
 
-**1. `get_capabilities()`**   the model's map of the world. Returns available measures,
+**1. `get_capabilities()`** — the model's map of the world. Returns available measures,
 dimensions, filter fields with their allowed enum values, the date range actually covered
 by the data, currency/units, granularity floor, and what this supplier may see about
 others. Cached in the system prompt prefix (§6.5). *This is what makes "I can't answer
@@ -275,7 +275,7 @@ that" possible instead of a guess.*
 **2. `resolve_entities(text, kinds[], limit)`** → `[{kind, id, label, score, path}]`
 Free text → canonical IDs (§5.4). The agent must call this before filtering by any name.
 
-**3. `query_sales(...)`**   the workhorse.
+**3. `query_sales(...)`** — the workhorse.
 
 ```jsonc
 {
@@ -306,12 +306,12 @@ Response:
 }
 ```
 
-Note `compare_to`   period-over-period is the single most common analyst follow-up
+Note `compare_to` — period-over-period is the single most common analyst follow-up
 ("och jämfört med förra året?"), and folding it into the tool means the model doesn't
 have to orchestrate two calls and subtract, which is exactly where arithmetic errors
 would creep in. **Never let the model do arithmetic it can ask the database to do.**
 
-**4. `query_market_share(...)`**   separate tool precisely *because* it reads beyond the
+**4. `query_market_share(...)`** — separate tool precisely *because* it reads beyond the
 supplier's own rows. Returns `{own_net, category_net, share_pct, rank, n_brands, suppressed}`
 from the aggregate rollups only. Competitor brands are never named, never itemised.
 Separating it makes the privileged read auditable in one place instead of being a flag
@@ -320,12 +320,12 @@ buried in `query_sales`.
 **Considered and deferred:** a guarded read-only SQL escape hatch over an RLS-protected
 view layer (statement timeout, forced `LIMIT`, parsed allowlist, same numeric validation).
 It genuinely covers the long tail. It is **not in the MVP** because it weakens the one
-guarantee I most want to be able to state without caveats   that a returned number is
+guarantee I most want to be able to state without caveats — that a returned number is
 always the output of a tested aggregation. I'd rather the system say *"det kan jag inte
-svara på med den data jag har   men jag kan visa X"* than risk a plausible wrong number.
+svara på med den data jag har — men jag kan visa X"* than risk a plausible wrong number.
 That trade is itself the answer to their question 5.
 
-### 6.3 Tenant injection   the important bit
+### 6.3 Tenant injection — the important bit
 
 `supplier_id` **does not appear in any tool's input schema.** The model literally cannot
 express "show me supplier 7's data". The FastAPI layer holds a request-scoped
@@ -368,15 +368,15 @@ Consequences of the provider, stated rather than buried:
 - **Prompt caching does not apply.** The endpoint ignores `cache_control`, so the ~90 %
   saving on the stable prefix (system prompt + tool definitions + capability catalogue,
   ≈ 3–4k tokens) is unavailable. Against real Claude the same code gets it back by adding
-  the field   the prefix is already structured as a stable block for exactly that reason.
-- **Model routing**   `deepseek-v4-flash` for a cheap first-pass intent classifier, `-pro`
-  for the real turn   remains available and is documented as a next step, not MVP.
+  the field — the prefix is already structured as a stable block for exactly that reason.
+- **Model routing** — `deepseek-v4-flash` for a cheap first-pass intent classifier, `-pro`
+  for the real turn — remains available and is documented as a next step, not MVP.
 - **Strict schemas.** DeepSeek's OpenAI-compatible route offers `strict: true` (requiring
   every property required and `additionalProperties: false`); the tool schemas in §6.2 are
   already written that way, so nothing has to change if we move to that route.
 
 One behavioural note that matters for a demo: I will not disable thinking. A thinking-off
-route can emit a tool call as plain prose that silently never runs   which on stage looks
+route can emit a tool call as plain prose that silently never runs — which on stage looks
 exactly like a confident hallucinated number, the one failure this whole design exists to
 prevent.
 
@@ -388,7 +388,7 @@ Short, explicit, and the enforcement lives in code rather than in hope:
 2. Resolve every entity with `resolve_entities` before filtering by name.
 3. Prefer one `query_sales` call with `compare_to` over two calls plus arithmetic.
 4. If `get_capabilities` doesn't cover it, return `status: "cannot_answer"` with a
-   suggestion   never approximate.
+   suggestion — never approximate.
 5. Answer in Swedish. Money in SEK excl. VAT, formatted sv-SE. State the period.
 6. Final output must validate against the `AnswerCard` schema.
 
@@ -406,8 +406,8 @@ ECharts is more powerful and heavier than this needs; Visx is more work for the 
 
 Presentation rules that answer *"visas i en enhet som är meningsfull"*:
 
-- SEK, `sv-SE` formatting   space thousands separator, comma decimal
-- Automatic magnitude: `< 100 tkr` → kr, `< 10 Mkr` → tkr, else Mkr   unit always on the axis
+- SEK, `sv-SE` formatting — space thousands separator, comma decimal
+- Automatic magnitude: `< 100 tkr` → kr, `< 10 Mkr` → tkr, else Mkr — unit always on the axis
 - Percentages one decimal; deltas always carry the comparison period as a label
 - ISO weeks, Swedish month names
 - Every card states period + scope + "exkl. moms"
@@ -437,7 +437,7 @@ the type is compatible (you cannot put a text column on a numeric axis). The fro
 fetches the **full** result set from `/api/result/{query_id}` and renders. Consequences:
 
 - The chart's values were never in the model's output. If the model hallucinated in prose,
-  the chart still shows the truth   and the validator (§9.2) catches the prose.
+  the chart still shows the truth — and the validator (§9.2) catches the prose.
 - Large result sets never enter the context window (only a capped preview does), so a
   1 200-row answer costs the same tokens as a 10-row one.
 
@@ -448,7 +448,7 @@ when the model is careless, which matters more for "produktkänsla" than model f
 
 ---
 
-## 9. Grounding   the core claim
+## 9. Grounding — the core claim
 
 > **The numbers you see never passed through the language model.**
 
@@ -457,7 +457,7 @@ Postgres → MCP → FastAPI → chart. The model chooses *the query* and *the p
 the values travel a path it doesn't touch. This is a property of the architecture, not of
 prompt quality, which is why I lead with it.
 
-### 9.2 Validation (secondary   for prose)
+### 9.2 Validation (secondary — for prose)
 The narrative *is* generated text, so after the tool loop and before responding:
 - extract every numeric literal from the narrative
 - assert each is present in the result set for `query_id`, or is a whitelisted derivation
@@ -470,7 +470,7 @@ Failing loudly and visibly beats failing plausibly.
 ### 9.3 Provenance (visible)
 Every card carries a source chip: tool name · applied filters · scope · row count ·
 data source (rollup vs fact) · timestamp. Expanding it shows the exact tool call arguments.
-The user   and the grader   can see the chain for any number on screen. That is the
+The user — and the grader — can see the chain for any number on screen. That is the
 demonstrable answer to *"kan vi lita på att svaren kommer från datan?"*.
 
 ### 9.4 The "can't answer" path
@@ -482,7 +482,7 @@ Three distinct failure modes, three distinct behaviours:
 | Metric doesn't exist (margin/COGS not exposed to suppliers) | `cannot_answer` + what *is* available from `get_capabilities` |
 | Outside data coverage (asks about 2019; predicts the future) | State the actual coverage; offer the nearest answerable question |
 
-The capability catalogue is what makes this graceful instead of a shrug   the model can
+The capability catalogue is what makes this graceful instead of a shrug — the model can
 say *what it doesn't have*, not merely that it failed.
 
 ---
@@ -490,10 +490,10 @@ say *what it doesn't have*, not merely that it failed.
 ## 10. Save, export, share
 
 - **Save**: pins the card to "Mina vyer". Persists the *spec plus the tool arguments*, not
-  a screenshot   so a saved card can be re-run live against fresh data.
+  a screenshot — so a saved card can be re-run live against fresh data.
 - **Export**: CSV from `/api/result/{query_id}`; PNG via `html-to-image` on the card node.
   PDF deferred (print stylesheet if time allows).
-- **Share**: signed, expiring, read-only link. **Snapshot by default**   a frozen copy with
+- **Share**: signed, expiring, read-only link. **Snapshot by default** — a frozen copy with
   its data and timestamp. Because a live link re-executes under *someone's* tenant scope,
   and getting that wrong is a data leak. "Live" is an explicit opt-in that re-runs strictly
   under the original supplier's scope.
@@ -507,7 +507,7 @@ say *what it doesn't have*, not merely that it failed.
 |---|---|
 | `supplier_viewer` | Dashboard + chat, own supplier only |
 | `supplier_admin` | + manage org's saved views and users |
-| `retail_analyst` | The retailer's own staff   cross-supplier |
+| `retail_analyst` | The retailer's own staff — cross-supplier |
 | `system_admin` | Ops |
 
 ### 11.2 Isolation (three layers, §6.3)
@@ -515,19 +515,19 @@ Schema omission → connection-scoped context → Postgres RLS. Plus an audit ta
 every turn: user, supplier scope, question, tools called, arguments, row counts, latency,
 tokens, cost. Useful for debugging, billing, and GDPR accountability alike.
 
-### 11.3 What a supplier may see about others   explicit policy
+### 11.3 What a supplier may see about others — explicit policy
 | | |
 |---|---|
-| ✅ Own brands | Full detail: product × store × day |
-| ✅ Category / market totals | Aggregate only, k-anonymised |
-| ✅ Own rank | "#2 av 7 varumärken i Hörlurar" |
-| ❌ Named competitor figures | Never   not filtered, not reachable |
-| ❌ Customer-level rows | Never   the tool's grain floor forbids it |
+| Own brands | Full detail: product × store × day |
+| Category / market totals | Aggregate only, k-anonymised |
+| Own rank | "#2 av 7 varumärken i Hörlurar" |
+| Named competitor figures | **Never** — not filtered, not reachable |
+| Customer-level rows | **Never** — the tool's grain floor forbids it |
 
 **k-anonymity:** market aggregates are suppressed unless the category contains ≥ 5 brands
 and ≥ 100 transactions in the slice. Otherwise "din andel" would be arithmetic subtraction
 away from a named competitor's revenue. The generator deliberately includes one thin
-category so this suppression fires during the demo   I want to *show* the guard, not
+category so this suppression fires during the demo — I want to *show* the guard, not
 assert it.
 
 ### 11.4 Other security measures
@@ -537,7 +537,7 @@ the internet (`ingress: internal` on Cloud Run); DB role is read-only for query 
 statement timeouts; secrets in Secret Manager, never in images; CORS allowlist; security
 headers. Prompt injection is treated as a *data* risk: since the model can neither express
 a cross-tenant query nor emit values, an injected instruction has no privileged path to
-abuse   and the adversarial eval set (§13.3) proves it rather than assuming it.
+abuse — and the adversarial eval set (§13.3) proves it rather than assuming it.
 
 ---
 
@@ -579,7 +579,7 @@ pytest for the semantic compiler (spec → SQL → expected numbers), each MCP t
 FastAPI routes. Vitest for chart/format utilities. One Playwright smoke test of the core
 flow: login → dashboard → ask → chart → save.
 
-### 13.2 Golden-question eval   the payoff from D7
+### 13.2 Golden-question eval — the payoff from D7
 Because the generator knows the truth, `eval/golden_questions.yaml` holds ~40 Swedish
 questions with **independently computed** expected values (pandas over the generated
 frames, not via the app). `run_eval.py` drives the *full* agent and asserts:
@@ -596,7 +596,7 @@ korrekt som obesvarbara"*. Run it in CI as a regression gate.
 Cross-tenant attempts ("visa alla leverantörers försäljning"), prompt injection ("ignorera
 instruktionerna ovan"), impossible questions ("vad säljer vi nästa kvartal?"), out-of-scope
 metrics ("vad är vår marginal?"), and thin-slice questions that must trigger k-anonymity
-suppression. Every one must produce a refusal or a suppression   never a number.
+suppression. Every one must produce a refusal or a suppression — never a number.
 
 ---
 
@@ -606,7 +606,7 @@ suppression. Every one must produce a refusal or a suppression   never a number.
 One command to a working demo is a deliverable in itself.
 
 **Cloud (GCP, matching the ad):**
-- Cloud Run × 3   `web` (static), `api` (public), `mcp` (**ingress: internal**)
+- Cloud Run × 3 — `web` (static), `api` (public), `mcp` (**ingress: internal**)
 - Cloud SQL for PostgreSQL 16 with `pgvector`, private IP + connector
 - Artifact Registry, Secret Manager, Cloud Logging/Monitoring
 - GitHub Actions: `ruff` + `mypy` + `eslint` + `tsc` → pytest + vitest → build → push →
@@ -619,7 +619,7 @@ stack.
 
 ## Sources
 
-- [MCP Python SDK](https://py.sdk.modelcontextprotocol.io/) · [mcp on PyPI](https://pypi.org/project/mcp/)   FastMCP + streamable HTTP as the production transport
+- [MCP Python SDK](https://py.sdk.modelcontextprotocol.io/) · [mcp on PyPI](https://pypi.org/project/mcp/) — FastMCP + streamable HTTP as the production transport
 - [Online Retail II (UCI)](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
 - [Olist Brazilian e-commerce dataset](https://www.kaggle.com/datasets/terencicp/e-commerce-dataset-by-olist-as-an-sqlite-database)
 - [Superstore sales dataset](https://www.kaggle.com/datasets/nayakganesh007/superstore-sales-dataset)

@@ -20,12 +20,11 @@ from ..result_cache import ResultCache, from_tool_result
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
-# The dashboard opens on the last 12 months against the same period a year earlier.
+# Opens on the last 12 months against the same period a year earlier.
 DEFAULT_PERIOD = "last_12_months"
 
-# The trend card is titled with the noun its buckets are, so the grain is the only thing
-# stored: the label and the noun are both `grain.<key>` in api/i18n.py. The client owns the
-# filter chips and never read the label from here.
+# Only the grain is stored; the trend card's title noun is derived from it via `grain.<key>`
+# in api/i18n.py. The client owns the filter chip labels, never reads them from here.
 PERIODS: dict[str, dict] = {
     "last_7_days":     {"grain": "day"},
     "last_30_days":    {"grain": "day"},
@@ -36,10 +35,8 @@ PERIODS: dict[str, dict] = {
     "all_time":        {"grain": "quarter"},
 }
 
-# The comparison follows the filter: whatever window is selected, the deltas and the overlay are
-# measured against the window immediately before it. That used to be a control the user set, but
-# a comparison basis that can disagree with the period filter is a second thing to keep in your
-# head for no gain - every delta on screen is now "vs the period before this one", always.
+# Comparison always follows the filter (vs the period immediately before) - used to be a
+# separate user control, but a basis that could disagree with the filter was one thing too many.
 COMPARE_TO = "previous_period"
 
 
@@ -61,20 +58,18 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     assert supplier_id is not None  # get_supplier_scope guarantees this
 
     window, period_settings = _period_spec(period)
-    # One window, one comparison: the same `compare_to` reaches the KPI deltas, the trend
-    # overlay and the share tile, so no two numbers on screen are measured against different
-    # periods.
+    # One `compare_to` reaches the KPI deltas, trend overlay, and share tile, so no two
+    # numbers on screen are ever measured against different periods.
     compare: dict = {"compare_to": COMPARE_TO}
 
     totals_args: dict = {"measures": ["net_sales_sek", "units", "avg_price_sek"],
                          "time_range": window, **compare}
 
-    # Named, because they are cached with the result and are what a saved or shared card
-    # re-runs. Passing `{}` here meant every card pinned from the dashboard came back as
-    # "Kunde inte uppdatera …" the next time it was opened.
+    # Named args, because they're cached and are what a saved/shared card re-runs; passing
+    # `{}` here meant every card pinned from the dashboard broke on refresh.
     trend_args: dict = {
-        # All three headline measures, so the KPI sparklines cost no extra query. The trend
-        # card charts the first of them; `propose_chart` picks measures[0].
+        # All three headline measures so KPI sparklines cost no extra query; the trend card
+        # charts the first one since `propose_chart` picks measures[0].
         "measures": ["net_sales_sek", "units", "avg_price_sek"],
         "dimensions": [period_settings["grain"]],
         "time_range": window,
@@ -96,24 +91,23 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
     }
 
     try:
-        # One MCP session, four queries, run concurrently - the tiles are independent and the
-        # rollup makes each of them cheap.
+        # One MCP session, run concurrently - the tiles are independent and the rollup makes
+        # each of them cheap.
         totals, trend, top_products, by_region, share, capabilities = await asyncio.gather(
             _call(mcp, supplier_id, "query_sales", totals_args),
             _call(mcp, supplier_id, "query_sales", trend_args),
             _call(mcp, supplier_id, "query_sales", top_products_args),
             _call(mcp, supplier_id, "query_sales", by_region_args),
             _call(mcp, supplier_id, "query_market_share", {"time_range": window, **compare}),
-            # Calendar only - a dimension read, not a trip to the fact table.
-            _call(mcp, supplier_id, "get_capabilities", {}),
+            _call(mcp, supplier_id, "get_capabilities", {}),  # calendar only, not the fact table
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("dashboard failed")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             tr("dash.error", error=exc)) from exc
 
-    # Before caching, so the average is part of the frozen result the chart, the table view and
-    # the CSV export all read.
+    # Before caching, so the average is part of the frozen result the chart, table view and
+    # CSV export all read.
     average = add_moving_average(trend, "net_sales_sek")
 
     payloads: dict[str, tuple[str, dict, dict]] = {
@@ -134,8 +128,8 @@ async def dashboard(period: str = Query(DEFAULT_PERIOD,
                         tr("dash.trend", noun=tr(f"grain.{period_settings['grain']}")),
                         average=average,
                         markers=campaign_markers(cached["trend"], capabilities),
-                        # One window, one comparison: if the tiles cannot honestly show it, the
-                        # chart must not draw it either.
+                        # One window, one comparison: if the tiles can't honestly show it,
+                        # the chart must not draw it either.
                         overlay=comparison_is_covered(totals)),
             _card(cached["top_products"], tr("dash.top_products")),
             _card(cached["by_region"], tr("dash.by_region")),
@@ -157,7 +151,7 @@ async def regions(tenant: ScopedTenant = Depends(get_supplier_scope),
     assert supplier_id is not None
     try:
         capabilities = await _call(mcp, supplier_id, "get_capabilities", {})
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("regions failed")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             tr("dash.error", error=exc)) from exc
@@ -167,10 +161,8 @@ async def regions(tenant: ScopedTenant = Depends(get_supplier_scope),
 
 MOVERS_LIMIT = 10
 
-# Ranked on kronor, not on percent. A percentage ranking put one product that went from 400 kr
-# to 6 000 kr at +1 400 % on the axis and left the other nine bars invisible beside it - a chart
-# whose caveat explained why it could not be read. The percentage is still on the card, in the
-# table view, where it says something about the product rather than about the axis.
+# Ranked on kronor, not percent: a percentage ranking put one product that went 400 kr -> 6000 kr
+# at +1400% on the axis and made the other nine bars invisible beside it.
 def _movers_caveat() -> str:
     return tr("dash.movers_caveat", currency=settings.app_currency)
 
@@ -206,7 +198,7 @@ async def movers(period: str = Query(DEFAULT_PERIOD),
             _call(mcp, supplier_id, "query_sales", args("desc")),
             _call(mcp, supplier_id, "query_sales", args("asc")),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("movers failed")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             tr("dash.movers_error", error=exc)) from exc
@@ -243,8 +235,8 @@ async def _call(mcp: McpClient, supplier_id: int, tool: str, args: dict) -> dict
     return await mcp.call(supplier_id, tool, args)
 
 
-# Three buckets: long enough to take the spike out of a single month, short enough that a real
-# turn still shows up inside a twelve-point window.
+# Long enough to take the spike out of a single month, short enough that a real turn still
+# shows up inside a twelve-point window.
 MA_WINDOW = 3
 
 
@@ -267,14 +259,14 @@ def add_moving_average(payload: dict, measure: str) -> str | None:
     if axis is None or len(rows) <= MA_WINDOW:
         return None
 
-    # The average is only an average if the buckets are in time order, and the sparklines read
-    # the same rows expecting oldest first.
+    # The average is only an average if buckets are in time order; sparklines read the same
+    # rows expecting oldest first.
     rows.sort(key=lambda row: str(row.get(axis) or ""))
     key = f"{measure}_ma"
     values = [row.get(measure) for row in rows]
     for index, row in enumerate(rows):
         window = values[max(0, index - MA_WINDOW + 1):index + 1]
-        # A short or gappy window would draw a line that is not the average it claims to be.
+        # A short or gappy window would draw a line that isn't the average it claims to be.
         row[key] = (round(sum(window) / MA_WINDOW, 2)
                     if len(window) == MA_WINDOW and None not in window else None)
 
@@ -331,9 +323,8 @@ def campaign_markers(result, capabilities: dict) -> list[str]:
     if not ranges or not values:
         return []
 
-    # Every grain - day, week, month, quarter - labels its bucket with the bucket's first day,
-    # so a bucket runs until the next one begins. That makes this grain-agnostic: no branch per
-    # grain, and a campaign starting mid-month still lands in that month.
+    # Every grain labels its bucket with the bucket's first day, so a bucket runs until the
+    # next one begins - grain-agnostic, and a mid-month campaign still lands in that month.
     last = str((result.meta or {}).get("time_range", {}).get("to") or values[-1][:10])
     marked = []
     for index, value in enumerate(values):
@@ -382,8 +373,8 @@ def _weighted_share(rows: list[dict], own_key: str, category_key: str) -> float 
     denominator is deduplicated by `category_id` because the tool's grain is brand ×
     subcategory: a supplier with two brands in one subcategory gets that total back twice.
     """
-    # A window every row does not carry is not a window: mixing rows that have a comparison
-    # with rows that do not would put two different periods in one figure.
+    # A window not every row carries isn't a window: mixing rows with and without a comparison
+    # would put two different periods in one figure.
     if any(row.get(own_key) is None or row.get(category_key) is None for row in rows):
         return None
     own = sum(float(row[own_key]) for row in rows)
@@ -415,8 +406,7 @@ def comparison_is_covered(totals: dict) -> bool:
     compare = meta.get("compare_range") or {}
     coverage = meta.get("coverage") or {}
     if not compare.get("from") or not coverage.get("from"):
-        # No comparison was asked for, or no coverage to check it against.
-        return True
+        return True  # no comparison was asked for, or nothing to check it against
     return str(compare["from"]) >= str(coverage["from"])
 
 
@@ -427,7 +417,7 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
     delta_label = tr("dash.delta_label") if delta_label is None else delta_label
     kpis: list[Kpi] = []
 
-    # A delta measured against a window the data does not cover is worse than no delta: it is
+    # A delta measured against a window the data doesn't cover is worse than no delta: it's
     # a number, so it will be read as one.
     covered = comparison_is_covered(totals)
     delta_label = delta_label if covered else None
@@ -456,8 +446,8 @@ def _kpis(totals: dict, share: dict, trend: dict | None = None,
                 # Percentage points: the frontend renders a '%' KPI's delta as p.e.
                 delta_pct=None if previous is None else round(current - previous, 1),
                 delta_label=delta_label,
-                # No sparkline: query_market_share aggregates over the whole window and has no
-                # month dimension, so there is no series to draw without a new tool shape.
+                # No sparkline: query_market_share aggregates over the whole window with no
+                # month dimension, so there's no series to draw.
                 rank_label=tr("kpi.rank", rank=best["rank"], total=best["n_brands"],
                              subcategory=best["subcategory"])))
 

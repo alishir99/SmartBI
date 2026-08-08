@@ -1,4 +1,3 @@
-/** Which node of the LLM → MCP → DB → MCP → LLM chain a turn is showing as live. */
 
 import { describe, expect, it } from 'vitest'
 import type { ChatTurn, ToolChip } from '../lib/chat'

@@ -1,4 +1,3 @@
-/** The questions a clicked number asks. Wrong wording here asks the agent a wrong question. */
 
 import { describe, expect, it } from 'vitest'
 import type { Column, Kpi } from '../types'
@@ -29,7 +28,7 @@ describe('kpiQuestion', () => {
 
   it('asks in percentage points about a percentage measure', () => {
     // A share moving 29,5 → 30,7 rose 1,2 p.e.; asking "varför ökade andelen 1,2 %" is a
-    // different and wrong question.
+    // different, wrong question.
     const question = kpiQuestion(
       kpi({ key: 'category_share_pct', label: 'Andel av kategori', unit: '%', delta_pct: 1.2 }),
     )

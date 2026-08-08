@@ -19,7 +19,6 @@ def cached(supplier_id: int = 1) -> CachedResult:
                            tool_args={"limit": 200}, payload=PAYLOAD)
 
 
-# ------------------------------------------------------------------ tenant scoping
 
 def test_an_entry_is_readable_by_its_own_tenant():
     cache = ResultCache()
@@ -38,7 +37,6 @@ def test_an_unknown_query_id_is_a_miss():
     assert ResultCache().get("q_nonexistent", 1) is None
 
 
-# ------------------------------------------------------------------------- eviction
 
 def test_the_cache_is_size_capped():
     cache = ResultCache(max_entries=3)
@@ -55,7 +53,6 @@ def test_expired_entries_are_not_returned():
     assert cache.get(entry.query_id, 1) is None
 
 
-# ---------------------------------------------------------------- preview discipline
 
 def test_the_preview_is_bounded():
     entry = cached()
@@ -84,7 +81,6 @@ def test_a_small_result_is_not_marked_truncated():
     assert entry.preview()["truncated_for_model"] is False
 
 
-# ------------------------------------------------------------------------- adapting
 
 def test_a_market_share_payload_without_columns_still_caches():
     """query_market_share returns no `columns` and no `query_id`; a KeyError here would turn a
@@ -103,12 +99,9 @@ def test_numeric_columns_are_identified():
     assert cached().numeric_columns() == ["net_sales_sek"]
 
 
-# ------------------------------------------------------- aggregates over the full result
 
-# The B2 fixture, built to reproduce the defect rather than to be convenient: the largest value
-# sits *outside* the 25 rows the model is shown, so any answer inferred from the sample names
-# the wrong winner while quoting a number that really is in the result set - which is exactly
-# why the validator used to accept it.
+# Built to reproduce the defect, not for convenience: the largest value sits outside the 25
+# rows the model is shown, so a sample-based answer names the wrong winner but quotes a real number.
 B2_ROWS = (
     [{"product": f"P{i}", "net_sales_sek": 8_507_984.0 - i} for i in range(PREVIEW_ROWS)]
     + [{"product": "P40", "net_sales_sek": 8_932_965.0}]

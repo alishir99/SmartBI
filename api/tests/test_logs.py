@@ -173,8 +173,8 @@ def test_a_rotated_file_keeps_its_extension(tmp_path, monkeypatch):
     """The stdlib default is `api.jsonl.2026-07-31`, which no tool recognises as JSON."""
     handler = configured(tmp_path, monkeypatch)
     logging.getLogger("api").info("", extra={"event": "before"})
-    # As a midnight would: just past due. Not 0 - the handler derives the rotated file's
-    # date by subtracting one interval, and a negative timestamp is an OSError on Windows.
+    # Not 0: rotation derives the rotated filename by subtracting an interval, and a negative
+    # timestamp raises OSError on Windows.
     handler.rolloverAt = time.time() - 1
     logging.getLogger("api").info("", extra={"event": "after"})
 

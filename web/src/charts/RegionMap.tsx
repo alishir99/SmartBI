@@ -1,11 +1,5 @@
-/**
- * Sales per region as a proportional-symbol map, positioned from the data's own coordinates.
- *
- * ponytail: no basemap. The hand-traced Sweden outline that used to sit behind these bubbles
- * was 600 points of one country and could not be fixed for any other, so it is gone and the
- * markers float. Add a real basemap when it matters - region GeoJSON served alongside the
- * centroids, drawn on the same projection - not another traced coastline.
- */
+/** Proportional-symbol map from the data's own coordinates - no basemap: the old hand-traced
+ * Sweden outline was 600 points that couldn't generalize, so markers float free instead. */
 
 import { useId, useMemo, useState } from 'react'
 import { findRegion, project, radiusFor, type RegionPoint } from '../lib/geo'
@@ -16,7 +10,6 @@ const VIEW_W = 460
 const VIEW_H = 620
 const PADDING = 40
 const MIN_R = 5
-// Capped lower than it could be.
 const MAX_R = 36
 /** Labels are placed for the biggest regions only, and never within this of another. */
 const LABEL_MIN_GAP = 30
@@ -55,9 +48,8 @@ export function RegionMap({ data, places, label }: Props) {
       .sort((a, b) => b.radius - a.radius)
   }, [data, places])
 
-  // Fitted to every region the warehouse has, not only the ones in this result: otherwise a
-  // period where one region sold nothing would re-scale and re-centre the whole map, and the
-  // same country would be a different shape on two cards.
+  // Fitted to every region the warehouse has, not just this result's: otherwise a period with
+  // one empty region would re-scale/re-centre the map, so the country looks different card to card.
   const projection = useMemo(
     () => project(places.length ? places : points.map((p) => p.point), VIEW_W, VIEW_H, PADDING),
     [places, points],
@@ -150,9 +142,8 @@ export function RegionMap({ data, places, label }: Props) {
           )
         })}
 
-        {/* Labels for the largest regions only, and only where one will not land on top of
-            another already placed. Dense areas produce overlapping text - the hover readout
-            carries the rest. */}
+        {/* Largest regions only, skipped where it'd overlap an already-placed label - dense
+            areas would produce overlapping text, so the hover readout carries the rest. */}
         {labelled.map((entry) => (
           <text
             key={`label-${entry.region}`}

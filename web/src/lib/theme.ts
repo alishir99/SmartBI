@@ -1,4 +1,3 @@
-/** Theme. */
 
 import { create } from 'zustand'
 

@@ -1,4 +1,3 @@
-/** Failure is a designed state too. */
 
 import type { ReactNode } from 'react'
 import { ApiError } from '../lib/api'

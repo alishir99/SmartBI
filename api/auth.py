@@ -43,7 +43,6 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
-# ------------------------------------------------------------------------------ tokens
 
 def create_access_token(user: dict) -> str:
     now = datetime.now(UTC)
@@ -62,7 +61,6 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
 
 
-# ------------------------------------------------------------------- password reset tokens
 
 def password_reset_key(password_hash: str) -> str:
     """The signing key for one user's reset tokens, derived from their current password hash.
@@ -124,8 +122,8 @@ def create_share_token(*, card_id: str, supplier_id: int, mode: str) -> tuple[st
     payload = {
         "typ": "share",
         "card_id": card_id,
-        # The original supplier's scope is baked in, so a "live" re-run can only ever execute
-        # against the tenant that shared it, whoever opens the link.
+        # Scope is baked into the token: a "live" re-run can only ever execute against the
+        # tenant that shared it, whoever opens the link.
         "supplier_id": supplier_id,
         "mode": mode,
         "exp": int(expires_at.timestamp()),
@@ -134,7 +132,6 @@ def create_share_token(*, card_id: str, supplier_id: int, mode: str) -> tuple[st
     return token, expires_at
 
 
-# ------------------------------------------------------------------------------ routes
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -149,16 +146,15 @@ def _to_user(row: dict) -> User:
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, request: Request) -> LoginResponse:
-    # Throttled *before* the lookup and before `verify_password`, per identifier and per
-    # address.
+    # Throttled before the lookup and before verify_password, per identifier and per IP.
     ip = ratelimit.client_ip(request)
     ratelimit.enforce_login(identifier=body.email, client_ip=ip)
 
     row = await db.user_by_email(body.email)
-    # One message and one code path for "no such user" and "wrong password", so the endpoint is
-    # not a registration oracle.
+    # Same message and code path for "no such user" and "wrong password" - not a
+    # registration oracle.
     if row is None or not verify_password(body.password, row["password_hash"]):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Felaktig e-post eller lösenord")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong email or password")
 
     ratelimit.clear_login(identifier=body.email, client_ip=ip)
     return LoginResponse(access_token=create_access_token(row), user=_to_user(row))
@@ -166,15 +162,14 @@ async def login(body: LoginRequest, request: Request) -> LoginResponse:
 
 @router.get("/me", response_model=User)
 async def me(tenant: TenantContext = Depends(get_current_user)) -> User:
-    # Read back from the database rather than from the token: a role or supplier change should
-    # take effect on the next request, not on the next login.
+    # Read from the DB, not the token: a role or supplier change takes effect on the next
+    # request, not the next login.
     row = await db.user_by_id(tenant.user_id)
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Användaren finns inte längre")
     return _to_user(row)
 
 
-# --------------------------------------------------------------------- password management
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
@@ -185,17 +180,16 @@ async def change_password(body: ChangePasswordRequest,
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, tr("auth.user_gone"))
 
-    # Argon2id at 19 MiB per verify, behind a session but still worth a bound: an authenticated
-    # client looping on a wrong current password is the same memory amplifier as the login
-    # endpoint, one token further in.
+    # Rate-limited even authenticated: a wrong-password loop here is the same Argon2
+    # memory-amplification cost as the login endpoint, one token further in.
     ratelimit.enforce_login(identifier=f"pwchange:{tenant.user_id}", client_ip="-")
     if not verify_password(body.current_password, row["password_hash"]):
         raise HTTPException(status.HTTP_403_FORBIDDEN, tr("auth.wrong_current_password"))
     ratelimit.clear_login(identifier=f"pwchange:{tenant.user_id}", client_ip="-")
 
     await db.set_password_hash(tenant.user_id, hash_password(body.new_password))
-    # No values, and no password of either kind: this line exists so an account takeover has a
-    # timestamp somebody can find afterwards.
+    # No secrets logged; this exists only so an account takeover leaves a timestamp to
+    # find later.
     logger.info("", extra={"event": "auth.password_changed", "user_id": tenant.user_id})
 
 
@@ -220,9 +214,9 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request) -> dict
                       subject=tr("mail.reset_subject"),
                       body=tr("mail.reset_body", name=row["display_name"], link=link,
                               minutes=settings.password_reset_ttl_minutes))
-        except Exception:  # noqa: BLE001
-            # Swallowed on purpose. Surfacing a mail failure here would answer "does this
-            # address exist" for anyone who can make the mail server fail.
+        except Exception:
+            # Swallowed on purpose: surfacing a mail failure here would reveal "does this
+            # address exist".
             logger.warning("could not send reset mail", exc_info=True,
                            extra={"event": "auth.reset_mail_failed"})
     else:
@@ -242,8 +236,8 @@ async def reset_password(body: ResetPasswordRequest, request: Request) -> None:
     ratelimit.enforce_password_reset(identifier="reset-redeem",
                                      client_ip=ratelimit.client_ip(request))
 
-    # Read the claimed user id without trusting it: it only decides whose hash the signature is
-    # then checked against, and a forged id simply fails that check.
+    # user_id isn't trusted here; it only selects whose hash the signature gets checked
+    # against, so a forged id just fails that check.
     user_id = user_id_in_reset_token(body.token)
     row = await db.user_by_id(user_id) if user_id is not None else None
     if row is None:
@@ -252,12 +246,12 @@ async def reset_password(body: ResetPasswordRequest, request: Request) -> None:
     try:
         decode_password_reset_token(body.token, row["password_hash"])
     except jwt.PyJWTError as exc:
-        # One message for expired, already-used and forged alike: which one it was is only
-        # useful to somebody who did not send the mail.
+        # Same error for expired/used/forged: distinguishing them only helps someone who
+        # didn't request the reset.
         raise HTTPException(status.HTTP_400_BAD_REQUEST, tr("auth.reset_invalid")) from exc
 
     await db.set_password_hash(row["user_id"], hash_password(body.new_password))
-    # A forgotten password usually means a locked-out person retrying; let them log in at once
-    # rather than meeting the throttle they just spent.
+    # A reset usually follows a lockout; clear the throttle too so they aren't made to
+    # wait through it again.
     ratelimit.clear_login(identifier=row["email"], client_ip=ratelimit.client_ip(request))
     logger.info("", extra={"event": "auth.password_reset", "user_id": row["user_id"]})

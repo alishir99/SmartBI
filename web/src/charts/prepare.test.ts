@@ -1,4 +1,3 @@
-/** The chart contract (§8) in test form. */
 
 import { describe, expect, it } from 'vitest'
 import type { ChartSpec, Column, ResultRow } from '../types'
@@ -217,9 +216,8 @@ describe('axis scale', () => {
         ['B', 1_000],
       ]),
     )
-    // The unit is built from `Intl`: the locale's own compact marker for a million plus its
-    // own symbol for whatever currency the deployment holds. Hardcoding "Mkr" was the same
-    // assumption as hardcoding kronor.
+    // Unit comes from Intl: the locale's own compact marker for a million plus its own currency
+    // symbol - hardcoding "Mkr" made the same assumption as hardcoding kronor.
     expect(prepared.scale).toEqual({ divisor: 1_000_000, unit: 'mn kr', decimals: 1 })
   })
 
@@ -240,8 +238,8 @@ describe('pie slices', () => {
   const shares = (pairs: Array<[string, number]>) => rows(pairs, 'subcategory')
 
   it('gives every slice its own colour', () => {
-    // The bug this pins: colour was matched against `series`, which for a pie holds the single
-    // measure and never a dimension value - so every wedge came out --series-1.
+    // Pins a real bug: colour was matched against `series`, which for a pie holds the single
+    // measure not a dimension value - every wedge came out --series-1.
     const prepared = prepareChart(
       pie(),
       [SUBCATEGORY, NET],

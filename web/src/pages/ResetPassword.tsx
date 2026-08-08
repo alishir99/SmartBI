@@ -1,9 +1,5 @@
-/**
- * Redeeming a reset link.
- *
- * Outside the auth gate, like the share page: whoever opens this cannot log in, which is the
- * whole reason they are here. Everything it needs is in the token.
- */
+/** Redeeming a reset link. Outside the auth gate, like the share page: whoever opens this
+ * cannot log in, which is the whole reason they're here - everything it needs is in the token. */
 
 import { useState, type FormEvent } from 'react'
 import { resetPassword } from '../lib/api'
@@ -33,8 +29,8 @@ export function ResetPasswordPage({ token }: { token: string }) {
       await resetPassword(token, value.password)
       setDone(true)
     } catch (caught) {
-      // The server's message, which says "invalid or already used" without saying which -
-      // expired, spent and forged are only distinguishable to someone who did not get the mail.
+      // The server's message says "invalid or already used" without saying which - expired,
+      // spent and forged are only distinguishable to someone who didn't get the mail.
       setError(caught instanceof Error ? caught.message : t('auth.reset_invalid'))
     } finally {
       setBusy(false)
@@ -61,7 +57,7 @@ export function ResetPasswordPage({ token }: { token: string }) {
             // A full reload rather than a hash change: it drops the spent token out of the
             // address bar and remounts the app at the login screen.
             onClick={() => {
-              window.location.hash = '#/oversikt'
+              window.location.hash = '#/overview'
               window.location.reload()
             }}
           >

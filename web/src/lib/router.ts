@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react'
 
-export type Route = 'oversikt' | 'produkter' | 'geografi' | 'mina-vyer'
+export type Route = 'overview' | 'products' | 'geography' | 'saved-views'
 
-const ROUTES: Route[] = ['oversikt', 'produkter', 'geografi', 'mina-vyer']
+const ROUTES: Route[] = ['overview', 'products', 'geography', 'saved-views']
 
 function parse(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
-  return (ROUTES as string[]).includes(raw) ? (raw as Route) : 'oversikt'
+  return (ROUTES as string[]).includes(raw) ? (raw as Route) : 'overview'
 }
 
 export function useRoute(): [Route, (next: Route) => void] {
@@ -23,7 +23,7 @@ export function useRoute(): [Route, (next: Route) => void] {
   return [route, navigate]
 }
 
-/** The token in `#/<prefix>/<token>`, or null. Not `Route`s: both sit outside the auth gate. */
+/** The token in `#/<prefix>/<token>`, or null. Not a `Route`: both sit outside the auth gate. */
 function tokenAfter(prefix: string): string | null {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
   const token = raw.startsWith(`${prefix}/`) ? raw.slice(prefix.length + 1) : ''

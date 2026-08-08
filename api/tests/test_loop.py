@@ -26,7 +26,6 @@ PAYLOAD = {
 }
 
 
-# ------------------------------------------------------------------------------ fakes
 
 class Block:
     """Stands in for an Anthropic content block; the loop only reads `.type` and friends."""
@@ -53,8 +52,8 @@ class FakeMessages:
     def __init__(self, script: list[Response], *, repeat_last: bool = False):
         self.script = list(script)
         self.calls = 0
-        # `repeat_last` models the case the iteration cap exists for: a model that will keep
-        # asking for tools no matter what it is told.
+        # Models the case the iteration cap exists for: a model that keeps asking for tools
+        # no matter what it's told.
         self.repeat_last = repeat_last
         self.kwargs: list[dict] = []
 
@@ -127,7 +126,6 @@ def query_turn() -> Response:
                                        "dimensions": ["month"]})])
 
 
-# --------------------------------------------------- explaining the card, without querying it
 
 @pytest.mark.asyncio
 async def test_a_question_about_the_chart_is_answered_without_a_query(monkeypatch):
@@ -151,7 +149,6 @@ async def test_an_explanation_may_not_smuggle_in_a_figure(monkeypatch):
     assert card.narrative == ""
 
 
-# ------------------------------------------------------------- the gate is on data, not status
 
 @pytest.mark.parametrize("status", ["ok", "clarify", "cannot_answer", "partial"])
 @pytest.mark.asyncio
@@ -163,7 +160,7 @@ async def test_a_fabricated_figure_is_caught_under_every_status(monkeypatch, sta
     assert card.status == "validation_failed"
     assert card.narrative == ""
     assert client.messages.calls == 3, "the model should have been asked to try again"
-    # The chart survives - it is drawn from the cache and never passed through the model.
+    # The chart survives - drawn from the cache, never passed through the model.
     assert card.chart is not None
     # The status carries the explanation; the card renders it from there, once.
     assert not any("kunde inte verifieras" in c for c in card.caveats)
@@ -200,7 +197,6 @@ async def test_the_retry_still_declares_the_tools(monkeypatch):
     assert card.status == "ok"
     retry = client.messages.kwargs[-1]
     assert retry["tools"], "the regeneration request dropped the tool declarations"
-    # And the history it carries is exactly why that matters.
     def block_type(block):
         return block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
 
@@ -230,7 +226,6 @@ async def test_the_tool_budget_is_never_exceeded(monkeypatch):
         "a round cap at or below the tool budget would cut turns off before they spend it")
 
 
-# --------------------------------------------------------- which result the card is about
 
 class FakeResult:
     """`_result_for` only ever reads `.query_id`."""
@@ -252,11 +247,11 @@ def test_a_query_id_we_never_minted_falls_back_to_our_own():
 
 
 @pytest.mark.parametrize("envelope_value", [
-    {},                                  # the model said nothing
+    {},                      # the model said nothing
     {"query_id": None},
-    {"query_id": ""},                    # falsy, so the lookup is skipped entirely
-    {"query_id": 12345},                 # not even a string
-    {"query_id": ["q_a"]},               # unhashable-ish shapes must not raise
+    {"query_id": ""},        # falsy, so the lookup is skipped entirely
+    {"query_id": 12345},     # not even a string
+    {"query_id": ["q_a"]},   # unhashable-ish shapes must not raise
 ])
 def test_a_missing_or_malformed_query_id_never_raises(envelope_value):
     last = FakeResult("q_last")
@@ -267,7 +262,6 @@ def test_no_results_means_no_card_source():
     assert agent_loop._result_for({"query_id": "q_a"}, []) is None
 
 
-# ------------------------------------------------------- the chart arrives before the prose
 
 @pytest.mark.asyncio
 async def test_the_chart_is_emitted_as_soon_as_its_rows_land(monkeypatch):
@@ -305,7 +299,6 @@ async def test_a_turn_with_no_rows_emits_no_preview(monkeypatch):
     assert not any(isinstance(e, PreviewEvent) for e in events)
 
 
-# ------------------------------------------------------------------- cost accounting
 
 @pytest.mark.asyncio
 async def test_usage_is_summed_across_every_call_in_the_turn(monkeypatch):
@@ -333,7 +326,7 @@ async def test_usage_is_summed_across_every_call_in_the_turn(monkeypatch):
 @pytest.mark.asyncio
 async def test_usage_is_reported_even_when_the_turn_fails(monkeypatch):
     """A turn that dies partway still spent real money."""
-    usage, events = await usage_of(monkeypatch, [])   # empty script → the fake raises
+    usage, events = await usage_of(monkeypatch, [])  # empty script -> the fake raises
 
     assert any(type(e).__name__ == "ErrorEvent" for e in events)
     assert usage is not None and usage.llm_calls == 0
@@ -375,11 +368,10 @@ async def test_no_tool_data_means_nothing_to_validate_against(monkeypatch):
     assert card.narrative
 
 
-# -------------------------------------------------------- which lookups counted as a miss
 
 @pytest.mark.parametrize("asked, labels, resembles", [
-    # The refusal path. Retrieval fuses lexical and semantic search, so a competitor's name
-    # comes back with the nearest brand the supplier does own - a hit by count, a miss in fact.
+    # Retrieval fuses lexical and semantic search, so a competitor's name comes back with the
+    # nearest brand the supplier does own - a hit by count, a miss in fact.
     ("Lumia Nordic", ["Nordström", "Vidar"], False),
     ("Lumia Nordic", [], False),
     # A typo must still resolve, or the answer stops naming a brand the user owns.
@@ -391,7 +383,6 @@ def test_a_lookup_counts_as_a_miss_unless_something_like_it_came_back(asked, lab
     assert agent_loop.resembles_any(asked, labels) is resembles
 
 
-# ------------------------------------------------------------------ the visible status
 
 @pytest.mark.asyncio
 async def test_the_status_stops_claiming_to_fetch_once_the_tools_are_done(monkeypatch):

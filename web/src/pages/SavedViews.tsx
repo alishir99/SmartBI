@@ -1,4 +1,3 @@
-/** Mina vyer. */
 
 import { useDeleteCard, useSavedCards } from '../lib/queries'
 import { useChatStore } from '../lib/chat'

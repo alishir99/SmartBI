@@ -49,8 +49,8 @@ mcp = FastMCP(
     instructions=INSTRUCTIONS,
     host=settings.mcp_host,
     port=settings.mcp_port,
-    # Stateless: every call carries its own tenant headers, so no session affinity is needed and
-    # the service scales horizontally without sticky routing.
+    # Stateless: every call carries its own tenant headers, so no session affinity is
+    # needed and the service scales horizontally without sticky routing.
     stateless_http=True,
     json_response=True,
 )

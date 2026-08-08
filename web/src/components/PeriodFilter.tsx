@@ -6,7 +6,6 @@ import { useT } from '../lib/i18n'
 type Props = {
   value: string
   onChange: (period: string) => void
-  /** True while the next window is loading, so the control can show it is working. */
   busy?: boolean
   options?: PeriodOption[]
   label?: string
@@ -14,8 +13,8 @@ type Props = {
 
 export function PeriodFilter({ value, onChange, busy = false, options, label }: Props) {
   const t = useT()
-  // Built inside the component, not at module load: the chips are labelled in the active
-  // language, and a module-level array is frozen in whichever one loaded first.
+  // Built inside the component, not at module load: chips are labelled in the active language,
+  // and a module-level array is frozen in whichever one loaded first.
   const chips = options ?? periodOptions()
   label = label ?? t('source.period')
   return (

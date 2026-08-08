@@ -23,25 +23,22 @@ import grade  # noqa: E402
 from grade import FAMILIES, CaseResult, Observed, family_of, family_rates  # noqa: E402
 
 DEFAULT_BASE_URL = "http://localhost:8000"
-DEFAULT_EMAIL = "anna@nordstromaudio.se"
+DEFAULT_EMAIL = "ali@solvigo.se"
 DEFAULT_PASSWORD = "demo1234"
 
 # One agent turn is several LLM round-trips plus a database query.
 DEFAULT_CONCURRENCY = 4
 
-# Generous, because the cap exists to stop a hung stream from wedging the run, not to measure
-# latency.
+# Generous: the cap stops a hung stream from wedging the run, not to measure latency.
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
-# /api/result pages at 1000 by default and caps at 5000.
-RESULT_PAGE_LIMIT = 5000
+RESULT_PAGE_LIMIT = 5000  # /api/result pages at 1000 by default, caps at 5000
 
 
 class SetupError(RuntimeError):
     """The run could not start. Distinct from any case failing."""
 
 
-# ------------------------------------------------------------------------------ styling
 
 @dataclass(frozen=True)
 class Style:
@@ -68,7 +65,6 @@ class Style:
         return self._wrap("1", text)
 
 
-# -------------------------------------------------------------------------- transport
 
 @dataclass
 class Session:
@@ -127,9 +123,8 @@ async def ask(session: Session, question: str, timeout: float,
                                       f"{response.status_code}: {response.text[:200]}")
                     return observed
 
-                # Line by line rather than `await response.aread()`: the stream is the product
-                # surface, and buffering it here would hide a server that only flushes at the
-                # end.
+                # Line by line, not `await response.aread()`: the stream is the product
+                # surface, and buffering here would hide a server that only flushes at the end.
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -199,8 +194,8 @@ async def establish_history(session: Session, case: dict,
 async def run_case(session: Session, case: dict, suite: str, timeout: float,
                    semaphore: asyncio.Semaphore) -> CaseResult:
     async with semaphore:
-        # The semaphore is held across the whole conversation on purpose: a follow-up must see
-        # its own prelude, not interleave with three other cases' turns.
+        # Held across the whole conversation on purpose: a follow-up must see its own
+        # prelude, not interleave with three other cases' turns.
         history, broken = await establish_history(session, case, timeout)
         if broken is not None:
             return grade.grade(case, broken, suite)
@@ -221,7 +216,6 @@ async def run_case(session: Session, case: dict, suite: str, timeout: float,
         return grade.grade(case, observed, suite)
 
 
-# ---------------------------------------------------------------------------- reporting
 
 def print_case(result: CaseResult, style: Style, verbose: bool) -> None:
     guarantee = result.suite == "adversarial"
@@ -275,9 +269,9 @@ def print_family_rates(results: list[CaseResult], style: Style) -> None:
 
     grounded, prose = rates.get("grounded"), rates.get("prose")
     if grounded and prose:
+        # ASCII arrow deliberately: this line gets quoted, and the Windows-default cp1252
+        # console can't encode a real arrow.
         print(style.bold(
-            # ASCII arrow deliberately: this line is the one a reader quotes, and a plain cp1252
-            # console (the Windows default) cannot encode a real arrow at all.
             f"  -> grounded {100.0 * grounded[0] / grounded[1]:.0f} % vs prose "
             f"{100.0 * prose[0] / prose[1]:.0f} % - the gap is the model, "
             f"the floor is the architecture"))
@@ -341,9 +335,8 @@ def write_json(path: Path, results: list[CaseResult], session: Session,
             "passed": sum(1 for r in results if r.passed),
             "failed": sum(1 for r in results if not r.passed),
         },
-        # Per-check rather than per-case: the conjunctive score above cannot distinguish a wrong
-        # chart type from a fabricated total, and these two families measure two different
-        # systems (the architecture and the model).
+        # Per-check, not per-case: the conjunctive score can't distinguish a wrong chart type
+        # from a fabricated total, and these families measure two different systems.
         "families": {name: {"passed": passed, "total": total,
                             "rate_pct": round(100.0 * passed / total, 1)}
                      for name, (passed, total) in family_rates(results).items()},
@@ -352,7 +345,6 @@ def write_json(path: Path, results: list[CaseResult], session: Session,
     path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-# --------------------------------------------------------------------------------- cli
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -449,8 +441,8 @@ async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],
             results.append(result)
             print_case(result, style, args.verbose)
 
-    # Report in suite order regardless of the order they finished in, so two runs of the same
-    # selection produce comparable output.
+    # Report in suite order regardless of finish order, so two runs of the same selection
+    # produce comparable output.
     order = {case["id"]: index for index, (_, case) in enumerate(selected)}
     results.sort(key=lambda r: order.get(r.case_id, 0))
 
@@ -463,7 +455,7 @@ async def run(args: argparse.Namespace, selected: list[tuple[str, dict]],
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Windows consoles still default to cp1252, which cannot encode "ö" - and every question in
+    # Windows consoles still default to cp1252, which can't encode "ö" - every question in
     # the suites is Swedish.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):

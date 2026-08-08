@@ -10,16 +10,13 @@ from ..semantic.compiler import Params, resolve_time_range, shift_range
 from ..tenant import TenantContext
 from .sales import _jsonable, scope_label
 
-# A slice must contain at least this many competing brands and this many transactions before any
+# k-anonymity floor: a slice needs at least this many brands and transactions before any
 # share figure is returned.
 MIN_BRANDS = 5
 MIN_TRANSACTIONS = 100
 
-# The result's own column spec, in row order. Without it the API falls back to inferring columns
-# from the rows, which gives raw snake_case headers and - worse - no `unit`, and a column with no
-# unit is a column the validator's unit separation cannot police and the chart cannot scale.
-# `category_id` and `suppressed` are deliberately absent: they exist for joining and policy, not
-# for reading, and a numeric id in the column list becomes a value the validator would license.
+# Explicit column spec: a column with no unit is one the validator can't police and the
+# chart can't scale. category_id/suppressed excluded - join/policy fields, not values to show.
 BASE_COLUMNS: list[dict] = [
     {"key": "brand", "type": "text", "label": "Varumärke"},
     {"key": "subcategory", "type": "text", "label": "Underkategori"},
@@ -29,15 +26,14 @@ BASE_COLUMNS: list[dict] = [
     {"key": "category_net_sek", "type": "number", "unit": "SEK",
      "label": "Kategorins nettoförsäljning"},
     {"key": "share_pct", "type": "number", "unit": "%", "label": "Marknadsandel"},
-    # No unit: a placement is not a count of anything, and calling it "st" would put it in the
-    # same bucket as sold units.
+    # No unit: a placement isn't a count of anything - "st" would group it with sold units.
     {"key": "rank", "type": "number", "label": "Placering"},
     # A band, not a figure. See _leader_band.
     {"key": "leader_share_band", "type": "text", "label": "Marknadsledarens andel"},
 ]
 
-# Only present when compare_to was asked for. "(jämförelse)" is a placeholder the API replaces
-# with the period the comparison actually ran over.
+# Only present when compare_to was asked for; "(jämförelse)" is a placeholder the API
+# replaces with the period the comparison actually ran over.
 COMPARE_COLUMNS: list[dict] = [
     {"key": "own_net_sek_compare", "type": "number", "unit": "SEK",
      "label": "Egen nettoförsäljning (jämförelse)"},
@@ -118,14 +114,14 @@ def _snap_to_whole_months(window: tuple[date, date]) -> tuple[date, date]:
 
 def _build(window: tuple[date, date], spec: dict) -> tuple[str, list]:
     params = Params()
-    params.add(window[0])          # $1
-    params.add(window[1])          # $2
+    params.add(window[0])
+    params.add(window[1])
 
     category_clause = ""
     if category_ids := (spec.get("category_ids") or None):
         placeholder = params.add(list(category_ids))
-        # Same two-level expansion as query_sales, so "Ljud & Bild" works as well as "Hörlurar".
-        # Unqualified column name so the one fragment fits all three CTEs.
+        # Same two-level expansion as query_sales. Unqualified column name so the one
+        # fragment fits all three CTEs.
         category_clause = (
             f" AND category_id IN (SELECT category_id FROM dim_category "
             f"WHERE category_id = ANY({placeholder}::int[]) "
@@ -145,8 +141,8 @@ async def query_market_share(tenant: TenantContext, spec: dict) -> dict:
     window = _snap_to_whole_months(requested)
     snapped = window != requested
 
-    # A share that cannot move is the one number this product most needs to be able to move:
-    # absolute sales rising while category share falls is the finding a supplier is here for.
+    # A share that can't move is the one number this product most needs to move: absolute
+    # sales rising while category share falls is the finding a supplier is here for.
     compare_to = spec.get("compare_to")
     compare_window = (_snap_to_whole_months(shift_range(window, compare_to))
                       if compare_to else None)
@@ -204,18 +200,18 @@ def _attach_comparison(rows: list[dict], previous: list[dict]) -> None:
     by_slice = {(r["brand"], r["category_id"]): r for r in previous}
     for row in rows:
         earlier = by_slice.get((row["brand"], row["category_id"]))
-        # Suppression is per window: a slice thin in either one stays withheld in both, or the
-        # comparison becomes a way to read a total that was deliberately not returned.
+        # Suppression is per window: a slice thin in either one stays withheld in both, or
+        # the comparison becomes a way to read a total that was deliberately not returned.
         if earlier is None or row["suppressed"] or earlier["suppressed"]:
             continue
         row["own_net_sek_compare"] = earlier["own_net_sek"]
-        # The category total too: a caller weighting several subcategories into one figure
-        # needs the same denominator for both windows, or the two are not comparable.
+        # The category total too: weighting several subcategories into one figure needs
+        # the same denominator for both windows, or the two aren't comparable.
         row["category_net_sek_compare"] = earlier["category_net_sek"]
         row["share_pct_compare"] = earlier["share_pct"]
         if row["share_pct"] is not None and earlier["share_pct"] is not None:
-            # Percentage points, not percent of a percent - a share moving 29,5 → 30,7 has
-            # risen 1,2 p.e., and calling that "+4 %" is how a share tile misleads.
+            # Percentage points, not percent of a percent - a share moving 29,5 -> 30,7 rose
+            # 1,2 p.e.; calling that "+4 %" is how a share tile misleads.
             row["share_pct_delta_pe"] = round(row["share_pct"] - earlier["share_pct"], 2)
 
 
@@ -256,8 +252,8 @@ def _row(record: dict) -> dict:
     return row
 
 
-# Wide enough that the leader's revenue comes back as a range rather than a figure, narrow
-# enough to still answer "how far ahead is the leader".
+# Wide enough that the leader's revenue comes back as a range not a figure, narrow enough
+# to still answer "how far ahead is the leader".
 LEADER_BAND_PE = 5
 
 

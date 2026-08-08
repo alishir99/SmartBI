@@ -23,12 +23,11 @@ WINDOWS = (
 
 @pytest.fixture(scope="module")
 def oracle() -> Oracle:
-    # Module-scoped: `lines` is a cached_property over seven CSVs, and rebuilding it per test
-    # would dominate the runtime of the whole suite.
+    # Module-scoped: `lines` is a cached_property over seven CSVs, and rebuilding it per
+    # test would dominate the suite's runtime.
     return Oracle()
 
 
-# ---------------------------------------------------------------- the licence
 
 
 def test_reconciles_against_ground_truth(oracle):
@@ -45,7 +44,6 @@ def test_data_files_are_present(oracle):
         assert (oracle.data_dir / name).exists(), f"{name} missing from {oracle.data_dir}"
 
 
-# ---------------------------------------------------------------- measures
 
 
 def test_measure_accepts_exactly_the_advertised_keys(oracle):
@@ -56,8 +54,7 @@ def test_measure_accepts_exactly_the_advertised_keys(oracle):
 
 
 def test_unknown_measure_raises(oracle):
-    # The failure mode this forbids is a typo'd measure returning None and comparing equal to
-    # nothing in particular.
+    # Forbids a typo'd measure silently returning None and comparing equal to nothing.
     with pytest.raises(KeyError, match="unknown measure"):
         oracle.measure(oracle.slice(), "net_sales")
 
@@ -80,7 +77,6 @@ def test_empty_slice_does_not_divide_by_zero(oracle):
     assert oracle.measure(empty, "discount_rate") == 0.0
 
 
-# ---------------------------------------------------------------- windows
 
 
 @pytest.mark.parametrize("name", WINDOWS)
@@ -134,7 +130,6 @@ def test_unknown_window_raises(oracle):
         oracle.relative_range("last_fortnight")
 
 
-# ---------------------------------------------------------------- tenant scoping
 
 
 def test_slice_defaults_to_the_demo_tenant(oracle):
@@ -153,7 +148,6 @@ def test_unknown_filter_key_in_a_derivation_raises(oracle):
         oracle.derive({"measure": "net_sales_sek", "where": {"customer_segment": "premium"}})
 
 
-# ---------------------------------------------------------------- market share
 
 
 def test_market_share_reports_peer_count_without_suppressing(oracle):
@@ -193,12 +187,11 @@ def test_vintersport_is_below_the_k_anonymity_threshold(oracle):
 
 
 def test_the_tenant_sells_nothing_in_vintersport(oracle):
-    # Two independent reasons the thin-slice question cannot yield a figure; this is the second
-    # one, and it is the reason the case is in adversarial.yaml at all.
+    # Two independent reasons the thin-slice question can't yield a figure; this is the
+    # second, and the reason the case is in adversarial.yaml at all.
     assert len(oracle.slice(subcategory="Vintersport")) == 0
 
 
-# ---------------------------------------------------------------- oddities
 
 
 def test_the_discontinued_product_stops_before_coverage_ends(oracle):

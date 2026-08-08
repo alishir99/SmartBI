@@ -20,9 +20,8 @@ from ..i18n import current as current_language
 
 ANSWER_BLOCK_LANGUAGE = "json"
 
-# What each language tells the model to produce. The currency and locale are the deployment's,
-# so the same rule reads "Belopp i SEK, formaterat sv-SE" or "Amounts in EUR, formatted en-GB"
-# without either being written down twice.
+# What each language tells the model to produce; currency/locale are the deployment's, so one
+# rule reads correctly whether that's "Belopp i SEK, formaterat sv-SE" or "Amounts in EUR...".
 _OUTPUT_RULES = {
     "sv": ("Svara på svenska. Belopp i {currency}, formaterat {locale}. Ange alltid vilken "
            "period svaret gäller. **En förändring av en andel skrivs i procentenheter, aldrig "
@@ -30,9 +29,8 @@ _OUTPUT_RULES = {
            "12,2 **procentenheter** - skriv \"procentenheter\" eller \"p.e.\" Skriver du "
            "\"procent\" där datan har procentenheter avvisas talet av valideringen, och med "
            "rätta: det är två olika storheter."),
-    # Deliberately NOT `{locale}`: that is the deployment's display locale, which the client
-    # formats with. The prose has to be written the way the English number grammar in
-    # validate.py reads it, or a correct figure gets rejected for its punctuation.
+    # Deliberately NOT `{locale}` (the client's display locale): prose must match the English
+    # number grammar in validate.py, or a correct figure gets rejected for punctuation.
     "en": ("Answer in ENGLISH, even though these instructions are in Swedish. Amounts in "
            "{currency}, written the English way: comma as the thousands separator, period as "
            "the decimal point. Always state which period the answer covers. **A change in a share "
@@ -266,7 +264,7 @@ def system_prompt(lang: str) -> str:
     """
     rule = _OUTPUT_RULES.get(lang, _OUTPUT_RULES["sv"])
     # A plain substitution, not `.format`: the template ends in a JSON example, and every brace
-    # in it would have to be doubled to survive a format call.
+    # would have to be doubled to survive a format call.
     return _TEMPLATE.replace(
         "{output_rule}",
         rule.format(currency=settings.app_currency, locale=settings.app_locale))

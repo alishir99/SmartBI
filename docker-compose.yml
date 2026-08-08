@@ -1,16 +1,7 @@
-# `docker compose up` has to work from a clean clone, because that is the bar a reviewer
-# applies before reading a line of code. Two things stopped it: compose errored immediately
-# when `.env` was absent, and `.gitignore` excludes both `.env` and `data/generated/`.
-#
-# Every service therefore reads `.env.example` first and `.env` second, with the second
-# optional - later files win, so a real `.env` still overrides every default, and someone
-# who has not made one gets a working demo instead of an error. `.env.example` sets
-# SOLVIGO_ENV=dev, which is what permits the in-repo secrets; anything else and the API and
-# MCP server refuse to boot on published defaults.
-#
-# The one thing this cannot supply is LLM_API_KEY. Without it the dashboard, the tools and
-# the whole deterministic path work; chat answers with "LLM_API_KEY är inte satt". That is
-# the honest failure for a secret nobody can commit.
+# Every service reads .env.example first, .env second (optional) - later wins, so a real
+# .env still overrides defaults but a fresh clone gets a working demo instead of an error.
+# LLM_API_KEY has no default; without it chat answers "LLM_API_KEY är inte satt" but the
+# rest of the deterministic path still works.
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -18,19 +9,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-solvigo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solvigo}
       POSTGRES_DB: ${POSTGRES_DB:-solvigo}
-    # No published port. The services that need Postgres are on this network; publishing
-    # 5432 put a database whose credentials are in db/sql/04_rls.sql on the host interface.
-    # docker-compose.demo.yml adds it back for hands-on work.
+    # No published port: publishing 5432 would put credentials-bearing Postgres on the host
+    # interface. docker-compose.demo.yml adds it back for hands-on work.
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      # `-h 127.0.0.1` is the whole point of this line. While docker-entrypoint-initdb.d is
-      # still applying the four schema files, Postgres is up on the Unix socket only - the
-      # entrypoint deliberately withholds TCP until initialisation finishes. A socket
-      # pg_isready therefore reports healthy mid-init, which lets `seed` start against a
-      # half-built schema: the classic compose race, and it fails intermittently, which is
-      # the worst way to fail. Asking over TCP is exactly the question we mean to ask.
+      # -h 127.0.0.1 forces a TCP check: docker-entrypoint-initdb.d holds TCP closed until
+      # init finishes, so a socket-only pg_isready would report healthy mid-init and race seed.
       test: ["CMD-SHELL",
              "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-solvigo} -d ${POSTGRES_DB:-solvigo}"]
       interval: 5s
@@ -41,11 +27,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.python
-    # `data/generated/` is gitignored, so on a clean clone the CSVs do not exist and
-    # seed.py exited - taking mcp, and then api, down with it. Generating them here makes
-    # `docker compose up` actually work from a fresh clone, which is the bar reviewers
-    # apply. Conditional rather than unconditional: the generator is deterministic, so
-    # regenerating on every boot would be a minute of work to produce byte-identical files.
+    # data/generated/ is gitignored, so a clean clone needs the CSVs generated first; the
+    # test guard avoids regenerating (deterministic) byte-identical files on every boot.
     command: >
       sh -c "test -f data/generated/fact_sales_line.csv ||
              python scripts/generate_data.py --seed 42;
@@ -74,10 +57,8 @@ services:
         required: false
     environment:
       POSTGRES_HOST: db
-    # Deliberately not published. `internal_token` is the only thing between this port and
-    # a full cross-tenant read, and a shared secret is defence in depth, not the boundary
-    # itself - the boundary is that the port is not reachable (§11.4, ingress: internal on
-    # Cloud Run). docker-compose.demo.yml publishes it for exercising the tools by hand.
+    # Deliberately not published: internal_token is defence in depth, not the boundary - the
+    # boundary is that this port isn't reachable (§11.4). demo overlay publishes it for testing.
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -99,8 +80,7 @@ services:
     environment:
       POSTGRES_HOST: db
       MCP_URL: http://mcp:8081/mcp
-      # stdout is what `docker compose logs` reads; the file is what survives a restart and
-      # what you grep after the fact. Both carry the same JSON.
+      # stdout is what `docker compose logs` reads; the file survives a restart. Same JSON.
       LOG_FILE: /app/logs/api.jsonl
     volumes:
       - ./logs:/app/logs
@@ -114,13 +94,12 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
-      # Vite inlines this into the bundle, so it has to be here and not under `environment:`
-      # - a static image reads no environment at all.
+      # Vite inlines this into the bundle - must be a build arg, not `environment:`, since a
+      # static image reads no environment at all.
       args:
         VITE_API_BASE_URL: http://localhost:8000
     ports:
-      # 8080 inside: unprivileged nginx does not bind a low port, because it is not root.
-      - "5173:8080"
+      - "5173:8080"  # 8080 inside: unprivileged nginx can't bind a low port
     depends_on:
       - api
 

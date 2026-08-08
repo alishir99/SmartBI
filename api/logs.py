@@ -43,16 +43,14 @@ from .config import settings
 __all__ = ["ContextVar", "JsonFormatter", "TextFormatter", "bind", "configure",
            "Path", "fingerprint", "new_turn_id", "redacted", "safe_extra", "timed"]
 
-# No mutable default: every reader goes through `_ctx()`, so the empty case is a fresh
-# dict rather than one shared across every request that never bound anything.
+# No mutable default: `_ctx()` returns a fresh dict per call, not one shared across requests.
 _context: ContextVar[dict[str, Any] | None] = ContextVar("log_context", default=None)
 
 
 def _ctx() -> dict[str, Any]:
     return _context.get() or {}
 
-# Attributes `logging` puts on every record. Anything else a caller passed via `extra=` is
-# ours and belongs in the JSON payload.
+# Attributes `logging` puts on every record; anything else via `extra=` belongs in the JSON payload.
 _STANDARD = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
     "asctime", "message", "taskName"}
 
@@ -105,8 +103,8 @@ def configure() -> None:
     root.addHandler(stream)
 
     if settings.log_file:
-        # Midnight UTC, not local: a container's timezone is not a fact anyone should have to
-        # know to read a filename, and a DST shift would otherwise produce a 23-hour file.
+        # Midnight UTC, not local: a container's timezone shouldn't matter to read a filename,
+        # and it avoids a DST-shortened file.
         path = Path(settings.log_file)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,32 +112,26 @@ def configure() -> None:
                 path, when="midnight", utc=True,
                 backupCount=settings.log_retention_days, encoding="utf-8")
         except OSError as exc:
-            # A second copy of what stdout already carries is not worth the process. The
-            # container runs unprivileged and `logs/` is a bind mount, so the file can be
-            # unwritable for reasons that have nothing to do with the API being healthy -
-            # and an API that refuses to start because it cannot write a duplicate log is
-            # an outage caused by its own bookkeeping.
+            # File logging just duplicates stdout, so a bind-mounted log dir being unwritable
+            # must not stop the API - that would be an outage from our own bookkeeping.
             root.warning("file logging disabled: %s", exc, extra={
                 "event": "log.file_unavailable", "path": str(path)})
         else:
-            # Default naming gives `api.jsonl.2026-07-31`, which no tool recognises as JSON
-            # and which sorts oddly. `api-2026-07-31.jsonl` keeps the suffix where it belongs.
+            # Default naming gives `api.jsonl.2026-07-31` (unrecognized as JSON, sorts oddly);
+            # this keeps the suffix last: `api-2026-07-31.jsonl`.
             rotating.namer = lambda name: str(
                 path.with_name(f"{path.stem}-{name.rsplit('.', 1)[-1]}{path.suffix}"))
             rotating.setFormatter(JsonFormatter())  # the file is always machine-readable
             root.addHandler(rotating)
 
     root.setLevel(settings.log_level.upper())
-    # These two narrate every request and every connection at INFO and drown the events
-    # that matter. Their warnings still come through.
+    # Chatty at INFO and would drown out the events that matter; their warnings still come through.
     for noisy in ("httpx", "httpcore", "asyncio", "anthropic"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
-#: Names `logging` already owns on a LogRecord. Passing one via `extra=` raises KeyError,
-#: which inside an agent turn is caught by the broad handler and silently becomes an error
-#: event - a logging call taking down the answer it was there to describe. `event` is ours by
-#: convention and deliberately allowed.
+#: Names `logging` already owns; passing one via `extra=` raises KeyError, silently turning a
+#: log call into an error event. `event` is ours by convention and deliberately allowed.
 RESERVED = _STANDARD - {"event"}
 
 

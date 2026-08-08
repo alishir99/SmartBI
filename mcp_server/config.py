@@ -2,7 +2,7 @@
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# See the matching block in api/config.py.
+# Mirrors api/config.py's IN_REPO_DEFAULTS - keep both in sync.
 IN_REPO_DEFAULTS = {
     "internal_token": "dev-internal-token",
     "app_db_password": "app_readonly",
@@ -12,7 +12,7 @@ IN_REPO_DEFAULTS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # The demo posture - published internal port, in-repo secrets.
+    # Default is the published demo posture: open port, in-repo secrets.
     solvigo_env: str = "prod"
 
     postgres_host: str = "localhost"
@@ -28,14 +28,11 @@ class Settings(BaseSettings):
     # Shared secret between the API and the MCP server.
     internal_token: str = "dev-internal-token"
 
-    # Hard ceiling on rows a single tool call may return, independent of the caller's limit.
+    # Hard ceiling on query duration in Postgres, independent of anything the caller sets.
     statement_timeout_ms: int = 15_000
 
-    # What the money columns are denominated in. Every tool result states it in `meta`, so a
-    # figure can never reach a card without its unit. Must match `app_currency` in
-    # api/config.py - same warehouse, one answer. `prices_include_vat` is the other half of
-    # "what does this number mean"; it is a flag rather than a phrase so the reader's language
-    # picks the words.
+    # Every tool result states this in meta, so a figure never reaches a card without its unit.
+    # Must match api/config.py's app_currency - same warehouse, one answer.
     app_currency: str = "SEK"
     prices_include_vat: bool = False
 

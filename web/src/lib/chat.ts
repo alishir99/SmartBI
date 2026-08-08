@@ -1,4 +1,3 @@
-/** Chat state (Zustand). */
 
 import { create } from 'zustand'
 import type { AnswerCard, ChatEvent, ChatHistoryEntry } from '../types'
@@ -50,14 +49,9 @@ function toHistory(turns: ChatTurn[]): ChatHistoryEntry[] {
   return history.slice(-8)
 }
 
-/**
- * What the card actually put on screen, appended to the answer the model wrote.
- *
- * Without this a follow-up like "vad betyder den streckade linjen?" is unanswerable: the
- * model never sees the chart, because the server picks it after the prose is written. It
- * would then say it cannot see the chart, which reads as a system that does not know what it
- * just showed you.
- */
+/** What the card actually put on screen, appended to the model's answer - without this, a
+ * follow-up like "vad betyder den streckade linjen?" is unanswerable: the model never sees
+ * the chart, since the server picks it after the prose is written. */
 function describeCard(card: AnswerCard): string {
   if (!card.chart) return ''
   const parts = [`typ: ${card.chart.type}`]
@@ -98,8 +92,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         turns: state.turns.map((candidate) => (candidate.id === id ? update(candidate) : candidate)),
       }))
 
-    // Held locally as well as on the module, because `cancel()` nulls the module-level
-    // reference synchronously while the fetch rejects a tick later.
+    // Held locally too, not just on the module: `cancel()` nulls the module-level reference
+    // synchronously while the fetch rejects a tick later.
     const abort = new AbortController()
     controller = abort
 

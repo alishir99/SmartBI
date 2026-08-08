@@ -1,4 +1,3 @@
-/** Login, and the "I cannot get in" path next to it. */
 
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { forgotPassword, login } from '../lib/api'
@@ -64,8 +63,6 @@ function LinkButton({ onClick, children }: { onClick: () => void; children: Reac
 function SignInForm({ onForgot }: { onForgot: () => void }) {
   const t = useT()
   const signIn = useAuthStore((state) => state.signIn)
-  // The page used to arrive with a working account's address and password one click away.
-  // Anyone who reached the login screen was already past the only door there is.
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -128,9 +125,8 @@ function SignInForm({ onForgot }: { onForgot: () => void }) {
         <LinkButton onClick={onForgot}>{t('login.forgot')}</LinkButton>
       </Card>
 
-      {/* No credentials on the page - anyone who reached it would already be past the only
-          door there is. But a reviewer who opens the app before reading anything is otherwise
-          simply stuck, so say where they are. */}
+      {/* No credentials on the page - anyone who reached it is already past the only door
+          there is. But a reviewer who opens the app cold is otherwise simply stuck. */}
       <p className="mt-5 text-center text-2xs text-ink-muted">{t('login.demo_hint')}</p>
     </>
   )
@@ -148,10 +144,8 @@ function ForgotForm({ onBack }: { onBack: () => void }) {
     try {
       setSent(await forgotPassword(email.trim()))
     } catch {
-      // Shows the same confirmation as a success, on purpose. The server already answers
-      // identically for a known and an unknown address so this form cannot be used to find out
-      // who has an account; surfacing a failure only here would rebuild that oracle out of the
-      // error path - "your address failed differently" is the same answer.
+      // Shows the same confirmation as a success, on purpose: the server already answers
+      // identically for a known and unknown address, so a failure here would rebuild that oracle.
       setSent(t('auth.reset_sent'))
     } finally {
       setBusy(false)

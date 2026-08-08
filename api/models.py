@@ -7,34 +7,24 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Role = Literal["supplier_viewer", "supplier_admin", "retail_analyst", "system_admin"]
-# A unit is either one of the three fixed kinds below or an ISO-4217 currency code - whichever
-# the warehouse is denominated in, which is a deployment setting and so cannot be a Literal.
-# "p.e." is percentage points, and it is a unit of its own rather than a flavour of "%": a share
-# moving 29,5 → 30,7 has risen 1,2 p.e., and letting the two share one unit is what let the model
-# call that "+1,2 procent" and pass validation (G2). The client renders "st" and "p.e." in its
-# own language; the currency code it hands to Intl.
+# str, not Literal: a unit is "st"/"%"/"p.e." or an ISO-4217 currency code set by deployment.
+# "p.e." is its own unit, not a flavour of "%", so share-point deltas can't misread as percent.
 Unit = str
 NON_CURRENCY_UNITS = ("st", "%", "p.e.")
 ChartType = Literal["line", "bar", "stacked_bar", "area", "pie", "kpi", "table"]
-# "explain" is an answer about the card rather than about the data: what a line means, how to
-# read the comparison, which period a series covers. It needs no query, and forcing it into
-# "cannot_answer" (which is what an "ok" with no result becomes) put "Det här har jag inte
-# underlag för" above a paragraph that answered the question perfectly well. It carries its own
-# guard instead: an explanation that states a figure has nothing to state it from, so the
-# numeric check runs on an empty result set and suppresses the prose.
+# "explain" answers questions about the card itself (no query needed) - separate from
+# cannot_answer so a valid explanation isn't shown under a false "no data" message.
 CardStatus = Literal["ok", "cannot_answer", "clarify", "validation_failed", "explain"]
 
 
-# ------------------------------------------------------------------------------ auth
 
 class LoginRequest(BaseModel):
     email: str
     password: str
 
 
-# A ceiling as well as a floor. Argon2id at 19 MiB hashes whatever it is given, so an
-# unbounded password field is an unbounded amount of work per request - and nobody's real
-# password is 4 kB.
+# Ceiling, not just floor: Argon2id hashes whatever length it's given, so an unbounded
+# password field is unbounded work per request.
 _MAX_PASSWORD = 200
 
 
@@ -92,7 +82,6 @@ class LoginResponse(BaseModel):
     user: User
 
 
-# ---------------------------------------------------------------------- shared types
 
 class Column(BaseModel):
     key: str
@@ -114,9 +103,8 @@ class ChartSpec(BaseModel):
     limit: int | None = None
     title: str
     subtitle: str | None = None
-    # Server-owned: x values worth a line on the axis, and one sentence saying what they mean.
-    # `validate_chart` drops whatever a model puts here - an annotation the model invented is
-    # exactly the kind of claim the rest of this pipeline exists to prevent.
+    # Server-owned: validate_chart strips whatever the model puts here - a model-invented
+    # annotation is exactly the kind of unchecked claim this pipeline exists to prevent.
     markers: list[str] = Field(default_factory=list)
     marker_label: str | None = None
 
@@ -136,8 +124,8 @@ class Provenance(BaseModel):
     tool: str
     source: str
     scope: str
-    # ISO-4217, from the tool's own meta - so a card cannot claim a currency the query did not
-    # run in. `vat` is a code, not a phrase: the reader's language decides the words.
+    # ISO-4217, from the tool's own meta, so a card can't claim a currency the query didn't run in.
+    # `vat` is a code, not a phrase - the reader's language decides the wording.
     currency: str = "SEK"
     vat: Literal["excl", "incl"] = "excl"
     time_range: TimeWindow
@@ -187,7 +175,6 @@ class AnswerCard(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
 
 
-# ------------------------------------------------------------------------- dashboard
 
 class Kpi(BaseModel):
     key: Literal["net_sales_sek", "category_share_pct", "units", "avg_price_sek"]
@@ -197,9 +184,8 @@ class Kpi(BaseModel):
     delta_pct: float | None = None
     delta_label: str | None = None
     rank_label: str | None = None
-    # The measure over the window's own grain, oldest first. An arrow gives direction; this
-    # gives shape - steady growth, one good month, or a trend that has just turned. It carries
-    # no axis and no labels, so it is a shape and never a reading.
+    # Oldest-first shape, not a reading: no axis or labels, just enough to show steady growth
+    # vs. one good month vs. a trend that just turned.
     spark: list[float] = Field(default_factory=list)
 
 
@@ -213,7 +199,6 @@ class MoversResponse(BaseModel):
     cards: list[AnswerCard]
 
 
-# ------------------------------------------------------------------------------ chat
 
 class ChatTurn(BaseModel):
     role: Literal["user", "assistant"]
@@ -228,9 +213,8 @@ MAX_HISTORY_CHARS = 24_000
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     history: list[ChatTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
-    # Carried in the body rather than left to the middleware's context: the answer is written
-    # inside a streaming generator, which is a different task from the one the middleware ran
-    # in, and a language that silently reverts halfway down a stream is worse than none.
+    # In the body, not middleware context: the answer streams from a generator running outside
+    # the middleware's task, and a language that reverts mid-stream is worse than none.
     lang: str | None = None
 
     @field_validator("history")
@@ -258,7 +242,7 @@ class ToolCallEvent(BaseModel):
 class ToolResultEvent(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool: str
-    # : None for tools with no row concept (get_capabilities, resolve_entities) - the chip then
+    # : None for tools with no row concept (get_capabilities, resolve_entities) - so the chip
     # says nothing rather than "0 rader" next to a green tick.
     row_count: int | None = None
 
@@ -299,7 +283,6 @@ class UsageEvent(BaseModel):
     llm_calls: int = 0
 
 
-# ----------------------------------------------------------------------------- result
 
 class ResultPage(BaseModel):
     query_id: str
@@ -309,11 +292,10 @@ class ResultPage(BaseModel):
     truncated: bool
 
 
-# ------------------------------------------------------------- saved views and sharing
 
 # The tools a saved card may re-run.
 CardTool = Literal["query_sales", "query_market_share"]
-# : The same allowlist as a set, for the read path - derived from the type rather than written :
+# : Same allowlist as a set, for the read path - derived from the type instead of written
 # twice, so the two can never drift apart.
 ALLOWED_CARD_TOOLS = frozenset(get_args(CardTool))
 
@@ -322,16 +304,20 @@ class SaveCardRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     chart: ChartSpec
     tool_name: CardTool
-    # Persisting the arguments rather than the rows is what lets a saved card re-run live
-    # against fresh data (§10).
-    tool_args: dict[str, Any] = Field(default_factory=dict)
+    tool_args: dict[str, Any]
+
+    @field_validator("tool_args")
+    @classmethod
+    def _args_required(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not value:
+            raise ValueError("tool_args saknas - kortet skulle aldrig gå att uppdatera")
+        return value
 
 
 class ShareRequest(BaseModel):
     card_id: str
-    # ponytail: only `live` is served. A frozen snapshot means storing the rows as they were,
-    # which is a table and a retention policy, not a flag - the mode is carried in the token so
-    # the read side can start honouring it without reissuing links.
+    # ponytail: only `live` is served - a real snapshot needs a table and retention policy, not
+    # just a flag. Mode rides in the token so the read side can honour it later without reissuing.
     mode: Literal["snapshot", "live"] = "live"
 
 
@@ -344,8 +330,8 @@ class SharedView(BaseModel):
     """What a share link resolves to, for a reader with no session at all."""
 
     card: AnswerCard
-    # Inline, because the reader cannot call /api/result - that endpoint is scoped to a
-    # logged-in tenant, and this page deliberately has no login.
+    # Inline: the reader can't call /api/result, since that endpoint is tenant-scoped and this
+    # page deliberately has no login.
     result: ResultPage
     shared_by: str
     expires_at: str

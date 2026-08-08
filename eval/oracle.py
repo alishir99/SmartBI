@@ -46,7 +46,6 @@ class Oracle:
     def __init__(self, data_dir: Path | str = DATA_DIR) -> None:
         self.data_dir = Path(data_dir)
 
-    # ------------------------------------------------------------------ loading
 
     @functools.cached_property
     def ground_truth(self) -> dict:
@@ -86,8 +85,8 @@ class Oracle:
                      .rename(columns={"name": "store"}), on="store_id"))
 
         df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
-        # date_trunc('week', ...) in Postgres is ISO week - Monday-anchored, matching the `week`
-        # dimension in semantic/model.py.
+        # ISO week (Monday-anchored), matching Postgres date_trunc('week', ...) and the
+        # `week` dimension in semantic/model.py.
         df["week"] = df["date"] - pd.to_timedelta(df["date"].dt.weekday, unit="D")
         df["quarter"] = df["date"].dt.to_period("Q").dt.to_timestamp()
         df["year"] = df["date"].dt.year
@@ -97,7 +96,6 @@ class Oracle:
     def coverage(self) -> Coverage:
         return Coverage(self.lines["date"].min().date(), self.lines["date"].max().date())
 
-    # ------------------------------------------------------------------ slicing
 
     def slice(
         self,
@@ -129,7 +127,6 @@ class Oracle:
             df = df[df["date"] <= pd.Timestamp(date_to)]
         return df
 
-    # ------------------------------------------------------------------ measures
 
     @staticmethod
     def measure(df: pd.DataFrame, key: str) -> float:
@@ -175,7 +172,6 @@ class Oracle:
         ranked = sorted(grouped.items(), key=lambda item: item[1], reverse=True)
         return ranked[:n]
 
-    # ------------------------------------------------------------------ windows
 
     def relative_range(self, name: str) -> tuple[date, date]:
         """The same relative windows the compiler resolves, anchored on the last date in the data
@@ -206,7 +202,6 @@ class Oracle:
         start, end = self.relative_range(name)
         return {"date_from": start, "date_to": end}
 
-    # ------------------------------------------------------------------ market share
 
     def market_share(self, subcategory: str, *, date_from, date_to,
                      brand: str | None = None, region=None) -> dict:
@@ -236,7 +231,6 @@ class Oracle:
         return (self.lines.groupby("subcategory")["brand"].nunique()
                 .sort_values().to_dict())
 
-    # ------------------------------------------------------------------ derivations
 
     def derive(self, spec: dict) -> dict:
         """Re-compute one golden question's expectations from a small declarative spec."""
@@ -326,7 +320,6 @@ class Oracle:
             raise KeyError(f"unknown filter key(s) in derivation: {sorted(unknown)}")
         return where
 
-    # ------------------------------------------------------------------ oddities
 
     def discontinued_products(self) -> pd.DataFrame:
         products = pd.read_csv(self.data_dir / "dim_product.csv")
@@ -336,7 +329,6 @@ class Oracle:
         stores = pd.read_csv(self.data_dir / "dim_store.csv", parse_dates=["opened_date"])
         return stores[stores["opened_date"].dt.date > self.coverage.start]
 
-    # ------------------------------------------------------------------ reconciliation
 
     def reconcile(self, tolerance: float = 0.02) -> list[str]:
         """Compare this module against ground_truth.json wherever they overlap."""
@@ -415,7 +407,7 @@ def _months_back(anchor: date, months: int) -> date:
 
 if __name__ == "__main__":  # pragma: no cover - a convenience for deriving expectations
     import sys
-    # Windows consoles still default to cp1252, which cannot encode "ö" let alone "→".
+    # Windows consoles still default to cp1252, which can't encode "ö" let alone "→".
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")

@@ -12,7 +12,6 @@ from mcp_server.tools.market_share import (
     _snap_to_whole_months,
 )
 
-# --------------------------------------------------------------------------- snapping
 
 @pytest.mark.parametrize(
     ("requested", "expected"),
@@ -21,15 +20,12 @@ from mcp_server.tools.market_share import (
         ((date(2026, 6, 24), date(2026, 6, 30)), (date(2026, 6, 1), date(2026, 6, 30))),
         # Spanning a boundary widens on both ends.
         ((date(2026, 5, 15), date(2026, 6, 14)), (date(2026, 5, 1), date(2026, 6, 30))),
-        # 30-day month.
         ((date(2026, 4, 10), date(2026, 4, 10)), (date(2026, 4, 1), date(2026, 4, 30))),
-        # February, common year.
         ((date(2026, 2, 3), date(2026, 2, 3)), (date(2026, 2, 1), date(2026, 2, 28))),
-        # February, leap year - the month-length arithmetic must not assume 28.
+        # Leap year - the month-length arithmetic must not assume 28.
         ((date(2024, 2, 3), date(2024, 2, 3)), (date(2024, 2, 1), date(2024, 2, 29))),
         # December, so the "next month" step has to roll the year over.
         ((date(2025, 12, 5), date(2025, 12, 20)), (date(2025, 12, 1), date(2025, 12, 31))),
-        # Multi-year window.
         ((date(2024, 7, 1), date(2026, 6, 30)), (date(2024, 7, 1), date(2026, 6, 30))),
     ],
 )
@@ -53,7 +49,6 @@ def test_snapped_window_never_narrows():
     assert last >= requested[1]
 
 
-# ------------------------------------------------------------------------ suppression
 
 def _record(**overrides):
     base = {
@@ -127,7 +122,6 @@ def test_the_leader_comes_back_as_a_band_not_a_figure():
                    for value in row.values()), "the exact share must not survive elsewhere"
 
 
-# ------------------------------------------------------------------------- comparison
 
 def test_the_comparison_is_paired_per_brand_and_category():
     rows = [_row(_record()), _row(_record(brand="Nordström Video", category_id=12))]
@@ -142,8 +136,8 @@ def test_the_comparison_is_paired_per_brand_and_category():
 
 def test_the_share_delta_is_in_percentage_points():
     """29,5 → 25,0 is −4,5 p.e. Calling it −15 % is how a share tile misleads."""
-    rows = [_row(_record())]                       # 250/1000 = 25,0 %
-    _attach_comparison(rows, [_row(_record(own_net_sek=295.0))])   # 29,5 %
+    rows = [_row(_record())]  # 250/1000 = 25,0 %
+    _attach_comparison(rows, [_row(_record(own_net_sek=295.0))])  # 29,5 %
 
     assert rows[0]["share_pct_compare"] == 29.5
     assert rows[0]["share_pct_delta_pe"] == -4.5

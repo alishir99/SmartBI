@@ -27,7 +27,6 @@ async def tools():
     return await mcp.list_tools()
 
 
-# --------------------------------------------------------------- the isolation test
 
 
 async def test_no_tool_lets_the_caller_name_a_supplier(tools):
@@ -48,8 +47,6 @@ async def test_every_tool_has_a_description_for_the_model(tools):
         assert tool.description and len(tool.description) > 40, tool.name
 
 
-# ------------------------------------------------------------------- drift guards schemas.py
-# spells the enums out so a reader can see what the model sees.
 
 
 def test_measure_keys_match_the_registry():
@@ -68,7 +65,6 @@ def test_compare_modes_are_the_two_the_compiler_implements():
     assert set(get_args(CompareTo)) == {"previous_period", "same_period_last_year"}
 
 
-# ------------------------------------------------------------ strictness of inputs
 
 
 @pytest.mark.parametrize("model", [Filters, TimeRange, OrderBy])

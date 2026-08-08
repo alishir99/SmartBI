@@ -1,4 +1,3 @@
-/** The single card renderer. */
 
 import { useState, type ReactNode } from 'react'
 import type { AnswerCard as Card, ResultResponse } from '../types'
@@ -14,31 +13,20 @@ import { IconEmptyChart, IconInfo, IconQuestion, IconShield } from './Icons'
 
 type Props = {
   card: Card
-  /**
-   * Puts a new question into the chat. Used by the suggestion and candidate chips, and by the
-   * chart marks and table rows - every number on the card is the start of a question.
-   */
+  /** Puts a new question into the chat: used by suggestion/candidate chips and by chart marks
+   * and table rows - every number on the card is the start of a question. */
   onAsk?: (question: string) => void
   onDelete?: (cardId: string) => void
   savable?: boolean
   height?: number
-  /**
-   * The chart-first card shown while the prose is still being written. It is one tool result,
-   * and a turn that calls a second one replaces it - so it says so. A card that looks final
-   * and then rewrites its own numbers is worse than a card that waited.
-   */
+  /** The chart-first card shown while the prose is still written; says so, because a card that
+   * looks final and then rewrites its own numbers is worse than one that waited. */
   preview?: boolean
-  /**
-   * Rows the caller already has. The shared-link page does: its reader has no session, so
-   * /api/result would 404 for them and the rows travel with the card instead.
-   */
+  /** Rows the caller already has - the shared-link page's reader has no session, so
+   * /api/result would 404 and the rows travel with the card instead. */
   rows?: ResultResponse | null
-  /**
-   * The source chip, which only the chat shows. A dashboard card is already framed by the
-   * page: one period, one supplier, stated once in the page header. Repeating a source line
-   * under every tile is noise there, while in the chat it is the answer to "where did this
-   * number come from" for a card the user just conjured.
-   */
+  /** The source chip; only the chat shows it. A dashboard card already states period/supplier
+   * once in the page header, so repeating a source line per tile there is just noise. */
   showSource?: boolean
 }
 
@@ -74,8 +62,8 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
           view={view}
           onToggleView={setView}
           onDelete={onDelete}
-          // A preview is one tool result that a later one may replace, so it is never
-          // savable - here rather than in the caller, so no caller can get it wrong.
+          // A preview is one tool result that a later one may replace, so it is never savable -
+          // here rather than in the caller, so no caller can get it wrong.
           savable={savable && !preview}
           hasRows={(result.data?.rows.length ?? 0) > 0}
         />
@@ -145,8 +133,7 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
       )}
 
       {/* A chart without a query_id and without rows has nothing to draw from - the result
-          query is disabled in that case, so guard here rather than leaving a skeleton
-          forever. */}
+          query is disabled in that case, so guard here rather than leaving a skeleton forever. */}
       {(!card.chart || !(card.query_id || rows)) && card.status === 'ok' && <EmptyState />}
 
       {card.status === 'clarify' && (
@@ -192,19 +179,14 @@ export function AnswerCardView({ card, onAsk, onDelete, savable = true, height =
 function headingFor(card: Card): string {
   if (card.status === 'clarify') return translate('card.clarify')
   if (card.status === 'cannot_answer') return translate('card.cannot_answer')
-  // A question about the card, answered from what the card shows. It is not a data answer and
-  // it is not a refusal, and labelling it as either was how "vad betyder den streckade linjen?"
-  // got a correct explanation under the heading "Det här har jag inte underlag för".
+  // Neither a data answer nor a refusal - labelling it as either was how "vad betyder den
+  // streckade linjen?" got a correct explanation under "Det här har jag inte underlag för".
   if (card.status === 'explain') return translate('card.explain')
   return translate('card.answer')
 }
 
-/**
- * The window that actually ran is never dropped, even when the model wrote its own subtitle.
- * The same question resolves to different periods on different runs - the compiler defaults to
- * the last 12 months, the model sometimes passes `all_time` - and a card whose only statement of
- * its period is the model's prose is a card whose totals can double with nothing explaining why.
- */
+/** The window that actually ran is never dropped: it varies run to run (12 months by default,
+ * sometimes `all_time`), so a subtitle that's only the model's prose can hide why totals moved. */
 function subtitleFor(card: Card, modelSubtitle: string | null): string | null {
   const provenance = card.provenance
   if (!provenance) return modelSubtitle

@@ -22,17 +22,17 @@ from ..i18n import tr
 from ..mcp_client import McpClient
 from ..models import ALLOWED_CARD_TOOLS, AnswerCard, ResultPage, SharedView
 from ..result_cache import ResultCache, from_tool_result
+from .dashboard import add_moving_average
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["shared"])
 
-# One message for every way a link can fail to resolve. A reader cannot act on the difference
-# between "expired", "tampered with" and "the card was deleted", and telling them which it was
-# tells whoever is guessing tokens which guess got closer.
+# One message for every failure mode: telling a reader which of expired/tampered/deleted it
+# was tells whoever is guessing tokens which guess got closer.
 _GONE = "Länken är ogiltig eller har gått ut."
 
-# The page has no pagination and no export, so this is the whole payload - well above any saved
-# card's chart, and below anything that hurts to serialise.
+# No pagination or export on this page, so this is the whole payload - above any saved card's
+# chart, below anything that hurts to serialise.
 MAX_SHARED_ROWS = 2_000
 
 
@@ -49,10 +49,14 @@ async def shared(token: str,
 
     try:
         payload = await mcp.call(supplier_id, row["tool_name"], row["tool_args"])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("could not resolve shared card %s", row["card_id"], exc_info=True)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             "Kunde inte hämta vyn mot aktuell data.") from exc
+
+    measures = row["tool_args"].get("measures") or []
+    if row["tool_name"] == "query_sales" and measures:
+        add_moving_average(payload, measures[0])
 
     result = cache.put(from_tool_result(
         supplier_id=supplier_id, tool=row["tool_name"],
@@ -60,23 +64,20 @@ async def shared(token: str,
 
     chart = render.propose_chart(result, title=row["title"])
     if row.get("chart_spec"):
-        # The saved spec is re-validated against today's result, exactly as a refresh does: a
-        # column that existed when the card was saved may not exist now.
+        # Re-validated against today's result, as a refresh does: a saved column may be gone.
         try:
             saved = AnswerCard.model_validate(
                 {"chart": row["chart_spec"], "status": "ok"}).chart
             if saved is not None:
                 chart, _ = render.validate_chart(saved, result)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     columns = render.to_columns(result)
     return SharedView(
         card=AnswerCard(
-            # Neither id reaches the reader. `query_id` because /api/result is scoped to a
-            # logged-in tenant and would 404 for them - the rows travel inline instead - and
-            # `card_id` because every control keyed to it (share, delete) is an authenticated
-            # call this page cannot make, and a button that 401s is worse than no button.
+            # Neither id reaches the reader: query_id because /api/result is tenant-scoped
+            # (rows travel inline instead), card_id because share/delete need auth this page lacks.
             card_id=None, status="ok", chart=chart,
             query_id=None, columns=columns,
             provenance=render.build_provenance(result)),
@@ -89,9 +90,8 @@ async def shared(token: str,
         ),
         shared_by=await db.supplier_name(supplier_id) or tr("unknown.supplier"),
         expires_at=datetime.fromtimestamp(claims["exp"], UTC).isoformat(),
-        # ponytail: `snapshot` links resolve live too. Freezing the rows means storing them,
-        # which is a table and a retention rule rather than a flag; the mode rides in the token
-        # so the read side can start honouring it without reissuing any link.
+        # ponytail: `snapshot` links resolve live too. Freezing rows means a table and a
+        # retention rule, not just a flag; the mode rides in the token for when that lands.
         mode="live",
     )
 
@@ -102,8 +102,8 @@ def _claims(token: str) -> dict:
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _GONE) from None
 
-    # A session token is signed with the same key, so the type has to be checked: without it,
-    # anyone's own access token would read any card_id they cared to name.
+    # A session token is signed with the same key, so `typ` must be checked: without it, anyone's
+    # own access token would read any card_id they cared to name.
     if (claims.get("typ") != "share"
             or not isinstance(claims.get("supplier_id"), int)
             or not str(claims.get("card_id", "")).isdigit()):

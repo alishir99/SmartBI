@@ -24,8 +24,7 @@ GROUND_TRUTH = Path(__file__).resolve().parents[2] / "data" / "generated" / "gro
 TOLERANCE_SEK = 1.0
 
 
-# How far to probe for seeded suppliers.
-_MAX_SUPPLIER_ID = 32
+_MAX_SUPPLIER_ID = 32  # how far to probe for seeded suppliers
 
 
 def _reachable() -> bool:
@@ -87,7 +86,6 @@ def total(payload: dict, key: str = "net_sales_sek") -> float:
     return sum(float(row[key]) for row in payload["rows"])
 
 
-# ------------------------------------------------------------------ the numbers reconcile
 
 async def test_net_sales_matches_ground_truth_for_every_supplier(pool, truth, suppliers):
     """Four transformations from the generator to the tool, and no krona lost on the way."""
@@ -121,7 +119,6 @@ async def test_the_monthly_breakdown_matches_ground_truth(pool, truth, suppliers
         assert abs(actual[month[:7]] - float(value)) < TOLERANCE_SEK, month
 
 
-# ------------------------------------------------------------------------ isolation holds
 
 async def test_two_suppliers_never_see_the_same_rows(pool, truth, suppliers):
     """The scope is a transaction setting, not a WHERE clause the caller could omit."""
@@ -158,7 +155,6 @@ async def test_an_unscoped_connection_sees_nothing(pool):
     assert count == 0
 
 
-# ------------------------------------------------------------------- market share is sane
 
 async def test_market_share_never_exceeds_one_hundred_percent(pool, truth, suppliers):
     """D1's live regression: the numerator and the denominator must cover the same months."""
@@ -190,10 +186,9 @@ async def test_a_thin_slice_is_suppressed_rather_than_answered(pool, truth, supp
             assert row["n_brands"] >= thresholds.get("min_brands", 5)
 
 
-# ------------------------------------------------- the rollup and the fact table agree
 
-# Compared with an absolute floor rather than a relative one: these are sums over hundreds of
-# thousands of NUMERIC(12,2) rows aggregated in a different order, so the last öre can differ.
+# Absolute floor, not relative: these are sums over hundreds of thousands of NUMERIC(12,2)
+# rows aggregated in a different order, so the last öre can differ.
 RECONCILE_TOLERANCE_SEK = 1.0
 
 
@@ -215,7 +210,6 @@ async def owner():
     finally:
         await connection.close()
 
-# The rollup's grouping keys.
 _ROLLUP_KEYS = [
     ("supplier_id", "f.supplier_id"),
     ("date", "d.date"),
@@ -323,8 +317,8 @@ async def test_the_two_sources_answer_the_same_question_identically(
         "measures": ["net_sales_sek", "units", "gross_sales_sek", "discount_sek"],
         "dimensions": ["month", "region"],
         "time_range": {"from": truth["coverage"]["from"], "to": truth["coverage"]["to"]},
-        # Deliberately left at DEFAULT_LIMIT, which this spec exceeds: 24 months x 22 regions is
-        # 528 groups against a limit of 500.
+        # Deliberately left at DEFAULT_LIMIT, which this spec exceeds: 24 months x 22
+        # regions is 528 groups against a limit of 500.
     }
 
     answers = {}
@@ -355,7 +349,6 @@ async def test_the_two_sources_answer_the_same_question_identically(
         assert int(rollup_row["units"]) == int(fact_row["units"]), key
 
 
-# ------------------------------------------------- the post-aggregate stage really runs
 
 async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers):
     """The gap that let a broken feature stay green for a whole remediation pass."""
@@ -369,8 +362,8 @@ async def test_compare_over_a_non_date_dimension_executes(pool, truth, suppliers
     })
 
     assert payload["rows"], "no rows came back at all"
-    # Sorting on the derived column is the whole point: the biggest decliner is typically mid-
-    # sized, so sorting by current value never surfaces it.
+    # Sorting on the derived column is the point: the biggest decliner is typically
+    # mid-sized, so sorting by current value never surfaces it.
     deltas = [row["net_sales_sek_delta_pct"] for row in payload["rows"]
               if row.get("net_sales_sek_delta_pct") is not None]
     assert deltas, "every delta came back NULL - the comparison join matched nothing"
@@ -387,8 +380,7 @@ async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
         "time_range": window, "percent_of_total": True})
     percentages = [row["net_sales_sek_pct_of_total"] for row in share["rows"]]
     assert percentages, "percent_of_total produced no column"
-    # The reason this measure exists: the model was being asked to divide, which the prompt
-    # forbids.
+    # This measure exists because the model was being asked to divide, which the prompt forbids.
     assert abs(sum(percentages) - 100.0) < 0.5, percentages
 
     filtered = await query_sales(scope, {
@@ -405,8 +397,8 @@ async def test_the_post_aggregate_stage_executes(pool, truth, suppliers):
         counts[row["region"]] = counts.get(row["region"], 0) + 1
     assert counts, "partitioned top-N produced no rows"
     assert max(counts.values()) <= 2, counts
-    # And more than one region survives, which is the actual complaint: a flat GROUP BY with a
-    # global LIMIT returned ten Stockholm rows and nothing else.
+    # More than one region surviving is the actual complaint: a flat GROUP BY with a
+    # global LIMIT once returned ten Stockholm rows and nothing else.
     assert len(counts) > 1, "only one region came back - the partition did not apply"
 
 
@@ -426,9 +418,8 @@ async def test_the_calendar_dimensions_reach_real_columns(pool, truth, suppliers
         "measures": ["net_sales_sek"], "dimensions": ["is_holiday"], "time_range": window})
     assert {str(row["is_holiday"]) for row in holidays["rows"]} == {"Vardag", "Röd dag"}
 
-    # campaign_id is only worth exposing because the generator bug that discounted every single
-    # line is fixed: campaign days now discount far harder than ordinary ones, so "how did Black
-    # Week compare?" has an answer in the data for the first time.
+    # campaign_id is only worth exposing because the generator bug that discounted every
+    # line is fixed: campaign days now discount far harder than ordinary ones.
     campaigns = await query_sales(scope, {
         "measures": ["discount_rate"], "dimensions": ["campaign_id"],
         "time_range": window})

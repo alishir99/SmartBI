@@ -1,4 +1,3 @@
-/** Chart colour. */
 
 export const SERIES_VARS = [
   'var(--series-1)',
@@ -16,10 +15,8 @@ export const SERIES_MUTED = 'var(--series-muted)'
 
 export const MAX_SERIES = SERIES_VARS.length
 
-/**
- * Slot for series index `i`. A 9th series is never a generated hue - callers fold the tail into
- * "Övrigt" before reaching here.
- */
+/** Slot for series index i. A 9th series never gets a generated hue - callers fold the tail
+ * into "Övrigt" before reaching here. */
 export function seriesColor(index: number): string {
   return SERIES_VARS[Math.min(index, MAX_SERIES - 1)]
 }
@@ -32,7 +29,6 @@ export const CHART_INK = {
   textSecondary: 'var(--text-secondary)',
 } as const
 
-/** Mark specs, fixed across every chart in the product. */
 export const MARK = {
   barMaxSize: 24,
   barRadius: 4,

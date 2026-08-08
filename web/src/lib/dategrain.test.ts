@@ -1,7 +1,3 @@
-/**
- * Every date bucket comes back as its first day, so the value alone cannot say whether
- * `2025-07-01` is a month or a day. The column key can.
- */
 
 import { describe, expect, it } from 'vitest'
 import type { Column } from '../types'
@@ -9,11 +5,8 @@ import { formatCell } from './format'
 
 const date = (key: string): Column => ({ key, type: 'date', label: key })
 
-// Month names come from `Intl` now rather than from a hand-written array, so the expectations
-// below are CLDR's Swedish: a trailing period on the abbreviated months, and no abbreviation
-// at all for the four that are already short (mars, maj, juni, juli). The old array wrote
-// "jul" and "nov"; those were a simplification that only ever happened to be Swedish.
-
+// Every date bucket comes back as its first day, so the value alone can't say whether
+// `2025-07-01` is a month or a day - the column key can.
 
 describe('date grain', () => {
   it('reads a month bucket as a month, not as its first day', () => {
@@ -31,8 +24,8 @@ describe('date grain', () => {
   })
 
   it('reads a day as a day, without the year', () => {
-    // The day grain only ever covers a recent window of days or weeks, and the card's period
-    // line already states which - so the axis says "1 juli", not "2025-07-01".
+    // The day grain only ever covers a recent window, and the card's own period line already
+    // states which - so the axis says "1 juli", not "2025-07-01".
     expect(formatCell('2025-07-01', date('day'))).toBe('1 juli')
   })
 

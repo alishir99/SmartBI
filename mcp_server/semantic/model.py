@@ -6,10 +6,8 @@ from dataclasses import dataclass, field
 
 from ..config import settings
 
-# Every money measure carries this rather than a literal, so pointing the warehouse at another
-# market is one setting and not a sweep through the registry. The *key* still says `_sek`: it is
-# an identifier the compiler, the eval suite and every saved card resolve against, and renaming
-# it would change nothing a user sees.
+# Every money measure references this rather than a literal, so repricing markets is one
+# setting; the key still says _sek since that's the identifier compiler/evals resolve against.
 CURRENCY = settings.app_currency
 
 ROLLUP = "rollup"
@@ -18,7 +16,6 @@ FACT = "fact"
 # The date column each source exposes; dimension expressions interpolate it as {date}.
 DATE_EXPR = {ROLLUP: "s.date", FACT: "d.date"}
 
-# Join fragments, keyed by a short name.
 JOINS: dict[str, dict[str, str]] = {
     ROLLUP: {
         "product": "JOIN dim_product p ON p.product_id = s.product_id",
@@ -37,7 +34,6 @@ JOINS: dict[str, dict[str, str]] = {
     },
 }
 
-# Joins every query of a given source always needs.
 BASE_JOINS = {ROLLUP: (), FACT: ("date",)}
 
 
@@ -45,8 +41,8 @@ BASE_JOINS = {ROLLUP: (), FACT: ("date",)}
 class Dimension:
     key: str
     label: str
-    type: str                                   # date | text | number
-    expr: dict[str, str]                        # source -> SQL expression
+    type: str  # date | text | number
+    expr: dict[str, str]  # source -> SQL expression
     joins: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def requires(self, source: str) -> tuple[str, ...]:
@@ -64,8 +60,7 @@ class Measure:
     expr: dict[str, str]
     joins: dict[str, tuple[str, ...]] = field(default_factory=dict)
     description: str = ""
-    # Whether the rows of this measure sum to a meaningful whole.
-    additive: bool = True
+    additive: bool = True  # whether this measure's rows sum to a meaningful whole
 
     def requires(self, source: str) -> tuple[str, ...]:
         return self.joins.get(source, ())
@@ -114,16 +109,14 @@ DIMENSIONS: dict[str, Dimension] = {d.key: d for d in [
     Dimension("month_of_year", "Månad på året", "number",
               expr={ROLLUP: "EXTRACT(MONTH FROM {date})::int",
                     FACT: "EXTRACT(MONTH FROM {date})::int"}),
-    # ISODOW, so 1 = måndag and the natural numeric sort is the order a Swedish reader expects.
+    # ISODOW, so 1 = måndag - the numeric sort order a Swedish reader expects.
     Dimension("weekday", "Veckodag", "number",
               expr={ROLLUP: "EXTRACT(ISODOW FROM {date})::int",
                     FACT: "EXTRACT(ISODOW FROM {date})::int"}),
-    # Fact-only: the rollup carries the date but not the calendar's judgement of it, and hard-
-    # coding the red days into SQL here would be a second source of truth for them.
+    # Fact-only: hardcoding red days here would be a second source of truth for them.
     Dimension("is_holiday", "Dagtyp", "text",
               expr={FACT: "CASE WHEN d.is_holiday THEN 'Röd dag' ELSE 'Vardag' END"}),
-    # NULL means "no campaign ran that day", which makes the ordinary days a group of their own
-    # - the comparison the question is usually after.
+    # NULL means "no campaign that day", which groups ordinary days together for comparison.
     Dimension("campaign_id", "Kampanj", "number",
               expr={FACT: "d.campaign_id"}),
 
@@ -169,7 +162,6 @@ MEASURES: dict[str, Measure] = {m.key: m for m in [
 ]}
 
 
-# Filters the caller may express.
 FILTER_FIELDS: dict[str, dict[str, str]] = {
     "product_ids": {"label": "Produkter", "type": "int[]"},
     "brand_ids": {"label": "Varumärken", "type": "int[]"},
@@ -183,13 +175,12 @@ FILTER_FIELDS: dict[str, dict[str, str]] = {
 
 CHANNELS = ["fysisk", "online"]
 
-# Relative windows the caller may name instead of giving explicit dates.
 RELATIVE_RANGES = [
     "last_7_days", "last_30_days", "last_90_days", "last_6_months", "last_12_months",
     "last_month", "this_month", "this_year", "ytd", "all_time",
 ]
 
-# A tool result never returns more than this many rows regardless of `limit`; the chart path
+# A tool result never returns more than this many rows regardless of limit; the chart path
 # pages through the API instead.
 MAX_ROWS = 20_000
 DEFAULT_LIMIT = 500

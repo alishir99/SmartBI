@@ -1,4 +1,3 @@
-/** Turns (ChartSpec + columns + rows) into exactly what Recharts needs. */
 
 import type { ChartSpec, Column, ColumnUnit, ResultRow } from '../types'
 import { MAX_SERIES, SERIES_MUTED, seriesColor } from './palette'
@@ -6,7 +5,6 @@ import { isCurrency, MISSING, moneyScale, truncateLabel, type MoneyScale } from 
 import { columnLabel, t } from '../lib/i18n'
 
 export type SeriesDescriptor = {
-  /** The key to read off each prepared row. */
   key: string
   label: string
   color: string
@@ -16,32 +14,23 @@ export type SeriesDescriptor = {
   line?: boolean
 }
 
-/** The server's suffix for a derived moving average, in the same unit as the measure. */
 const AVERAGE_SUFFIX = '_ma'
 
 export type PreparedChart = {
   rows: ResultRow[]
   series: SeriesDescriptor[]
   xColumn: Column | null
-  /** Unit of the measure axis; drives the axis label and the tick formatter. */
   unit: ColumnUnit | null
   /** Shared money scale so every tick and label on one axis carries one unit. */
   scale: MoneyScale | null
-  /** Columns describing the prepared rows - what the tooltip and table view read. */
   columns: Column[]
-  /** True when a tail of small categories was folded into "Övrigt". */
   folded: boolean
-  /** Rows the chart is not drawing. Zero unless `spec.limit` cut a ranked categorical axis. */
   hidden: number
-  /** One descriptor per pie slice, in row order; empty for every other chart type. */
   slices: SeriesDescriptor[]
 }
 
-/**
- * Read per call, not frozen at module load: the fold label appears in the legend and in the
- * chart's own description, and a constant captured at import would stay in whichever language
- * happened to load first.
- */
+/** Read per call, not frozen at module load - a constant captured at import would stay in
+ * whichever language loaded first, but the fold label needs the current one. */
 const otherLabel = () => t('card.other')
 
 const byKey = (columns: Column[], key: string | null): Column | null =>
@@ -73,7 +62,6 @@ export function prepareChart(
   }
 }
 
-/** Colour and label per slice, following the dimension value. */
 function sliceDescriptors(
   rows: ResultRow[],
   xColumn: Column | null,
@@ -188,10 +176,8 @@ function pivot(
   }
 }
 
-/**
- * A time axis is always chronological - a `sort` on a date x would scramble the reading order,
- * so the spec's sort only applies to categorical axes.
- */
+/** A time axis is always chronological - a `sort` on a date x would scramble the reading
+ * order, so the spec's sort only applies to categorical axes. */
 function order(
   rows: ResultRow[],
   spec: ChartSpec,
@@ -208,7 +194,6 @@ function order(
   return copy.sort((a, b) => direction * (numeric(a[measureKey]) - numeric(b[measureKey])))
 }
 
-/** `limit` truncates a ranked categorical axis. */
 function applyLimit(
   rows: ResultRow[],
   spec: ChartSpec,
@@ -221,9 +206,8 @@ function applyLimit(
   }
 
   const head = rows.slice(0, limit)
-  // A bar chart cannot fold its tail into "Övrigt" - the sum of the categories it dropped is not
-  // a category. So it drops them, and the count is reported instead: rows disappearing unnoticed
-  // from the half of the card presented as the trustworthy half is the wrong place to be quiet.
+  // A bar chart can't fold its tail into "Övrigt" (the sum isn't a category), so it drops rows
+  // and reports the count instead - silently losing rows from the "trustworthy" half is worse.
   if (spec.type !== 'pie' || !xColumn) {
     return { rows: head, folded: false, hidden: rows.length - head.length }
   }

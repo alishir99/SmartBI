@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Secrets that ship in the repo so the demo runs with no setup, and the value each one has to
-# move off before this process is allowed to serve anything outside `dev`. Keeping the check in
-# code rather than in a deployment runbook is the point: a runbook can be skipped by whoever
-# inherits this, and the failure mode of a skipped rotation is silent.
+# Ship-with-repo secrets so the demo needs no setup; each must be rotated before this serves
+# anything outside dev. Checked in code, not a runbook, so a skipped rotation isn't silent.
 IN_REPO_DEFAULTS = {
     "jwt_secret": "dev-only-change-me",
     "internal_token": "dev-internal-token",
@@ -21,98 +19,75 @@ class Settings(BaseSettings):
     # `dev` is the demo posture: published internal ports, in-repo secrets, no TLS.
     solvigo_env: str = "prod"
 
-    # --- Postgres (the API's own connection, not the MCP role) ---
+    # The API's own Postgres connection, not the MCP role.
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = "solvigo"
     postgres_user: str = "solvigo"
     postgres_password: str = "solvigo"
 
-    # --- Auth ---
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 30
-    # NIST SP 800-63B: length is the control that matters, and composition rules ("one digit,
-    # one symbol") measurably push people towards weaker, more predictable passwords. So this
-    # is the only rule, and it is checked at every place a password is set.
+    # NIST 800-63B: length is what matters, composition rules just push weaker passwords.
+    # The only rule, enforced everywhere a password is set.
     password_min_length: int = 8
-    # Short by design. A reset link sits in an inbox, which is a place a link outlives its
-    # usefulness; an hour is long enough to read mail and short enough to matter if the inbox
-    # is later compromised. Single use is enforced separately - see `password_reset_key`.
+    # Short by design: long enough to read the mail, short enough to matter if the inbox is
+    # later compromised. Single-use is enforced separately (see password_reset_key).
     password_reset_ttl_minutes: int = 60
-    # Share links are their own short-lived signed token, deliberately separate from the access
-    # token so a leaked share URL cannot be replayed as a login (§10).
+    # Separate short-lived signed token from the access token, so a leaked share URL can't
+    # be replayed as a login.
     share_link_ttl_hours: int = 72
 
-    # --- MCP ---
     mcp_url: str = "http://localhost:8081/mcp"
-    # Shared secret proving the caller is this API and not something else that found the
-    # internal port.
+    # Shared secret proving the caller is this API, not something else on the internal port.
     internal_token: str = "dev-internal-token"
     mcp_timeout_seconds: float = 60.0
 
-    # --- LLM --- Provider lives behind these three values and nothing else (decision D1).
+    # LLM provider lives behind these three values and nothing else (decision D1).
     llm_api_key: str = ""
     llm_base_url: str = "https://api.deepseek.com/anthropic"
     llm_model: str = "deepseek-v4-pro"
     llm_max_tokens: int = 8000
-    # The SDK's own default is 10 minutes per request and it retries twice, so one question
-    # could hold a connection for over half an hour before anything gave up.
+    # SDK default is 10 min per request with 2 retries - one question could hold a
+    # connection 30+ min unbounded.
     llm_timeout_seconds: float = 60.0
 
-    # --- Rate limits and cost cap (api/ratelimit.py) --- Every limit here is picked to be
-    # generous for a human and tight for a script, because a limit that trips during a live demo
-    # is worse than no limit at all.
+    # Rate limits (api/ratelimit.py): generous for a human, tight for a script - a limit
+    # that trips mid-demo is worse than none.
     login_window_seconds: int = 300
-    # A human retyping a password gets it wrong two or three times - capslock, an old saved
-    # password.
+    # A human retyping a password gets it wrong 2-3 times (capslock, an old saved password).
     login_attempts_per_identifier: int = 5
-    # Higher, because an office (or a demo room) shares one NAT address, and locking out a whole
-    # building because one person forgot their password is its own outage.
+    # Higher: an office/demo room shares one NAT address; locking out a building isn't better.
     login_attempts_per_ip: int = 30
 
-    # A chat turn is several LLM calls and takes 10–30 s, so ten in five minutes is already
-    # faster than a person can read the answers - but a human is not the binding constraint
-    # here.
+    # A turn is several LLM calls, 10-30s; 10/5min is already faster than a human reads
+    # answers, but a human isn't the binding constraint here.
     chat_turns_per_user: int = 100
     chat_window_seconds: int = 300
 
-    # Per-tenant cost cap, in input+output tokens over the trailing window, read from
-    # `audit_turn`. Sized from the measured ~30 k tokens a turn costs: 5 M is roughly 150 turns
-    # a day for one supplier, several times the heaviest realistic day and far below what a
-    # runaway client burns in an hour.
+    # Per-tenant cap on trailing-window tokens (from audit_turn). ~30k tokens/turn puts 5M at
+    # ~150 turns/day, above a heavy day but far below a runaway client in an hour.
     tenant_token_budget: int | None = 5_000_000
     tenant_budget_window_hours: int = 24
 
-    # --- Logging (api/logs.py) ---
-    # `json` for anything shipped, `text` for a local run. The file handler is always JSON:
-    # a log you have to regex is a log nobody aggregates.
+    # Logging (api/logs.py): json for anything shipped, text for local runs. File handler is
+    # always JSON - a log you have to regex is a log nobody aggregates.
     log_level: str = "INFO"
     log_format: str = "json"
-    # Empty disables the file and leaves stdout only, which is what the container wants -
-    # docker and Cloud Run both collect stdout, and a file inside a container is a file
-    # nobody reads. Set it when running the API directly.
+    # Empty = stdout only, what the container wants (docker/Cloud Run collect stdout; a file
+    # in a container is a file nobody reads). Set only for a direct local run.
     log_file: str = ""
-    # Opt-in, and off in every environment that is not a laptop. The log is a WIDER trust
-    # boundary than the database: `audit_turn` sits behind Postgres RLS with a tenant policy,
-    # while stdout goes to an aggregator that far more people can read, gets copied into
-    # tickets and survives longer than the row does. So the values a supplier's answer is
-    # made of stay in the database, and the log carries only the keys needed to find them.
-    # Turning this on puts question text and rejected figures back in, for a local debug run.
+    # Off everywhere but a laptop: stdout is a WIDER trust boundary than the DB (which sits
+    # behind RLS). On, it puts question text and rejected figures back into the log.
     log_sensitive: bool = False
-    # Rotated on TIME, not on size. Size-based rotation bounds the disk and nothing else:
-    # "keep the last 120 MB" is two hours on a busy day and six months on a quiet one, so the
-    # question this log exists to answer - what happened last Tuesday - has no answer. Daily
-    # files with a retention in days give a window you can actually state, and a filename you
-    # can reason about.
+    # Rotated by time not size: size-based rotation gives no fixed window ("last 120MB" is 2h
+    # busy / 6mo quiet), so "what happened last Tuesday" needs daily files with day retention.
     log_retention_days: int = 14
 
-    # --- Mail (api/mail.py) --- How a password-reset link reaches the person who asked for it.
-    # `log` writes it to the application log and sends nothing, which is what a demo or a local
-    # run wants; `smtp` sends for real. Deliberately not a third-party mail SDK: one transport
-    # over stdlib `smtplib` is the whole requirement, and a provider SDK is a dependency plus an
-    # account plus a second way for this to break.
-    mail_backend: str = "log"                       # log | smtp
+    # Mail (api/mail.py): `log` writes to the app log for local/demo use, `smtp` sends for
+    # real. stdlib smtplib only - a provider SDK is a dependency, an account, another failure mode.
+    mail_backend: str = "log"  # log | smtp
     mail_from: str = "no-reply@solvigo.example"
     smtp_host: str = ""
     smtp_port: int = 587
@@ -120,17 +95,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_starttls: bool = True
 
-    # --- Locale --- What the warehouse is denominated in, and how it is presented. Nothing in
-    # the code below assumes Sweden or kronor; point these three at whatever market the data
-    # actually holds and every amount, date and axis label follows. `app_currency` must match
-    # what the MCP server is told (mcp_server/config.py) - it is the same warehouse, and two
-    # different answers to "what currency is this" is a mislabelled number, not a formatting
-    # nit. One currency per deployment: a warehouse holding several is future work (README).
-    app_currency: str = "SEK"          # ISO-4217, the unit every money column carries
-    app_locale: str = "sv-SE"          # BCP-47, drives grouping, decimals and month names
-    app_language: str = "sv"           # default UI and answer language; see LANGUAGES
+    # Locale: point these at the real market and every amount/date/axis label follows.
+    # app_currency must match mcp_server/config.py - same warehouse, one truth.
+    app_currency: str = "SEK"  # ISO-4217
+    app_locale: str = "sv-SE"  # BCP-47
+    app_language: str = "sv"  # UI/answer language, see LANGUAGES
 
-    # --- Web ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     public_web_url: str = "http://localhost:5173"
 

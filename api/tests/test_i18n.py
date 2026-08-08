@@ -48,19 +48,14 @@ def test_the_prompt_states_the_answer_language():
 
 
 # ------------------------------------------------- the number grammar (money path)
-#
-# The expensive failure is silent: read English prose with Swedish separators and "1,234,567"
-# becomes 1.234, so a figure that IS in the result gets rejected and the whole narrative is
-# hidden behind the amber banner. These are the shapes that go wrong.
+# A misread separator fails silently: a figure that IS in the result gets rejected as
+# wrong, hiding the whole narrative behind the amber banner.
 
 @pytest.mark.parametrize("lang, text, expected", [
-    # Grouped thousands, each language's own way.
     ("sv", "Försäljningen var 1 234 567 kr.", 1_234_567),
     ("en", "Sales were 1,234,567 SEK.", 1_234_567),
-    # The decimal separator is the other half of the same coin.
     ("sv", "Snittpriset var 1 234,50 kr.", 1_234.50),
     ("en", "The average price was 1,234.50 SEK.", 1_234.50),
-    # Magnitude suffixes.
     ("sv", "Omsättningen nådde 12,4 Mkr.", 12_400_000),
     ("en", "Revenue reached 12.4M.", 12_400_000),
     # A period between three digits is a thousands group in Swedish and a decimal in English.

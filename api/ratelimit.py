@@ -61,22 +61,19 @@ class SlidingWindow:
 
 
 def _too_many(wait_seconds: float, message: str) -> HTTPException:
-    # Retry-After in whole seconds, rounded up, so a client that honours it does not come back a
-    # fraction of a second early and burn another refusal.
+    # Retry-After rounded up to whole seconds, so a client that honours it doesn't come back
+    # early and burn another refusal.
     return HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, message,
                          headers={"Retry-After": str(max(1, int(wait_seconds) + 1))})
 
 
-# --------------------------------------------------------------------------------- login
-# Argon2id at 19 MiB, t=2 (api/auth.py) is not merely CPU-expensive: every verification
-# allocates 19 MiB, so an unthrottled login endpoint converts a cheap POST into hundreds of
-# megabytes of allocation churn - a *memory* amplifier, not just a brute-force surface.
+# Argon2id at 19 MiB (api/auth.py) allocates that much per verification, so an unthrottled
+# login endpoint is a memory amplifier, not just a brute-force surface.
 login_by_identifier = SlidingWindow(settings.login_attempts_per_identifier,
                                     settings.login_window_seconds)
 login_by_ip = SlidingWindow(settings.login_attempts_per_ip, settings.login_window_seconds)
 
-# One message for throttled, unknown-account and wrong-password alike - see the note in
-# auth.login.
+# One message for throttled, unknown-account and wrong-password alike - see auth.login.
 LOGIN_THROTTLED = "För många inloggningsförsök. Vänta en stund och försök igen."
 
 
@@ -95,11 +92,8 @@ def clear_login(*, identifier: str, client_ip: str) -> None:
     login_by_ip.reset(client_ip)
 
 
-# ------------------------------------------------------------------------ password reset
-# Tighter than login, because the cost of an unthrottled reset endpoint is not a compromised
-# account but a mailbox: someone can point it at a real address and send that person a hundred
-# mails. Keyed on the address asked about and on the caller, so neither a single victim nor a
-# single script gets far.
+# Tighter than login: an unthrottled reset endpoint doesn't compromise an account, it spams a
+# mailbox. Keyed on both the target address and the caller so neither gets far alone.
 reset_by_identifier = SlidingWindow(3, settings.login_window_seconds)
 reset_by_ip = SlidingWindow(10, settings.login_window_seconds)
 
@@ -120,9 +114,8 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-# ---------------------------------------------------------------------------------- chat
 
-# A turn is several LLM calls and takes 10–30 s, so a human asking as fast as they can read
+# A turn is several LLM calls and takes 10-30s, so a human asking as fast as they can read
 # manages perhaps ten in five minutes.
 chat_turns = SlidingWindow(settings.chat_turns_per_user, settings.chat_window_seconds)
 
@@ -135,7 +128,6 @@ def enforce_chat_turn(user_id: int) -> None:
             f"försök igen.")
 
 
-# ------------------------------------------------------------------------- tenant budget
 
 async def enforce_tenant_budget(supplier_id: int) -> None:
     """Refuse a turn once the tenant has burned its token budget for the trailing window."""

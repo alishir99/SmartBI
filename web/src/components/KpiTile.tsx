@@ -1,4 +1,3 @@
-/** A KPI tile. */
 
 import type { Kpi } from '../types'
 import { formatDelta, formatKpiValue } from '../lib/format'
@@ -15,7 +14,7 @@ export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) =
     <div className="rounded-tile bg-surface p-5 shadow-card ring-hairline sm:p-6">
       <p className="text-xs font-medium text-ink-secondary">{kpi.label}</p>
       {/* The number is the control: click it and the chat opens on the question it raises.
-          A real button, so it is reachable by keyboard as well as by mouse. */}
+          A real button, so it is keyboard-reachable too. */}
       {onAsk ? (
         <button
           type="button"
@@ -66,11 +65,8 @@ export function KpiTile({ kpi, onAsk }: { kpi: Kpi; onAsk?: (question: string) =
 
 const SPARK = { width: 100, height: 24, pad: 2 }
 
-/**
- * Shape, not reading: no axis, no ticks, no labels - so it must not be given any, or it
- * implies a precision it is not showing. The tile's value and delta carry the numbers, which
- * is why this is hidden from the accessibility tree rather than described badly.
- */
+/** Shape, not reading: no axis, no ticks, no labels - the tile's value and delta already
+ * carry the numbers. */
 export function sparkPoints(values: number[]): string {
   const min = Math.min(...values)
   const max = Math.max(...values)

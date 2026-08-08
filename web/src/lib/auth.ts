@@ -1,4 +1,3 @@
-/** Auth store. */
 
 import { create } from 'zustand'
 import type { User } from '../types'

@@ -1,11 +1,5 @@
-/**
- * A shared card, for someone with no account here.
- *
- * Deliberately not the app: no navigation, no chat, no period filter, nothing to save. One
- * card, who shared it, when the link stops working, and a sentence about what the reader is
- * looking at. The link cannot be widened - which card and whose scope are both signed into the
- * token, and the query runs as the supplier who shared it.
- */
+/** A shared card, for someone with no account here. Deliberately not the app: no nav, no
+ * chat, nothing to save - which card and whose scope are both signed into the token. */
 
 import { useEffect, useState } from 'react'
 import type { SharedView } from '../types'

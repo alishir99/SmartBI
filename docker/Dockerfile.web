@@ -1,5 +1,5 @@
-# Build context is the repo root (not web/) so this Dockerfile does not have to live inside
-# the directory it builds - keeps both Dockerfiles together under docker/.
+# Build context is repo root (not web/), so this Dockerfile can live under docker/ with
+# Dockerfile.python instead of inside the directory it builds.
 
 FROM node:24-slim AS build
 
@@ -10,19 +10,17 @@ RUN npm ci
 
 COPY web/ ./
 
-# A build argument, not an environment variable: Vite inlines every `VITE_*` into the bundle
-# at build time, so setting this at run time on a static image does nothing at all.
+# Build arg, not env var: Vite inlines every VITE_* into the bundle at build time, so
+# setting this at run time on a static image does nothing.
 ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
-# The dev server used to be the container command, which meant the "deployable" image was a
-# watcher with source maps and no compression. This stage carries the built assets and nothing
-# else - no node, no node_modules, no source. Unprivileged nginx: runs as uid 101 and listens
-# on 8080, so nothing here needs root or a capability to bind a low port.
+# This stage carries only the built assets - no node, no source. Unprivileged nginx runs
+# as uid 101 on 8080, so nothing here needs root to bind a low port.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# The router is hash-based, so every URL is `/` to the server and no SPA fallback is needed.
+# Hash-based router: every URL is `/` to the server, so no SPA fallback is needed.
 EXPOSE 8080

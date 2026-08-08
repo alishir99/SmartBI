@@ -1,4 +1,3 @@
-/** One labelled input. Lifted out of Login so the reset and change-password forms reuse it. */
 
 export function Field({
   id,

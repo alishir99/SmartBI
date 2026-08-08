@@ -12,17 +12,8 @@ from ..config import settings
 from ..i18n import current as current_language
 from ..result_cache import PREVIEW_ROWS, CachedResult
 
-# --- number grammar, per language --------------------------------------------------------
-#
-# Extraction has to read the prose the way it was written, and that is not one way. Swedish
-# writes "1 234,5 Mkr"; English writes "1,234.5M". Reading the second with the first's rules
-# turns 1,234,567 into 1.234 and rejects a figure that was in the data all along - a false
-# rejection is the expensive direction here, because it hides a correct answer behind the
-# amber banner. So the separators, the magnitude words and the spans that are never
-# measurements are all properties of the language the answer is in.
-#
-# The Swedish grammar below is unchanged from when this file was Swedish-only, deliberately:
-# the eval suite is Swedish and measures this path.
+# Number grammar is per-language: Swedish writes "1 234,5 Mkr", English "1,234.5M". Reading one
+# with the other's rules turns a real figure into a false rejection - the expensive direction.
 
 # Space, no-break space, narrow no-break space, thin space.
 _SPACES = " \\u00a0\\u202f\\u2009"
@@ -51,10 +42,8 @@ class NumberGrammar:
 
     @property
     def number(self) -> re.Pattern[str]:
-        # Longest suffix first, so "kronor" is not read as "kr" plus stray letters. Escaped,
-        # because "p.e." carries dots that would otherwise match any character. The trailing
-        # `(?!\w)` is what keeps a one-letter magnitude honest: without it "12 months" reads
-        # as 12 million, because "m" matches and the rest of the word is ignored.
+        # Longest suffix first, so "kronor" isn't read as "kr" plus stray letters. The trailing
+        # `(?!\w)` keeps a one-letter magnitude honest: without it "12 months" reads as 12M.
         alternatives = "|".join(
             re.escape(word) for word in sorted([*self.scales, *self.units],
                                                key=len, reverse=True))
@@ -90,8 +79,8 @@ SV = NumberGrammar(
             "mkr": 1e6, "msek": 1e6, "miljoner": 1e6, "miljon": 1e6, "mnkr": 1e6,
             "tkr": 1e3, "ksek": 1e3, "tusen": 1e3},
     percent=frozenset({"%", "procent"}),
-    # Longer than "procent" and therefore matched before it, which is the whole point:
-    # "12,2 procentenheter" must not be read as 12,2 %.
+    # Longer than "procent" and therefore matched before it: "12,2 procentenheter" must not
+    # be read as 12,2 %.
     percent_points=frozenset({"p.e.", "procentenheter", "procentenhet"}),
     money=frozenset({"kr", "sek", "kronor"}),
     count=frozenset({"st", "styck", "stycken", "enheter"}),
@@ -113,9 +102,8 @@ EN = NumberGrammar(
             "k": 1e3, "thousand": 1e3, "thousands": 1e3},
     percent=frozenset({"%", "percent", "pct"}),
     percent_points=frozenset({"pp", "p.p.", "percentage point", "percentage points"}),
-    # The deployment's own currency code, plus the words a model reaches for around it. The
-    # code is a setting, so this set is built at import from the same value the tools stamp
-    # onto every result.
+    # The deployment's own currency code, built at import from the same setting the tools
+    # stamp onto every result.
     money=frozenset({settings.app_currency.lower(), "units of currency"}),
     count=frozenset({"pcs", "units", "unit"}),
     # No period: in English a period is the decimal point, and treating it as a grouper is
@@ -142,18 +130,14 @@ def grammar() -> NumberGrammar:
 _YEAR_MIN, _YEAR_MAX = 1990, 2099
 
 # A bare integer no larger than this, and no larger than the row count, is accepted as a count
-# of things on screen ("de 10 största", "3 av 6 varumärken") rather than a measurement.
+# of things on screen ("de 10 största") rather than a measurement.
 _MAX_COUNTING_INTEGER = 50
 
 # Guards against floating-point noise once a value has been multiplied by 1e6.
 _FLOAT_EPSILON = 1e-6
 
-# Ceiling on the tolerance a round number may imply, relative to itself. "300 000" implies
-# +/-50 000 on significant figures alone, which is loose enough to launder a fabrication.
-# Measured over 300 random round figures against a 500-row result: 0 % accepted with no
-# implied tolerance at all (but then 0 of 4 correct roundings survive), and ~8 % at any cap
-# from 1 % upward - the rate is set by how densely 500 values fill the range, not by this
-# number. So it is set at the tight end of the band that still keeps every honest rounding.
+# Ceiling on the tolerance a round number may imply, relative to itself: loose enough to keep
+# honest roundings, tight enough that it can't launder a fabricated figure.
 _ROUND_NUMBER_MAX_REL = 0.02
 
 
@@ -162,13 +146,13 @@ class NumberLiteral:
     raw: str
     value: float
     tolerance: float
-    # : True when the literal carried no magnitude suffix, so "12,4" may still mean 12,4 Mkr.
+    #: True when the literal carried no magnitude suffix, so "12,4" may still mean 12,4 Mkr.
     implicit_scale_allowed: bool
-    # : True when the literal is a plain integer with no unit at all.
+    #: True when the literal is a plain integer with no unit at all.
     bare_integer: bool
-    # : "percent" | "money" | "count" | "unknown", read off the unit it carried.
+    #: "percent" | "money" | "count" | "unknown", read off the unit it carried.
     unit_class: str = "unknown"
-    # : Character offset in the (masked) narrative, so the words around it can be read.
+    #: Character offset in the (masked) narrative, so the words around it can be read.
     position: int = 0
 
 
@@ -195,11 +179,9 @@ class ValidationResult:
     ok: bool
     violations: list[Violation] = field(default_factory=list)
     checked: int = 0
-    # : One entry per accepted numeric literal, in the order they appear in the prose.
+    #: One entry per accepted numeric literal, in the order they appear in the prose.
     attributions: list[Attribution] = field(default_factory=list)
 
-
-# ------------------------------------------------------------------------- extraction
 
 def mask_entity_names(text: str, results: Iterable[CachedResult],
                       extra_names: Iterable[str] = ()) -> str:
@@ -207,11 +189,8 @@ def mask_entity_names(text: str, results: Iterable[CachedResult],
     names = {value for result in results for row in result.rows
              for value in row.values()
              if isinstance(value, str) and any(char.isdigit() for char in value)}
-    # Names the turn *resolved* but that no row carries. Ask "hur mycket sålde Nordström
-    # Hörlurar N178 Pro" and the answer groups by month: the product is a filter, so the
-    # rows hold dates and kronor and the name appears only in the prose. Masking from rows
-    # alone therefore left "N178" to be read as the number 178, and every question that
-    # named an entity and grouped by time failed validation. Same for "Täby Handelsplats 4".
+    # Names the turn *resolved* but that no row carries (a filter, not a group-by column) also
+    # need masking, or a product like "N178 Pro" gets its digits read as a number.
     names |= {name for name in extra_names
               if isinstance(name, str) and any(char.isdigit() for char in name)}
     masked = text
@@ -238,8 +217,7 @@ def _parse_number(integer_part: str, fraction_part: str | None,
 
     separator, fraction = fraction_part[0], fraction_part[1:]
     # Not the decimal separator, and exactly three digits: this is a thousands group the
-    # integer pattern did not swallow, not a fraction. "12.400" in Swedish is twelve
-    # thousand four hundred; in English it is twelve point four.
+    # integer pattern missed, not a fraction ("12.400" is 12400 in Swedish, 12.4 in English).
     if separator != rules.decimal and len(fraction) == 3:
         return float(digits + fraction), 0
     return float(f"{digits}.{fraction}"), len(fraction)
@@ -259,19 +237,14 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
         # Half a unit of the literal's last decimal place, in the literal's own magnitude.
         tolerance = 0.5 * (10.0 ** -decimals) * scale
 
-        # …unless the literal is a round number, in which case its trailing zeros ARE the
-        # claim. "530 000 kr" is how anyone reports 529 868, and demanding +/-0,50 kr of it
-        # rejected a correct answer - the expensive direction, per this file's own header.
-        # So an integer literal is read to its last *significant* digit instead.
         if not decimals:
             digits = match.group("int")
             stripped = "".join(c for c in digits if c.isdigit()).rstrip("0")
             zeros = len(digits.replace(" ", "")) - len(stripped) if stripped else 0
             if zeros:
+                # A round integer's trailing zeros ARE the claim: "530 000" is how anyone
+                # reports 529 868, so it's read to its last *significant* digit instead.
                 implied = 0.5 * (10.0 ** zeros) * scale
-                # Capped, because "300 000" implies +/-50 000 and that is loose enough to
-                # launder a fabrication. 5 % keeps an honest rounding while still catching a
-                # number that simply is not there.
                 tolerance = max(tolerance, min(implied, abs(value) * _ROUND_NUMBER_MAX_REL))
         tolerance += abs(value) * _FLOAT_EPSILON
 
@@ -280,8 +253,8 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
         elif suffix in rules.percent_points:
             unit_class = "pe"
         elif suffix in rules.money or suffix in rules.scales:
-            # A magnitude suffix is always money here: "3,45 Mkr", "2 tusen". No percentage is
-            # written with one.
+            # A magnitude suffix is always money here: "3,45 Mkr" - no percentage is written
+            # with one.
             unit_class = "money"
         elif suffix in rules.count:
             unit_class = "count"
@@ -300,7 +273,6 @@ def extract_numbers(text: str) -> list[NumberLiteral]:
     return literals
 
 
-# ------------------------------------------------------------------------- candidates
 
 def _numbers_in(rows: Sequence[dict], key: str) -> list[float]:
     values: list[float] = []
@@ -364,48 +336,42 @@ def candidates_by_result(
                 continue
 
             own = unit_of.get(key, "unknown")
-            # The difference between two percentages is percentage points, not percent. Keeping
-            # them in one bucket is exactly the hole G2 walked through: "22,8 % → 10,6 %, en
-            # minskning på 12,2 procent" then validated, because 12,2 was in the data - as p.e.
+            # The difference between two percentages is percentage points, not percent -
+            # keeping them in one bucket let a p.p. change validate as if it were a percent.
             delta_class = "pe" if own == "percent" else own
-            # A column that IS a change keeps its direction - `net_sales_sek_delta_pct` of -8,2
-            # says the sales fell, and prose calling that a rise is the failure this check
-            # exists for. Every other cell is a level, and so is anything derived from levels
-            # without subtracting: a total, a mean, a share. Only a difference points anywhere.
+            # A column that IS a change keeps its direction; every other cell is a level (a
+            # total, a mean, a share). Only a difference points anywhere.
             level = add if _is_change_column(key, own) else add_cell
             level(own, *values)
 
-            # Shares and pairwise deltas are licensed only over the rows the model saw: a
-            # 500-row result otherwise yields ~1 000 percentages blanketing [-100, 100], and the
+            # Shares and pairwise deltas are licensed only over the rows the model saw: the
             # model cannot honestly derive a share for a row it never received.
             seen = values[:PREVIEW_ROWS]
 
             if complete:
                 total = sum(values)
-                # A sum or a mean is the same kind of quantity as the column it came from:
-                # summing kronor gives kronor.
+                # A sum or a mean is the same kind of quantity as the column it came from.
                 level(own, total, total / len(values))
                 if total:
-                    # Share is a percentage NO MATTER what the column's unit is: this is the
-                    # derivation that turns kronor into a proportion, and it is the reason a `%`
-                    # literal has any legitimate claim on a money column at all.
+                    # Share is a percentage no matter the column's unit - the derivation that
+                    # gives a `%` literal any legitimate claim on a money column at all.
                     add_cell("percent", *(100.0 * value / total for value in seen))
 
-            # delta between adjacent rows stays available either way - it is local to two rows
-            # and does not depend on holding the whole series.
+            # Delta between adjacent rows stays available either way - it's local to two rows
+            # and doesn't depend on holding the whole series.
             for previous, current in pairwise(seen):
                 add(delta_class, current - previous)
                 if previous:
                     add("percent", 100.0 * (current - previous) / abs(previous))
 
             if complete:
-                # first→last is a statement about the series as a whole, so it needs the whole
-                # series.
+                # first→last is a statement about the series as a whole, so it needs the
+                # whole series.
                 add(delta_class, values[-1] - values[0])
                 if values[0]:
                     add("percent", 100.0 * (values[-1] - values[0]) / abs(values[0]))
 
-            # delta against the comparison period, when compare_to produced a paired column.
+            # Delta against the comparison period, when compare_to produced a paired column.
             compare_key = f"{key}_compare"
             if compare_key in numeric_keys:
                 for row in result.rows:
@@ -415,7 +381,7 @@ def candidates_by_result(
                             and not isinstance(before, bool)):
                         add(delta_class, float(now) - float(before))
 
-        # Candidates stay SIGNED.
+        # Candidates stay signed, so a match can report which direction the data supports.
         for buckets in (cells, derived):
             for values in buckets.values():
                 values.sort()
@@ -430,8 +396,6 @@ def _class_of_unit(unit: str | None) -> str:
         return "percent"
     if unit == "p.e.":
         return "pe"
-    # Anything that is not one of the three fixed units is the warehouse's currency code -
-    # which is a deployment setting, so it cannot be compared against a literal.
     if unit and unit not in ("st", "%"):
         return "money"
     if unit == "st":
@@ -439,8 +403,8 @@ def _class_of_unit(unit: str | None) -> str:
     return "unknown"
 
 
-# A literal may only match candidates of its own kind, so a `%` claim cannot match a raw SEK
-# cell - or, since "p.e." became a class of its own, a percentage-point delta.
+# A literal only matches candidates of its own kind - a `%` claim can't match a raw SEK cell,
+# nor a percentage-point delta now that "p.e." is its own class.
 _ALLOWED_CLASSES: dict[str, tuple[str, ...]] = {
     "percent": ("percent", "unknown"),
     "pe": ("pe", "unknown"),
@@ -462,12 +426,11 @@ def _matching_sign(buckets: dict[str, list[float]], allowed: tuple[str, ...],
         values = buckets.get(bucket)
         if not values:
             continue
-        # Both signs are tried explicitly, which is what keeps the magnitude check indifferent
-        # to phrasing now that the candidates are no longer stored mirrored.
+        # Both signs tried explicitly, so the magnitude check stays indifferent to phrasing.
         positive = _matches(values, abs(value), tolerance)
         negative = _matches(values, -abs(value), tolerance)
         if positive and negative:
-            return 0    # the data holds both; direction is unconstrained
+            return 0
         if positive:
             return 1
         if negative:
@@ -475,7 +438,6 @@ def _matching_sign(buckets: dict[str, list[float]], allowed: tuple[str, ...],
     return None
 
 
-# Swedish direction verbs, as they appear in the prose a sales model writes.
 _RISING = ("ökade", "ökat", "ökar", "ökning", "steg", "stigit", "stiger", "växte", "växt",
            "växer", "tillväxt", "uppgång", "förbättrades", "förbättring", "starkare",
            "högre", "upp")
@@ -494,11 +456,9 @@ def _stated_direction(text: str, position: int) -> int | None:
     falling = max((window.rfind(word) for word in _FALLING), default=-1)
     if rising < 0 and falling < 0:
         return None
-    # The nearest verb wins: "försäljningen ökade i mars men minskade med 8,2 % i april".
     return 1 if rising > falling else -1
 
 
-# Swedish superlatives that name a winner.
 _SUPERLATIVES = ("störst", "störste", "bäst", "bäste", "högst", "toppar", "topp",
                  "mest sålda", "mest sålde", "ledande", "vinnare")
 
@@ -517,8 +477,7 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Viola
         if not measures or not labels or len(result.rows) < 2:
             continue
 
-        # The primary measure is the first numeric column that is not a derived comparison - the
-        # same choice propose_chart makes, so prose and chart are judged against one axis.
+        # Same choice propose_chart makes, so prose and chart are judged against one axis.
         primary = next((key for key in measures
                         if not key.endswith(("_compare", "_delta", "_delta_pct"))), None)
         if primary is None:
@@ -542,8 +501,8 @@ def check_superlatives(text: str, results: Iterable[CachedResult]) -> list[Viola
             while (found := lowered.find(word, start)) != -1:
                 start = found + len(word)
                 window = lowered[found:found + _SUPERLATIVE_WINDOW]
-                # The entity the sentence is about: the longest known name in the window, so
-                # "Nordström TV N100 Pro" wins over a bare "Nordström".
+                # Longest known name in the window wins, so "Nordström TV N100 Pro" beats a
+                # bare "Nordström".
                 claimed = max((name for name in named if name and name in window),
                               key=len, default=None)
                 if claimed is None or claimed in winners:
@@ -572,7 +531,6 @@ def _direction_disagrees(text: str, literal: NumberLiteral, sign: int) -> bool:
     return stated is not None and stated != sign
 
 
-# -------------------------------------------------------------------------- validation
 
 def validate_narrative(text: str, results: Iterable[CachedResult],
                        entity_names: Iterable[str] = ()) -> ValidationResult:
@@ -594,21 +552,14 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
                 and 0 <= literal.value <= min(max_rows, _MAX_COUNTING_INTEGER)):
             continue
 
-        # Try the literal as written, then - only when it carried no magnitude suffix - as
-        # thousands and as millions.
         scales = ((1.0, 1e3, 1e6)
                   if literal.implicit_scale_allowed
                   and literal.unit_class not in ("percent", "pe")
                   else (1.0,))
         allowed = _ALLOWED_CLASSES[literal.unit_class]
 
-        # Results are tried in the order the turn produced them, so a figure that several
-        # queries could account for is attributed to the first one that could - which is the one
-        # the model was looking at when it wrote the sentence.
         source, sign = None, 0
 
-        # Levels first, across every result: a literal that appears in some row is a level
-        # wherever it sits, and no sentence makes a level point in a direction.
         for query_id, cells, _derived in by_result:
             if _find(cells, allowed, literal, scales) is not None:
                 source, sign = query_id, 0
@@ -639,8 +590,6 @@ def validate_narrative(text: str, results: Iterable[CachedResult],
                     f"härledning (summa, medel, förändring eller andel) av något värde "
                     f"i det."))
 
-    # Entity claims, which carry no digits at all and were therefore invisible to everything
-    # above.
     violations += check_superlatives(text, results)
 
     return ValidationResult(ok=not violations, violations=violations,

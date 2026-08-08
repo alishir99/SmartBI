@@ -32,9 +32,8 @@ def send(*, to: str, subject: str, body: str) -> None:
     a mail outage must not become a way to find out which addresses have accounts.
     """
     if settings.mail_backend == "log":
-        # The full body, so the link is copy-pasteable out of `docker compose logs api`. This is
-        # a development transport and the log is a development log; the `smtp` backend never
-        # writes the body anywhere.
+        # Full body logged so the link is copy-pasteable from `docker compose logs api`;
+        # dev-only transport - the `smtp` backend never logs the body.
         logger.info("", extra={"event": "mail.logged", "to": to, "subject": subject,
                                "body": body})
         return
@@ -55,6 +54,6 @@ def send(*, to: str, subject: str, body: str) -> None:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
 
-    # The address, never the body: a reset link in a log is a reset link anyone with log access
-    # can use, which is the whole point of it being short-lived and single-use.
+    # Log the address, never the body: a reset link in logs is usable by anyone with log
+    # access, defeating the whole point of it being short-lived and single-use.
     logger.info("", extra={"event": "mail.sent", "to": to, "subject": subject})

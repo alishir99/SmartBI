@@ -1,8 +1,5 @@
-/**
- * Produkter and Geografi are the same page with a different lens: take the dashboard card that
- * is already grouped by that dimension, give it the whole width, and offer follow-up questions
- * that hand off to the chat.
- */
+/** Produkter and Geografi are the same page with a different lens: take the dashboard card
+ * already grouped by that dimension and give it the whole width. */
 
 import type { ReactNode } from 'react'
 import type { AnswerCard } from '../types'

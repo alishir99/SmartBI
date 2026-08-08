@@ -1,4 +1,3 @@
-/** The KPI sparkline is a shape, so what is tested is that the shape is right. */
 
 import { describe, expect, it } from 'vitest'
 import { sparkPoints } from './KpiTile'

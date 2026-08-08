@@ -69,9 +69,8 @@ class OrderBy(BaseModel):
 
     measure: MeasureKey | None = None
     dimension: DimensionKey | None = None
-    # The one free-text field on the whole tool surface, and the reason it is safe: it is
-    # matched against the column list the compiler is about to emit and rejected if absent, so
-    # it can only ever name a column this query already has.
+    # The one free-text field on the whole tool surface, and why it's safe: matched against
+    # the query's own emitted column list and rejected if absent.
     field: str | None = Field(
         None, description="Kolumnnyckel ur resultatet, för härledda kolumner: "
                           "'<mått>_delta_pct' och '<mått>_compare' (kräver compare_to), "

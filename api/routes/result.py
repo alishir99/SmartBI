@@ -21,8 +21,7 @@ MAX_PAGE = 5_000
 def _lookup(query_id: str, tenant: ScopedTenant, cache: ResultCache):
     result = cache.get(query_id, tenant.supplier_id)
     if result is None:
-        # 404, not 403, and deliberately so: a 403 would confirm that this query_id exists and
-        # belongs to someone else.
+        # 404 not 403: a 403 would confirm the query_id belongs to someone else.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Okänt query_id")
     return result
 
@@ -37,9 +36,7 @@ async def get_result(query_id: str,
     page = result.rows[offset:offset + limit]
     return ResultPage(
         query_id=result.query_id,
-        # `to_columns`, not a second copy of it: this is where the chart reads its legend, so a
-        # label built differently here is a label that disagrees with the card's own table.
-        columns=to_columns(result),
+        columns=to_columns(result),  # shared with the chart, so labels never disagree
         rows=[presentable_row(row) for row in page],
         row_count=result.row_count,
         truncated=offset + len(page) < len(result.rows),
@@ -51,22 +48,18 @@ async def export_csv(query_id: str,
                      tenant: ScopedTenant = Depends(get_supplier_scope),
                      cache: ResultCache = Depends(get_cache)) -> StreamingResponse:
     result = _lookup(query_id, tenant, cache)
-    # An export is the most likely thing to be forwarded to someone who never saw the app, so it
-    # is the worst place for internal columns, and the worst place for a header that says
-    # "(jämförelse)" without saying which period. Same columns as the table view.
+    # Exports get forwarded outside the app, so same columns as the table view - no raw internals.
     columns = to_columns(result)
 
     buffer = io.StringIO()
-    # Semicolon delimiter and comma decimals: what Excel in a sv-SE locale expects.
-    writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")  # sv-SE Excel: ; and ,
     writer.writerow([c.label for c in columns])
     for row in result.rows:
         writer.writerow([_sv(row.get(c.key)) for c in columns])
 
     filename = f"solvigo-{result.tool}-{query_id}.csv"
     return StreamingResponse(
-        # BOM so Excel detects UTF-8 and renders å, ä and ö correctly.
-        iter(["﻿" + buffer.getvalue()]),
+        iter(["﻿" + buffer.getvalue()]),  # BOM so Excel detects UTF-8 (å, ä, ö render correctly)
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

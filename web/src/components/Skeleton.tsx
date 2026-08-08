@@ -1,4 +1,3 @@
-/** Space is reserved at the real size, so nothing shifts when data arrives. */
 
 export function Skeleton({ className = '' }: { className?: string }) {
   return (

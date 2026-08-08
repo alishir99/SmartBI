@@ -1,4 +1,3 @@
-/** What the source chip is allowed to say about how a result was narrowed. */
 
 import { describe, expect, it } from 'vitest'
 import { describeFilters } from './format'
@@ -9,8 +8,7 @@ describe('describeFilters', () => {
   })
 
   it('counts id filters instead of printing the id', () => {
-    // "Produkt: 8" is a database key on a supplier's screen: it says nothing about what was
-    // filtered and reads as an internal leak.
+    // "Produkt: 8" is a database key on a supplier's screen - it reads as an internal leak.
     expect(describeFilters({ product_ids: [8] })).toBe('1 produkt')
     expect(describeFilters({ brand_ids: [1, 2] })).toBe('2 varumärken')
   })

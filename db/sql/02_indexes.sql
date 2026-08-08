@@ -1,6 +1,5 @@
--- Indexes sized for the query shapes the semantic compiler actually emits:
--- always a date range, almost always a supplier scope, then some subset of
--- product / category / region / channel.
+-- Sized for the query shapes the semantic compiler emits: date range + supplier scope,
+-- then some subset of product/category/region/channel.
 
 -- Leading supplier_id matches the RLS predicate and every tenant-scoped scan.
 CREATE INDEX idx_fact_supplier_date   ON fact_sales_line (supplier_id, date_id);
@@ -21,8 +20,8 @@ CREATE INDEX idx_entity_label_trgm    ON entity_search USING gin (label gin_trgm
 CREATE INDEX idx_entity_synonyms_trgm ON entity_search USING gin (synonyms gin_trgm_ops);
 CREATE INDEX idx_entity_kind          ON entity_search (kind);
 
--- Built by scripts/embed_entities.py after embeddings exist; an IVFFlat index on an
--- all-NULL column is useless, so it is created there rather than here.
+-- IVFFlat index on embedding is built by scripts/embed_entities.py after embeddings exist -
+-- one on an all-NULL column is useless.
 
 CREATE INDEX idx_audit_supplier_time  ON audit_turn (supplier_id, occurred_at DESC);
 CREATE INDEX idx_card_user            ON saved_card (user_id, created_at DESC);

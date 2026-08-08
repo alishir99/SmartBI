@@ -28,7 +28,6 @@ MONTHLY = result([
 ])
 
 
-# ------------------------------------------------------------------ it accepts truth
 
 def test_exact_value_from_the_result_passes():
     check = validate_narrative(
@@ -69,7 +68,6 @@ def test_a_year_is_not_a_hallucinated_number():
     assert check.ok, check.violations
 
 
-# ----------------------------------------------------------------- it rejects fiction
 
 def test_a_fabricated_total_is_rejected():
     """The exact failure this project exists to prevent: a confident, plausible, wrong total."""
@@ -110,7 +108,6 @@ def test_every_violation_is_reported_not_just_the_first():
     assert len(check.violations) == 2
 
 
-# ------------------------------------------------------- it spans several tool results
 
 def test_a_number_from_any_result_in_the_turn_is_accepted():
     """One turn may run more than one query; a number from the earlier one is still grounded."""
@@ -124,7 +121,6 @@ def test_a_number_from_any_result_in_the_turn_is_accepted():
     assert check.ok, check.violations
 
 
-# ---------------------------------------------------------------- preview discipline
 
 def test_summing_a_preview_as_if_it_were_everything_is_rejected():
     """The subtle failure mode: the model gets 25 of 1 200 rows and adds them up, presenting the
@@ -137,7 +133,6 @@ def test_summing_a_preview_as_if_it_were_everything_is_rejected():
     assert not check.ok, "a partial sum must not pass as a total when row_count > rows seen"
 
 
-# ------------------------------------------------------------------------ extraction
 
 @pytest.mark.parametrize("text,expected", [
     ("3 450 900,50 kr", 3_450_900.50),
@@ -159,7 +154,6 @@ def test_empty_narrative_is_vacuously_valid():
     assert check.checked == 0
 
 
-# --------------------------------------------------------------- names that carry digits
 
 PRODUCT_COLUMNS = [
     {"key": "product", "type": "text", "label": "Produkt"},
@@ -190,7 +184,6 @@ def test_masking_a_name_does_not_excuse_a_fabricated_figure():
     assert check.violations[0].literal == "9 999 999 kr"
 
 
-# --------------------------------------------------------------- provenance per tool call
 
 def named(query_id: str, rows, columns=None, row_count=None) -> CachedResult:
     entry = result(rows, columns=columns, row_count=row_count)
@@ -257,7 +250,6 @@ def test_a_fabricated_figure_is_attributed_to_nothing():
     assert check.attributions == []
 
 
-# ----------------------------------------------------------- direction, class and winner
 
 WITH_DELTA = result(
     [{"month": "2026-03-01", "net_sales_sek": 3_450_900.50,
@@ -286,10 +278,8 @@ def test_prose_may_not_reverse_the_direction_of_a_real_change(prose):
     "Försäljningen minskade med 8,2 % jämfört med förra året.",
     "Försäljningen sjönk med 8,2 % mot i fjol.",
     "Försäljningen tappade 8,2 % mot i fjol.",
-    # No direction word at all: nothing to contradict, so nothing is asserted.
-    "Förändringen var 8,2 % jämfört med förra året.",
-    # Written with its own sign, which agrees with the data.
-    "Försäljningen var -8,2 % mot i fjol.",
+    "Förändringen var 8,2 % jämfört med förra året.",  # no direction word: nothing to contradict
+    "Försäljningen var -8,2 % mot i fjol.",  # written with its own sign, which agrees with the data
 ])
 def test_prose_that_states_the_direction_correctly_still_passes(prose):
     """The half that matters more: a tightened validator which rejects true statements is worse
@@ -348,7 +338,7 @@ def test_a_percentage_may_not_match_a_money_figure_by_implicit_rescaling():
                  {"key": "net_sales_sek", "type": "number", "label": "Netto", "unit": "SEK"}])
 
     assert not validate_narrative("Marknadsandelen var 2,89 %.", [revenue]).ok
-    # The same digits as money are still fine - the literal now has to agree about what it is.
+    # Same digits as money, still fine: the literal now has to agree about what it is.
     assert validate_narrative("Stockholm stod för 2 890 100,00 kr.", [revenue]).ok
 
 
@@ -362,7 +352,6 @@ def test_a_share_of_the_total_is_still_a_legitimate_percentage():
     assert validate_narrative("A stod för 75,0 % av försäljningen.", [two]).ok
 
 
-# ------------------------------------------------------------------------- superlatives
 
 TOP_THREE = result(
     [{"product": "Nordström TV N100 Pro", "net_sales_sek": 8_932_965.00},
@@ -398,7 +387,6 @@ def test_mentioning_a_product_without_a_superlative_is_not_a_winner_claim():
         "Vidar Hörlurar V191 Studio sålde för 4 251 150,76 kr.", [TOP_THREE]).ok
 
 
-# --------------------------------------- names the turn resolved but no row carries
 
 def test_a_resolved_name_is_masked_even_when_no_row_carries_it():
     """The regression that failed five golden cases at once.
@@ -438,7 +426,6 @@ def test_masking_a_resolved_name_still_does_not_excuse_a_fabricated_figure():
     assert check.violations[0].literal == "9 999 999,00 kr"
 
 
-# ------------------------------------------------- round numbers carry their own precision
 
 ROUNDED = result(
     [{"month": "2024-12-01", "net_sales_sek": 529_867.69},

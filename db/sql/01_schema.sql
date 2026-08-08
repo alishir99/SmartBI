@@ -1,13 +1,9 @@
--- Solvigo Insights - star schema (IMPLEMENTATION_PLAN.md §5.2)
---
--- Grain of the fact table: one row per order line. Everything else is derivable.
--- Money is SEK excluding VAT; the unit is stated in the column name and re-stated
--- in every MCP tool response's meta.unit (§9.3).
+-- Star schema (IMPLEMENTATION_PLAN.md §5.2). Grain of the fact table: one row per order
+-- line; money is SEK excluding VAT, re-stated in every MCP tool response's meta.unit (§9.3).
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- ---------------------------------------------------------------- dimensions
 
 CREATE TABLE dim_supplier (
     supplier_id  INT PRIMARY KEY,
@@ -47,7 +43,7 @@ CREATE TABLE dim_store (
     channel      TEXT NOT NULL CHECK (channel IN ('fysisk', 'online')),
     city         TEXT NOT NULL,
     municipality TEXT NOT NULL,
-    region       TEXT NOT NULL,          -- län
+    region       TEXT NOT NULL,
     lat          DOUBLE PRECISION,
     lon          DOUBLE PRECISION,
     opened_date  DATE NOT NULL
@@ -76,7 +72,6 @@ CREATE TABLE dim_date (
     campaign_id INT
 );
 
--- ---------------------------------------------------------------------- fact
 
 CREATE TABLE fact_sales_line (
     sale_line_id        BIGSERIAL PRIMARY KEY,
@@ -85,8 +80,8 @@ CREATE TABLE fact_sales_line (
     store_id            INT NOT NULL REFERENCES dim_store(store_id),
     customer_id         BIGINT REFERENCES dim_customer(customer_id),  -- NULL = cash purchase
     product_id          INT NOT NULL REFERENCES dim_product(product_id),
-    -- Denormalised from dim_product → dim_brand purely so the RLS policy (04_rls.sql)
-    -- is a column comparison rather than a two-hop subquery evaluated per row.
+    -- Denormalised from dim_product -> dim_brand so the RLS policy (04_rls.sql) is a column
+    -- comparison, not a two-hop subquery evaluated per row.
     supplier_id         INT NOT NULL REFERENCES dim_supplier(supplier_id),
     quantity            INT NOT NULL,
     gross_amount_sek    NUMERIC(12, 2) NOT NULL,
@@ -95,12 +90,8 @@ CREATE TABLE fact_sales_line (
     is_return           BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- --------------------------------------------------------- entity resolution
---
--- One searchable row per resolvable entity (§5.4). Populated by the seeder from the
--- dimensions; embedding stays NULL unless scripts/embed_entities.py has been run, in
--- which case resolve_entities fuses trigram and vector hits with RRF. Lexical search
--- works with or without it, so the heavy embedding model is opt-in, not a hard dep.
+-- One searchable row per resolvable entity (§5.4); embedding stays NULL unless
+-- scripts/embed_entities.py has run - lexical search works with or without it.
 CREATE TABLE entity_search (
     kind       TEXT NOT NULL CHECK (kind IN ('product', 'category', 'store', 'brand', 'region')),
     entity_id  INT NOT NULL,
@@ -112,7 +103,6 @@ CREATE TABLE entity_search (
     PRIMARY KEY (kind, entity_id)
 );
 
--- ----------------------------------------------------------- app users, audit
 
 CREATE TABLE app_user (
     user_id       SERIAL PRIMARY KEY,
@@ -139,8 +129,8 @@ CREATE TABLE audit_turn (
     status       TEXT NOT NULL          -- ok | cannot_answer | validation_failed | error
 );
 
--- Saved cards ("Mina vyer"): the spec plus the tool arguments, never a screenshot,
--- so a saved card re-runs live against fresh data (§10).
+-- Saved cards ("Mina vyer"): spec + tool arguments, never a screenshot, so a saved card
+-- re-runs live against fresh data (§10).
 CREATE TABLE saved_card (
     card_id     BIGSERIAL PRIMARY KEY,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

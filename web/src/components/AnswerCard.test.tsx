@@ -1,12 +1,5 @@
-/**
- * One render per card status.
- *
- * These exist because the review found four defects a single render test each would have
- * caught - a deleted source chip that four documents still promised, a `validation_failed`
- * sentence painted twice, a preview card indistinguishable from a final one, and a chip
- * reading "0 rader" next to a green tick. The whole frontend suite was pure functions, so
- * every one of them passed CI.
- */
+/** One render per card status: the review found real defects (dropped source chip, doubled
+ * validation text, an unclear preview) that pure-function tests, the whole prior suite, missed. */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -92,8 +85,8 @@ describe('the answer card', () => {
 
   it('states once, not twice, that the text could not be verified', () => {
     show({ status: 'validation_failed' })
-    // B3: the server inserted the sentence as a caveat and the card rendered it from the
-    // status as well, so it appeared in the amber box and again in grey underneath.
+    // B3: server inserted the caveat sentence and the card rendered it from status too, so it
+    // appeared twice - amber box, then grey underneath.
     expect(screen.getAllByText(/kunde inte verifieras/)).toHaveLength(1)
   })
 
@@ -115,10 +108,10 @@ describe('the answer card', () => {
   })
 
   it('always states the period the answer covers', () => {
-    // G3: the same question resolves to different windows on different runs, and the card's
-    // own subtitle is the only thing on screen that says which one ran.
+    // G3: the same question resolves to different windows on different runs, and the subtitle
+    // is the only thing on screen that says which one ran.
     show({})
-    // Twice over: the card's subtitle and the source chip, which both name the window.
+    // Twice over: the card's subtitle and the source chip both name the window.
     expect(screen.getAllByText(/juli 2025–juni 2026/).length).toBeGreaterThan(0)
   })
 

@@ -14,8 +14,8 @@ from console import use_utf8_stdout
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data" / "generated"
 
-# Load order matters: dim_category has a self-referencing foreign key and the generator emits
-# every level-1 row before any level-2 row, so a single COPY satisfies it.
+# Load order matters: dim_category self-references via FK, and the generator emits every
+# level-1 row before any level-2 row, so a single COPY satisfies it.
 TABLES = [
     "dim_supplier",
     "dim_brand",
@@ -29,13 +29,12 @@ TABLES = [
 
 DEMO_PASSWORD = "demo1234"
 
-# One user per supplier for the first two suppliers: the second exists so tenant isolation can
-# be *shown* live rather than asserted - log in as Erik and the same question returns a
-# different company's numbers.
 DEMO_USERS = [
-    ("ali@solvigo.se", "Ali Shirzad", "Solvigo AB", "supplier_admin"),
-    ("erik@lagerkvisthem.se", "Erik Sandberg", "Lagerkvist Hem AB", "supplier_viewer"),
+    ("ali@solvigo.se", "Ali Shirzad", "Nordström Audio AB", "supplier_admin"),
+    ("sara@solvigo.se", "Sara Lindqvist", "Lagerkvist Hem AB", "supplier_viewer"),
 ]
+# Second account exists so tenant isolation can be shown live: log in as Sara and the same
+# question returns a different company's numbers.
 
 # Curated synonyms so lexical retrieval alone handles how Swedes actually type.
 REGION_SYNONYMS = {
@@ -122,15 +121,14 @@ async def load_tables(connection: asyncpg.Connection) -> None:
         path = DATA / f"{table}.csv"
         if not path.exists():
             raise SystemExit(f"missing {path}. Run: python scripts/generate_data.py --seed 42")
-        # null='' because pandas writes an empty field for NULL, and those are meaningful here:
-        # cash purchases have no customer, online stores have no coordinates, current products
-        # have no discontinued date.
+        # null='' because pandas writes empty for NULL, and those are meaningful here: cash
+        # purchases have no customer, online stores have no coordinates.
         await connection.copy_to_table(
             table, source=str(path), format="csv", header=True, null="")
         count = await connection.fetchval(f"SELECT COUNT(*) FROM {table}")
         print(f"  {table}: {count:,} rows")
 
-    # The CSVs carry explicit sale_line_id values, which leaves the BIGSERIAL sequence at 1.
+    # CSVs carry explicit sale_line_id values, which leaves the BIGSERIAL sequence at 1.
     await connection.execute(
         "SELECT setval(pg_get_serial_sequence('fact_sales_line', 'sale_line_id'), "
         "COALESCE((SELECT MAX(sale_line_id) FROM fact_sales_line), 1))")
@@ -176,7 +174,7 @@ async def build_entity_search(connection: asyncpg.Connection) -> None:
           FROM dim_store s
     """)
 
-    # Regions are not a table, so they get synthetic ids - dense_rank over the distinct names,
+    # Regions aren't a table, so they get synthetic ids: dense_rank over the distinct names,
     # stable for a given dataset.
     await connection.execute("""
         INSERT INTO entity_search (kind, entity_id, label, path, synonyms, supplier_id)
@@ -195,15 +193,12 @@ async def build_entity_search(connection: asyncpg.Connection) -> None:
 
 
 async def create_users(connection: asyncpg.Connection) -> None:
-    # The API's own hasher, not a bare `PasswordHasher()`. The defaults are m=64 MiB, t=3, p=4;
-    # `api.auth` is tuned to OWASP's second Argon2id profile (19 MiB, t=2, p=1). Both verify -
-    # the parameters travel inside the hash string - but two answers to "how expensive is a
-    # login here" is one too many, and the seed was quietly using the wrong one.
+    # The API's own hasher, not a bare PasswordHasher(): api.auth is tuned to OWASP's second
+    # Argon2id profile, and two answers to "how expensive is a login" is one too many.
     from api.auth import hash_password
 
-    # Safe here and nowhere else: this function only runs from the seeder, which is building a
-    # demo database from nothing. The cascade takes saved_card and audit_turn with it, so
-    # onboarding a real customer uses scripts/add_user.py instead.
+    # Safe only here: this seeds a demo database from nothing. Onboarding a real customer
+    # goes through scripts/add_user.py instead.
     await connection.execute("TRUNCATE app_user CASCADE")
     for email, display_name, supplier_name, role in DEMO_USERS:
         supplier_id = await connection.fetchval(
@@ -218,7 +213,7 @@ async def create_users(connection: asyncpg.Connection) -> None:
 
 
 async def refresh_rollups(connection: asyncpg.Connection) -> None:
-    # Plain REFRESH, not CONCURRENTLY: this runs once on an empty-but-populated view where
+    # Plain REFRESH, not CONCURRENTLY: runs once on an empty-but-populated view, where
     # CONCURRENTLY has no advantage and takes an exclusive lock either way.
     for view in ("mv_sales_daily", "mv_category_daily", "mv_brand_monthly"):
         await connection.execute(f"REFRESH MATERIALIZED VIEW {view}")

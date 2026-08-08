@@ -18,13 +18,11 @@ from contextvars import ContextVar
 
 from .config import settings
 
-# The languages the UI ships in. Adding one is this dict plus its twin in web/src/lib/i18n.ts.
+# UI languages; add one here and in web/src/lib/i18n.ts.
 LANGUAGES = ("sv", "en")
 
-# Request-scoped, the same way api/logs.py carries the turn id. The alternative was a `lang`
-# parameter on every function in render.py - fifteen signatures changed so that one caveat at
-# the bottom could pick a string. The language is a property of the request, so it travels
-# with the request.
+# Request-scoped, like the turn id in api/logs.py: the alternative was a `lang` param
+# threaded through every render.py function. Language belongs to the request.
 _language: ContextVar[str] = ContextVar("language", default="")
 
 
@@ -73,7 +71,6 @@ def t(lang: str, key: str, **kwargs: object) -> str:
 
 STRINGS: dict[str, dict[str, str]] = {
     "sv": {
-        # periods
         "period.last_7_days": "Senaste veckan",
         "period.last_30_days": "Senaste 30 dagarna",
         "period.last_90_days": "Senaste kvartalet",
@@ -85,7 +82,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "grain.week": "vecka",
         "grain.month": "månad",
         "grain.quarter": "kvartal",
-        # dashboard
         "dash.trend": "Försäljning per {noun}",
         "dash.top_products": "Topp 10 produkter",
         "dash.by_region": "Försäljning per region",
@@ -100,13 +96,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "Streckade linjer markerar perioder med kampanj - handlaren rabatterar tungt då."),
         "dash.error": "Kunde inte hämta dashboarddata: {error}",
         "dash.movers_error": "Kunde inte hämta produktrörelser: {error}",
-        # KPI tiles
         "kpi.net_sales": "Försäljning",
         "kpi.category_share": "Andel av kategori",
         "kpi.units": "Sålda enheter",
         "kpi.avg_price": "Snittpris",
         "kpi.rank": "#{rank} av {total} varumärken i {subcategory}",
-        # render.py
         "card.fallback_title": "Resultat",
         "card.market_share": "Marknadsandel",
         "card.sales": "Försäljning",
@@ -122,12 +116,27 @@ STRINGS: dict[str, dict[str, str]] = {
         "chart.pie": "cirkeldiagram",
         "chart.table": "tabell",
         "chart.generic": "diagram",
-        # auth and the reset mail
         "auth.user_gone": "Användaren finns inte längre",
         "auth.wrong_current_password": "Nuvarande lösenord stämmer inte",
         "auth.reset_invalid": "Länken är ogiltig eller har redan använts. Begär en ny.",
         "auth.reset_sent": ("Om adressen hör till ett konto har vi skickat en "
                             "återställningslänk."),
+        "auth.missing_header": "Saknar Authorization-header",
+        "auth.invalid_token": "Ogiltig eller utgången token - logga in igen",
+        "auth.token_not_for_login": "Token kan inte användas för inloggning",
+        "auth.no_supplier": ("Kontot är inte kopplat till en leverantör. Leverantörsdata "
+                             "kräver ett leverantörskonto."),
+        "agent.no_api_key": "LLM_API_KEY är inte satt - agenten kan inte köra.",
+        "agent.thinking": "Tänker…",
+        "agent.status.get_capabilities": "Kontrollerar vad datan kan svara på…",
+        "agent.status.resolve_entities": "Slår upp vad du menar…",
+        "agent.status.query_sales": "Hämtar försäljningssiffror…",
+        "agent.status.query_market_share": "Beräknar marknadsandel…",
+        "agent.status.default": "Hämtar data…",
+        "agent.composing": "Sammanställer svaret…",
+        "agent.checking_numbers": "Kontrollerar siffrorna mot datan…",
+        "agent.rewriting": "Skriver om svaret…",
+        "agent.error": "Något gick fel i agenten: {error}",
         "mail.reset_subject": "Återställ ditt lösenord - Solvigo Insights",
         "mail.reset_body": (
             "Hej {name},\n\n"
@@ -137,9 +146,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "Länken gäller i {minutes} minuter och kan bara användas en gång.\n\n"
             "Var det inte du behöver du inte göra något - ditt nuvarande lösenord "
             "fortsätter att gälla.\n"),
-        # misc
-        # Abbreviated month names, for the period labels the server writes onto a card's
-        # legend. Comma-separated because it is one string to translate, not twelve.
+        # Abbreviated month names for card legends; comma-separated so it's one string to
+        # translate, not twelve.
         "months.short": "jan,feb,mar,apr,maj,jun,jul,aug,sep,okt,nov,dec",
         "unknown.source": "okänd",
         "unknown.scope": "okänt",
@@ -195,6 +203,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "auth.wrong_current_password": "Your current password is not correct",
         "auth.reset_invalid": "This link is invalid or has already been used. Request a new one.",
         "auth.reset_sent": "If that address belongs to an account, we have sent a reset link.",
+        "auth.missing_header": "Missing Authorization header",
+        "auth.invalid_token": "Invalid or expired session - please log in again",
+        "auth.token_not_for_login": "This token cannot be used to log in",
+        "auth.no_supplier": ("This account isn't linked to a supplier. Supplier data "
+                             "requires a supplier account."),
+        "agent.no_api_key": "LLM_API_KEY is not set - the agent can't run.",
+        "agent.thinking": "Thinking…",
+        "agent.status.get_capabilities": "Checking what the data can answer…",
+        "agent.status.resolve_entities": "Looking up what you mean…",
+        "agent.status.query_sales": "Fetching sales figures…",
+        "agent.status.query_market_share": "Computing market share…",
+        "agent.status.default": "Fetching data…",
+        "agent.composing": "Compiling the answer…",
+        "agent.checking_numbers": "Checking the numbers against the data…",
+        "agent.rewriting": "Rewriting the answer…",
+        "agent.error": "Something went wrong in the agent: {error}",
         "mail.reset_subject": "Reset your password - Solvigo Insights",
         "mail.reset_body": (
             "Hi {name},\n\n"

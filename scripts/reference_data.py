@@ -1,6 +1,5 @@
 """Swedish retail reference data for the synthetic generator."""
 
-# --------------------------------------------------------------------- geography All 21 län.
 REGIONS: dict[str, dict] = {
     "Stockholms län": {"weight": 235, "cities": [
         ("Stockholm", "Stockholm", 59.3293, 18.0686),
@@ -87,8 +86,6 @@ REGIONS: dict[str, dict] = {
     ]},
 }
 
-# ------------------------------------------------------------------- categories level 1 → list
-# of level 2.
 CATEGORIES: dict[str, list[str]] = {
     "Ljud & Bild": ["Hörlurar", "Högtalare", "TV", "Ljudanläggningar", "Bilstereo"],
     "Hem & Kök": ["Kaffebryggare", "Köksmaskiner", "Dammsugare", "Belysning"],
@@ -98,12 +95,9 @@ CATEGORIES: dict[str, list[str]] = {
     "Barn & Leksaker": ["Byggleksaker", "Sällskapsspel", "Babyprodukter"],
 }
 
-# Subcategory that deliberately has too few competing brands, so the k-anonymity suppression
-# path (§11.3) fires during the demo instead of being merely asserted.
+# Deliberately too few competing brands, so k-anonymity suppression (§11.3) actually fires.
 THIN_SUBCATEGORY = "Vintersport"
 
-# ----------------------------------------------------------- suppliers & brands supplier name →
-# brands it owns.
 SUPPLIERS: dict[str, list[str]] = {
     "Nordström Audio AB": ["Nordström", "Vidar"],
     "Lagerkvist Hem AB": ["Lagerkvist", "Bruksbo"],
@@ -115,10 +109,9 @@ SUPPLIERS: dict[str, list[str]] = {
     "Aurora Kök AB": ["Aurora", "Tindra"],
 }
 
-# The supplier the demo logs in as - the one whose dashboard is shown in the video.
+# The supplier the demo logs in as - whose dashboard is shown in the video.
 DEMO_SUPPLIER = "Nordström Audio AB"
 
-# Which brands compete in which subcategory.
 BRAND_SUBCATEGORIES: dict[str, list[str]] = {
     "Hörlurar":            ["Nordström", "Vidar", "Svea", "Norrsken", "Lumia", "Kvist"],
     "Högtalare":           ["Nordström", "Vidar", "Svea", "Lumia", "Bruksbo"],
@@ -136,7 +129,7 @@ BRAND_SUBCATEGORIES: dict[str, list[str]] = {
     "Träningsutrustning":  ["Bergqvist", "Klätter", "Kvist", "Lumia", "Bruksbo"],
     "Cyklar":              ["Bergqvist", "Klätter", "Bruksbo", "Kvist", "Lagerkvist"],
     "Utomhusliv":          ["Bergqvist", "Klätter", "Trolle", "Bruksbo", "Lagerkvist"],
-    "Vintersport":         ["Bergqvist", "Klätter", "Bruksbo"],          # thin on purpose
+    "Vintersport":         ["Bergqvist", "Klätter", "Bruksbo"],
     "Hårvård":             ["Falkenberg", "Tindra", "Aurora", "Lumia", "Kvist"],
     "Personvård":          ["Falkenberg", "Tindra", "Aurora", "Bruksbo", "Kvist"],
     "Byggleksaker":        ["Trolle", "Klätter", "Bergqvist", "Tindra", "Kvist"],
@@ -144,7 +137,6 @@ BRAND_SUBCATEGORIES: dict[str, list[str]] = {
     "Babyprodukter":       ["Trolle", "Klätter", "Tindra", "Aurora", "Falkenberg"],
 }
 
-# Product naming: subcategory → (noun used in the product name, typical price band in SEK).
 SUBCATEGORY_PROFILE: dict[str, tuple[str, int, int]] = {
     "Hörlurar":           ("Hörlurar", 399, 3990),
     "Högtalare":          ("Högtalare", 690, 8990),
@@ -170,13 +162,11 @@ SUBCATEGORY_PROFILE: dict[str, tuple[str, int, int]] = {
     "Babyprodukter":      ("Babyprodukt", 199, 4990),
 }
 
-# Model-name suffixes, cycled deterministically to build product names.
 MODEL_SUFFIXES = [
     "One", "Two", "Pro", "Max", "Mini", "Air", "Plus", "Studio", "Go", "Home",
     "Sport", "Compact", "Elite", "Classic", "Neo", "Lite", "Ultra", "Duo",
 ]
 
-# Seasonality: multiplier per calendar month (Jan=index 0) per level-1 category.
 SEASONALITY: dict[str, list[float]] = {
     "Ljud & Bild":     [0.85, 0.80, 0.85, 0.85, 0.90, 0.90, 0.75, 0.95, 1.00, 1.05, 1.75, 1.85],
     "Hem & Kök":       [1.05, 0.95, 0.95, 0.95, 1.00, 0.95, 0.80, 1.00, 1.05, 1.05, 1.45, 1.55],
@@ -186,12 +176,10 @@ SEASONALITY: dict[str, list[float]] = {
     "Barn & Leksaker": [0.75, 0.70, 0.75, 0.80, 0.85, 0.90, 0.80, 0.85, 0.90, 1.00, 1.80, 2.30],
 }
 
-# Swedish red days that matter for retail, as (month, day).
 FIXED_HOLIDAYS = [
     (1, 1), (1, 6), (5, 1), (6, 6), (12, 24), (12, 25), (12, 26), (12, 31),
 ]
 
-# Campaign windows, applied to every category: (name, month, start_day, end_day, uplift).
 CAMPAIGNS = [
     ("Black Week", 11, 21, 30, 2.6),
     ("Mellandagsrea", 12, 26, 31, 1.9),

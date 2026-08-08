@@ -59,8 +59,8 @@ async def query_sales(tenant: TenantContext, spec: dict) -> dict:
             "filters_applied": {k: v for k, v in (spec.get("filters") or {}).items() if v},
             "measures": list(spec.get("measures") or []),
             "dimensions": list(spec.get("dimensions") or []),
-            # True when the caller's own limit cut the result, so the model can say "topp 10"
-            # rather than implying it saw everything.
+            # True when the caller's own limit cut the result, so the model can say
+            # "topp 10" rather than implying it saw everything.
             "truncated": limit is not None and len(rows) >= int(limit),
             "executed_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },

@@ -69,10 +69,9 @@ async def test_a_valid_link_resolves_with_its_rows_inline(stubbed):
 
     assert view.shared_by == "Nordström Audio AB"
     assert view.card.chart is not None
-    # The reader has no session, so /api/result would 404 for them: the rows have to travel
-    # with the card or the page has a chart and nothing to draw.
+    # No session for the reader, so /api/result would 404: rows must travel with the card.
     assert view.card.query_id is None
-    # And no card_id, or the card offers a share button and a delete button that can only 401.
+    # And no card_id, or the card would offer share/delete buttons that can only 401.
     assert view.card.card_id is None
     assert len(view.result.rows) == 2
 

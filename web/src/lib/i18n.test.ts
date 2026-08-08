@@ -1,10 +1,3 @@
-/**
- * The parts of localisation that can be silently wrong.
- *
- * A missing string is obvious the moment anyone looks at the screen. A number formatted with
- * the wrong locale's separators, or an axis labelled with a magnitude it was not divided by,
- * is a wrong figure that looks like a right one - so that is what these cover.
- */
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { STRINGS, columnLabel, plural, t, useLanguageStore } from './i18n'
@@ -18,7 +11,7 @@ beforeEach(() => use('sv'))
 
 describe('the string tables', () => {
   it('answer every key in every language', () => {
-    // A gap falls back to Swedish, which on an English screen reads as a bug rather than as a
+    // A gap falls back to Swedish, which on an English screen reads as a bug rather than a
     // translation gap - so the tables have to stay the same shape.
     const reference = Object.keys(STRINGS.sv).sort()
     expect(Object.keys(STRINGS.en).sort()).toEqual(reference)
@@ -26,8 +19,8 @@ describe('the string tables', () => {
 
   it('fills placeholders and leaves unknown ones alone', () => {
     expect(t('source.rows_count', { count: 42 })).toContain('42')
-    // A template referring to a name the caller did not pass keeps the placeholder rather than
-    // printing "undefined" at a user.
+    // A template referring to a name the caller didn't pass keeps the placeholder rather
+    // than printing "undefined" at a user.
     expect(t('ask.compared_with', {})).toContain('{period}')
   })
 

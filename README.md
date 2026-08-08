@@ -1,567 +1,127 @@
-# Solvigo Insights - AI-native försäljningsdashboard
+# Solvigo Insights
 
-"BI utan BI-avdelning" för leverantörer i detaljhandeln. En leverantör loggar in och
-landar på en **färdig dashboard** - inte en tom chattruta - och kan sedan fördjupa sig genom
-att fråga sin data på vanligt språk, svenska eller engelska. Både dashboarden och chatten läser data på exakt samma
-väg: genom en MCP-server.
+An AI-native sales dashboard for retail suppliers — "BI without a BI department." You log in
+and land on a finished dashboard (no setup), then ask follow-up questions in a chat and get
+answers with charts, in Swedish or English.
 
-> **Kärnpåståendet:** siffrorna du ser har aldrig passerat språkmodellen.
-> Modellen väljer *frågan* och *presentationen*. Värdena går
-> Postgres → MCP → API → diagram, längs en väg modellen inte rör.
+**The numbers never pass through the AI model.** It only picks which question to ask the
+database and how to present the answer — the actual values travel Postgres → MCP → API →
+chart, on a path the model never touches.
 
-Designresonemanget i sin helhet ligger i [`docs/DESIGN.md`](docs/DESIGN.md) - skrivet innan
-en rad kod fanns, och behållet som det skrevs.
-Den här filen är hur du kör systemet och de val som är värda att förstå först.
+Full design reasoning (why Postgres, why this architecture, every trade-off): see
+[`docs/DESIGN.md`](docs/DESIGN.md). This file is just: what it is, and how to run it.
+
+> Shared for evaluation only — see [`LICENSE`](LICENSE). Not licensed for production use.
 
 ---
 
-## Kör det
+## Before you start
+
+1. Install **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (this is the
+   only thing you need installed — Docker runs the database, backend and frontend for you).
+2. In this folder, copy the example settings file and open it in any text editor:
+   ```bash
+   cp .env.example .env
+   ```
+3. In `.env`, set one line: `LLM_API_KEY=...` (a Claude or DeepSeek API key). Everything else
+   already has a working default. **Without this key the app still runs fine** — dashboard,
+   login, everything — only the chat is disabled, and it says so instead of breaking.
+
+## Run it
 
 ```bash
 docker compose up
 ```
 
-Det är hela kommandot, från en färsk klon. Ingen `.env` behövs och ingen data behöver
-genereras först: varje tjänst läser `.env.example` och därefter `.env` om den finns, och
-seed-steget genererar CSV-filerna om `data/generated/` saknas. Båda är `gitignore`:ade, så
-utan det här dog kedjan direkt - compose felade på en saknad `.env`, och `seed.py` avslutade
-på saknade CSV:er, vilket gjorde att `mcp` aldrig startade och `api` aldrig heller.
+That's it — one command. First run takes a minute or two (it builds the app and generates
+sample data automatically). When it's ready:
 
-- Webb: http://localhost:5173
-- API: http://localhost:8000/docs
+- **App:** http://localhost:5173
+- **API docs:** http://localhost:8000/docs
 
-Det enda som inte kan levereras på det viset är `LLM_API_KEY` - en nyckel går inte att
-committa. Utan den fungerar dashboarden, verktygen och hela den deterministiska vägen;
-chatten svarar *"LLM_API_KEY är inte satt"*. Lägg in den i en egen `.env` för att köra
-agenten:
+Log in with a demo account (password is `demo1234` for both):
 
-```bash
-cp .env.example .env          # lägg in LLM_API_KEY
-docker compose up
-```
-
-MCP-servern och Postgres publiceras **inte** på värden i standarduppsättningen. De behöver
-det inte - API:t når dem över compose-nätverket - och `internal_token` är tänkt som
-djupförsvar bakom en oåtkomlig port, inte som hela åtkomstkontrollen. För att kunna anropa
-verktygen direkt eller öppna `psql` och se RLS neka en läsning över tenant-gränsen:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up
-```
-
-Då finns MCP health på http://localhost:8081/health och Postgres på `localhost:5432`.
-
-`SOLVIGO_ENV=dev` i `.env.example` är det som tillåter de inkomna standardhemligheterna.
-Utan den vägrar både API:t och MCP-servern att starta så länge `JWT_SECRET`,
-`INTERNAL_TOKEN`, `POSTGRES_PASSWORD` eller `APP_DB_PASSWORD` står kvar på värdena som
-ligger i repot - de är publika, och en okonfigurerad driftsättning ska falla högljutt
-i stället för att köra vidare på dem.
-
-Demokonton (lösenord `demo1234`):
-
-| E-post | Leverantör |
+| Email | Company |
 |---|---|
-| `anna@nordstromaudio.se` | Nordström Audio AB |
-| `erik@lagerkvisthem.se` | Lagerkvist Hem AB |
+| `ali@solvigo.se` | Nordström Audio AB |
+| `sara@solvigo.se` | Lagerkvist Hem AB |
 
-Två konton finns för att kunna **visa** dataisolering live: samma fråga, olika inloggning,
-olika siffror.
+Try asking the chat: *"Which products sell best in Stockholm?"* — then log in as the other
+account and ask the same thing. You'll get different, correct answers, because each account
+only ever sees its own company's data.
 
-### Utan Docker
+To stop everything: `Ctrl+C`, then `docker compose down`.
 
-```bash
-uv venv && uv pip install -e ".[dev]"
-python scripts/generate_data.py --seed 42
-python scripts/seed.py                      # kräver en Postgres 16 med pgvector
-python -m mcp_server.server                 # :8081
-uvicorn api.main:app --reload               # :8000
-cd web && npm install && npm run dev        # :5173
-```
+## Running it without Docker
 
-### Tester
+Only do this if you can't use Docker. You'll need Python 3.13, Node.js, and a PostgreSQL 16
+database with the `pgvector` extension already running yourself.
+
+**Every command below is run from this folder** (`solvigo-insights/`, where this README and
+`pyproject.toml` live) — open a terminal here first, and keep it open for all the steps.
 
 ```bash
-pip install -e ".[dev]"       # allt testerna behöver, inklusive sqlglot
-pytest                        # semantiskt lager, verktyg, API, validator
-cd web && npm test            # diagramkontraktet: ordning, gräns, serier, skala
-cd web && npm run build       # typkontroll + bygge
-python eval/run_eval.py       # gyllene frågor mot ground truth
-python eval/run_eval.py --adversarial
+uv venv                          # creates a virtual environment in .venv/
 ```
 
-`pytest` kräver ingen databas. Sviten innehåller också ett fåtal integrationstester -
-de påståenden som bara en riktig, seedad Postgres kan pröva: att RLS faktiskt stoppar en
-läsning över tenant-gränsen när anropet går genom verktygen, och att verktygen
-reproducerar `ground_truth.json`. De hoppas över automatiskt när ingen databas svarar,
-och körs så här mot en igång-körande stack:
+Then **activate it** — you need to do this once per new terminal window, before any `python`,
+`pytest` or `uvicorn` command below, or those commands run your system's Python instead of the
+project's and fail with confusing "module not found" errors:
+
+- macOS/Linux: `source .venv/bin/activate`
+- Windows (PowerShell): `.venv\Scripts\activate`
+- Windows (Git Bash): `source .venv/Scripts/activate`
+
+Your prompt should now start with `(.venv)`. Then, still in this same terminal:
 
 ```bash
-POSTGRES_HOST=localhost pytest -q -m integration
+uv pip install -e ".[dev]"                 # installs the Python backend
+python scripts/generate_data.py --seed 42  # creates sample data
+python scripts/seed.py                     # loads it into your Postgres
+python -m mcp_server.server                # starts the data server   → :8081
+uvicorn api.main:app --reload              # starts the backend       → :8000
+cd web && npm install && npm run dev       # starts the frontend      → :5173
 ```
+
+`mcp_server.server` and `uvicorn` each block the terminal while running, so give each its own
+terminal window (with the virtual environment activated again in each one — see above).
+
+Same `.env` file and rules as above.
 
 ---
 
-## Loggning
-
-Varje rad är ett JSON-objekt och varje turn har ett eget `turn_id`, så en hel fråga går att
-följa från början till slut. Loggen skrivs till stdout (`docker compose logs api`) och till
-`./logs/api.jsonl`, som överlever en omstart.
-
-Filändelsen är `.jsonl` därför att innehållet *är* JSON Lines - ett objekt per rad. `.log`
-hade antytt fritext, och `jq` och varje logg-shipper läser `.jsonl` direkt.
-
-**Rotation sker på tid, inte på storlek.** Vid midnatt UTC byter filen namn till
-`api-2026-07-31.jsonl` och en ny `api.jsonl` börjar; `LOG_RETENTION_DAYS` (14) styr hur många
-som sparas, resten raderas. Storleksrotation begränsar bara disken: "de senaste 120 MB" är
-två timmar en tung dag och ett halvår en lugn, och då går frågan loggen finns för - *vad hände
-i tisdags* - inte att besvara. UTC och inte lokal tid, eftersom en containers tidszon inte ska
-behöva vara känd för att läsa ett filnamn, och en sommartidsväxling annars ger en 23-timmarsfil.
-
-```bash
-# Allt som hände i en viss turn
-jq 'select(.turn_id=="666c25eb2c19")' logs/api.jsonl
-
-# Vad avvisade validatorn, och av vilken anledning?
-jq -r 'select(.event=="validate.rejected") | .reasons[]' logs/api.jsonl | sort | uniq -c
-
-# Långsammaste verktygsanropen
-jq -r 'select(.event=="tool.call") | [.ms, .tool, .row_count] | @tsv' logs/api.jsonl | sort -rn | head
-```
-
-En turn ser ut så här:
+## How it's built
 
 ```
-turn.start        question, history_turns
-tool.call         tool, tool_args, ms, row_count, source, query_id
-validate.rejected reasons ["not_in_result"|"wrong_direction"|"not_the_argmax"], literals
-turn.end          status, ms, tools, input_tokens, output_tokens, llm_calls
+Frontend (React)  →  Backend (FastAPI)  →  MCP server  →  PostgreSQL
+                              ↕
+                             LLM
 ```
 
-### Vad som medvetet inte loggas
+The frontend never talks to the database directly — every number, on the dashboard or in the
+chat, comes from the same MCP server, which is the only thing allowed to read the database. The
+AI model sits next to the backend, not in the data path: it chooses *what* to ask for and *how*
+to show it, then the backend checks that every number it wrote actually exists in the real
+result before showing it to you.
 
-**Loggen är en bredare förtroendegräns än databasen.** `audit_turn` ligger bakom Postgres RLS
-med en tenant-policy; stdout går till en aggregator som fler personer läser, klistras in i
-ärenden och överlever raden. Därför stannar *värdena* i databasen och loggen bär bara det som
-behövs för att hitta tillbaka:
+**Key choices, briefly** (full reasoning in [`docs/DESIGN.md`](docs/DESIGN.md)):
 
-| Fält | Loggas | Varför |
-|---|---|---|
-| resultatrader | aldrig | En loggfil som citerar rader är samma läcka via en omväg. |
-| frågetext | längd + `sha` (12 tecken) | Fingeravtrycket räcker för att se att samma fråga återkommer och för att joina mot `audit_turn`. Texten själv är fri text - den kan innehålla vad som helst en användare skriver. |
-| avvisade tal | nej, bara `reasons` + antal | Vid `wrong_direction` och `not_the_argmax` är literalen ett *verkligt* värde ur tenantens data - att den matchade datan är ju skälet till att den flaggades. |
-| verktygsargument | bara nycklarna | Värdena namnger produkter, län och perioder som just den leverantören frågade om. |
-| `supplier_id`, `user_id` | ja | Pseudonyma heltal, och hela poängen med att kunna filtrera. Omfattas av retention. |
-| `query_id` | ja | En cache-nyckel, inte en behörighet: `/api/result/{query_id}` är tenant-scopat och svarar 404 över gränsen. |
-| radantal, latens, tokens | ja | Ren metadata. |
-
-`LOG_SENSITIVE=true` lägger tillbaka frågetext, avvisade tal och argumentvärden - för en
-lokal felsökningskörning. Den är avstängd som standard, eftersom ett integritetsskydd man
-måste komma ihåg att slå på är ett integritetsskydd som fallerar.
-
-`audit_turn` gör något annat och finns kvar: affärsloggen - en rad per turn, i databasen, för
-fakturering och GDPR. Den här loggen är driftloggen: varför blev svaret som det blev.
-
----
-
-## Arkitektur
-
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│  React 19 + Vite + TS      Recharts · TanStack Query                      │
-│  Dashboard (kort)  ·  Chattpanel (SSE)  ·  Mina vyer                      │
-└───────────────┬───────────────────────────────────────────────────────────┘
-                │ HTTPS + JWT (Bearer)
-┌───────────────▼───────────────────────────────────────────────────────────┐
-│  FastAPI                                                                  │
-│   ├ auth: JWT → TenantContext{supplier_id}   ← aldrig från modellen       │
-│   ├ /api/dashboard   deterministisk, ingen LLM                            │
-│   ├ /api/chat        agentturn (SSE)                                      │
-│   └ /api/result/{query_id}   fullt resultat ── diagrammens datakälla      │
-│                                                                           │
-│   Agentpipeline:  PLAN+EXECUTE → VALIDATE (numeriskt) → RENDER (kort)     │
-└───────────────┬───────────────────────────────────────────────────────────┘
-                │ MCP (streamable HTTP, internt)
-                │ TenantContext injiceras här - inte del av något verktygsschema
-┌───────────────▼───────────────────────────────────────────────────────────┐
-│  MCP-server (FastMCP)                  "det semantiska lagret"            │
-│   get_capabilities()    vad som finns, vilka enheter, vad som är tillåtet  │
-│   resolve_entities()    fritext → kanoniska ID (pg_trgm + pgvector)        │
-│   query_sales()         mått × dimensioner × filter → rader                │
-│   query_market_share()  egen vs kategori, k-anonymiserat, aldrig namngivet │
-└───────────────┬───────────────────────────────────────────────────────────┘
-                │ asyncpg, roll `app_readonly`, set_config('app.supplier_id')
-┌───────────────▼───────────────────────────────────────────────────────────┐
-│  PostgreSQL 16 + pgvector + pg_trgm                                       │
-│   stjärnschema · materialiserade rollups · RLS · barriärvyer              │
-└───────────────────────────────────────────────────────────────────────────┘
-```
-
-**Notera de två konsumenterna.** Den deterministiska dashboarden och LLM-agenten anropar
-*samma fyra verktyg*. MCP är inte ett omslag vi lade till för modellens skull - det är enda
-vägen till data. Därför kan chatten och dashboarden inte visa olika siffror för samma sak.
-
----
-
-## De val som är värda att förstå
-
-### 1. Ett semantiskt lager, inte text-to-SQL
-
-Det här är beslutet jag räknar med att bli hårdast utfrågad om.
-
-| | Text-to-SQL | Ett verktyg per fråga | **Semantiskt frågeverktyg** |
-|---|---|---|---|
-| Klarar frågor vi inte förutsett | ✅ | ❌ | ✅ |
-| Kan inte råka dubbelräkna | ❌ | ✅ | ✅ |
-| Leverantörsomfång serverside | ⚠️ stränginjektion | ✅ | ✅ |
-| Enheter kan fästas på resultatet | ❌ | ✅ | ✅ |
-| Testbart isolerat | ❌ | ✅ | ✅ |
-
-De sa att de ställer egna frågor live - det stryker kolumn 2. Allt annat stryker kolumn 1.
-
-Konkret: `mcp_server/semantic/model.py` är ett register över vad som får mätas och delas upp.
-`compiler.py` översätter en typad spec till SQL där **varje identifierare kommer från
-registret** och **varje värde är en bunden parameter**. En fientlig sträng blir ett
-valideringsfel, inte en fråga. Det finns 43 tester på just det - de flesta parsar den
-genererade SQL:en med `sqlglot` och kontrollerar att inget literalvärde tog sig in i den.
-
-### 2. Så vet vi att siffrorna är verkliga
-
-Fyra lager, i den ordning de bär vikt:
-
-1. **Strukturellt.** `query_sales` returnerar hela resultatmängden. API:t cachar den under ett
-   `query_id` och skickar bara en **kapad förhandsvisning (25 rader)** till modellen.
-   Diagrammet hämtas sedan från `/api/result/{query_id}`. Modellen ser alltså aldrig de
-   värden diagrammet ritar. Det är en egenskap hos arkitekturen, inte hos promptkvaliteten.
-2. **Numerisk validering.** Berättelsen *är* genererad text, så efter verktygsloopen plockas
-   varje siffra ut ur prosan och måste finnas i resultatmängden - eller vara en tillåten
-   härledning (summa, medel, differens, andel) inom avrundningstolerans. Vid fel: en
-   omgenerering med den felande siffran citerad tillbaka. Vid andra felet: `validation_failed`,
-   prosan utelämnas, diagrammet står kvar. **Att misslyckas synligt slår att misslyckas
-   trovärdigt.**
-3. **Härkomst.** Varje chattsvar bär en källchip: underlag · period · antal rader ·
-   tidsstämpel. Expanderad visar den jämförelseperiod som gällde, datans täckning, vad som
-   filtrerades och **vilka tal i texten som kommer från just den hämtningen**. Den säger
-   *vad* som räknades, inte vilken tabell som lästes: `query_sales` och `mv_sales_daily` är
-   riktiga svar på fel fråga, och på en leverantörs skärm läser de som att appen lämnar ut
-   sitt innanmäte. Dashboardens kort har ingen chip - sidhuvudet anger redan period,
-   leverantör och enhet en gång för hela sidan.
-4. **Mätning.** `eval/` kör 85 svenska frågor - 56 gyllene och 29 adversariella - mot facit
-   som räknats fram **oberoende** med pandas ur samma genererade data. Det gör "hallucinerar
-   den?" till ett tal jag kan rapportera. Talen står nedan.
-
-### Vad mätningen säger
-
-Kört mot `deepseek-v4-pro` (se *Kända begränsningar*). Två tal, medvetet hållna isär:
-
-| | |
+| Choice | Why |
 |---|---|
-| **Garantierna** (`adversarial.yaml`, 29 fall) | **27–29 av 29**, och **inget fall faller två körningar i rad**. Ingen konkurrentsiffra, ingen kategoritotal under k-tröskeln och ingen rad från en annan leverantör nådde något kort. Samtliga sex promptinjektionsfall avvisas. Senast mätt **28 av 29** efter att datan regenererats (se nedan). |
-| **Svarskvaliteten** (`golden_questions.yaml`, numera 56 fall) | **36–40 av 52 (69–77 %)** beroende på körning. ⚠️ Mätt på datan *före* regenereringen som rättade rabatt- och returbuggarna, och på de 52 fall som fanns då - fyra har tillkommit sedan dess. Talen är alltså historik, inte en mätning av det som ligger här. |
+| PostgreSQL + pgvector | Real relationships between products/brands/stores, database-level rules that keep one company from ever seeing another's data, and fuzzy text search — no simpler database gives all three. |
+| One flexible data tool, not raw SQL | Suppliers ask unpredictable questions live. A fixed tool can't answer the unexpected; letting the AI write raw SQL is unsafe. A typed "ask for this metric, sliced this way" tool is both safe and flexible. |
+| Numbers never touch the AI model | The model can only pick a question and a chart type. The actual figures are fetched separately and checked against the real database before display — grounding by construction, not by a well-written prompt. |
+| Synthetic, generated data | Needed several competing brands per category (for market-share questions) and a known-correct answer key to test against — no public dataset offers both. |
+| DeepSeek, via the Anthropic SDK | Anthropic-compatible endpoint — switching to real Claude later is a one-line config change, not a rewrite. |
 
-> **Om datasetet bytte under mätningen.** Generatorn hade två fel som gjorde varje orderrad
-> rabatterad och staplade returer på sista dagen. Att rätta dem ändrade varenda siffra i
-> datan, alltså också varje förväntat värde i `golden_questions.yaml` - de är omhärledda ur
-> `eval/oracle.py`, vilket testsviten framtvingar, men de *uppmätta* svarskvalitetstalen
-> ovan är från före bytet och står kvar som historik tills de körs om. Garantisviten kördes
-> om: **28 av 29**. Det enda fallet som föll (`injection_fake_system_block`) avvisade
-> korrekt men upprepade konkurrentnamnet *"Lumia Nordic"* i meningen som sa att det inte
-> finns i datan. Ingen siffra läckte. Det är precis den sortens fall som växlar mellan
-> körningar, och det är därför det står ett spann här.
+---
 
-Uppdelningen per checkfamilj i samma körning - den upplösning som ett enda pass/fail per
-fall slänger bort:
+## Tests
 
-```
-pass rate by check family:
-  prose        73/74   checks  ( 98.6%)   the narrative - the model
-  routing      39/39   checks  (100.0%)   tools, dimensions, chart and status - the plan
-```
-
-Spannet är inte slarv, det är resultatet. Två körningar på **identisk kod** gav 36 och 40 -
-30 fall passerar stabilt, 6 faller stabilt, och 16 växlar mellan körningar. Ett enskilt värde
-från den här uppsättningen betyder därför ingenting; det är därför det står ett spann och ett
-stickprov här i stället för en siffra med två decimaler. Rätt nästa steg är *n* körningar per
-fall och median, inte en snyggare enskild siffra.
-
-Det viktiga är att de två talen inte rör sig ihop. Svarskvaliteten hänger på modellen och
-varierar. Grundgarantin gör det inte: en siffra i prosan som inte går att belägga i
-resultatmängden fångas, texten döljs och diagrammet står kvar. Det är inte hög kvalitet, men
-det är ärligt, och det är skillnaden mellan ett fel som syns och ett fel som är trovärdigt.
-
-De 6 stabila fallen är svarskvalitet, inte grundning: modellen utelämnar huvudsiffran, hoppar
-över `resolve_entities` eller får ordningen i en serie om bakfoten. Inget av dem är ett
-påhittat värde som nått ett kort.
-
-**Vad mätningen hittade i skyddet självt.** Uppsättningen fanns för att mäta modellen och
-råkade i stället fälla validatorn. Fem av de stabilt fallerande fallen delade form - alla
-frågade efter toppsäljande produkter - och loggen visade varför: överträdelserna var `139`,
-`217`, `282` och `191 St`. Det är inga belopp, det är modellbeteckningar inne i produktnamn
-(`Nordström TV N100 Pro`, `Vidar Hörlurar V191 Studio`), och `St` i "Studio" lästes som
-enheten `st`. Validatorn dolde alltså prosan på den vanligaste frågan en leverantör ställer.
-Namnen maskas nu med resultatets egna rader innan tal extraheras - bara text verktyget redan
-returnerat, aldrig en siffra - och två regressionstester håller båda riktningarna: namn med
-riktiga belopp passerar, ett påhittat belopp bredvid ett maskat namn fångas fortfarande.
-Poängen är inte buggen utan att en enskild siffra dolde den: 55 % såg ut som en svag modell
-och var i själva verket ett skydd som brann av på fel indata.
-
-Modellen får aldrig räkna något databasen kan räkna. Därför finns `compare_to` i verktyget:
-periodjämförelser är den vanligaste följdfrågan, och att låta modellen hämta två resultat och
-subtrahera är precis där aritmetiska fel uppstår.
-
-### 3. Leverantörsisolering - tre oberoende lager
-
-1. **`supplier_id` finns inte i något verktygsschema.** Modellen kan inte formulera
-   "visa leverantör 7". Det testas i `mcp_server/tests/test_schemas.py`, och det är
-   det viktigaste testet i repot.
-2. **Omfånget kommer från anslutningen, inte argumenten.** API:t skickar det som en
-   HTTP-header från en verifierad JWT; MCP-servern sätter `app.supplier_id` på transaktionen.
-3. **Postgres RLS** på faktatabellen och dimensionerna, plus **security-barriärvyer** över
-   rollup-vyerna.
-
-> Rättelse till planen, värd att nämna: PostgreSQL stöder **inte** RLS på materialiserade
-> vyer - `CREATE POLICY` tar bara tabeller. Rollups skyddas därför av motsvarande
-> konstruktion: ingen `GRANT` på den materialiserade vyn alls, och åtkomst enbart via en
-> `security_barrier`-vy med samma predikat som en policy skulle haft.
-
-Vad en leverantör får se om andra:
-
-| | |
-|---|---|
-| ✅ Egna varumärken | Full detalj: produkt × butik × dag |
-| ✅ Kategoritotaler | Endast aggregat, k-anonymiserat |
-| ✅ Egen placering | "#2 av 6 varumärken i Hörlurar" |
-| ❌ Namngivna konkurrentsiffror | Aldrig - inte filtrerade, inte åtkomliga |
-| ❌ Kundnivå | Aldrig - verktygens minsta kornighet förbjuder det |
-
-**k-anonymitet:** marknadsandelar utelämnas om urvalet har färre än 5 varumärken eller
-färre än 100 köp. Annars vore "din andel" bara en subtraktion från en namngiven konkurrents
-omsättning. Datagenereringen innehåller **avsiktligt** en tunn underkategori
-(`Vintersport`, 3 varumärken) så att skyddet *går att visa*, inte bara påstå.
-
-Tröskeln avgjorde däremot bara **om** svaret gavs, inte hur exakt. I en kategori med precis
-5 varumärken fick en tvåa tidigare marknadsledarens exakta andel *och* den exakta
-kategoritotalen - vilket är ledarens omsättning på kronan, för den ena konkurrent en
-branschkunnig oftast kan gissa namnet på. Ledarens andel returneras därför i femprocentsband
-(`40–45 %`): ett intervall, inte ett tal. Avvägningen är medveten - alternativet var att
-stryka jämförelsen som är hela anledningen att fråga.
-
-### 4. Rollups är en integritetsgräns, inte bara cache
-
-`mv_category_daily` och `mv_brand_monthly` är de enda objekt `query_market_share` får läsa.
-Konkurrentdata är därför inte "bortfiltrerad" av applikationslogik - den fanns aldrig i det
-objekt verktyget når. En rollup som aggregerat bort identitet är en strukturellt starkare
-garanti än en `WHERE`-sats.
-
-### 5. Genererad data, inte lånad
-
-Tre publika datamängder utvärderades (Online Retail II, Olist, Superstore). Ingen har den
-struktur marknadsandel kräver: flera konkurrerande varumärken per kategori, ägda av olika
-leverantörer, med överlappande sortiment. Och ingen ger ett **facit**.
-
-`scripts/generate_data.py --seed 42` är deterministisk - samma seed ger byte-identisk
-utdata - och skriver både CSV:erna och `ground_truth.json`. Att det stämmer är inget
-påstående: `eval/tests/test_determinism.py` genererar två gånger och jämför SHA-256 per
-fil, och kontrollerar dessutom att en *annan* seed ger andra siffror, så testet inte
-skulle kunna passera på en generator som ignorerar sin seed. Hela facit vilar på det -
-`ground_truth.json` beskriver bara datan om ingen oseedad slump når utdatan.
-Formen: 8 leverantörer, 14 varumärken, 6 kategorier / 22 underkategorier, 392 produkter,
-81 butiker över alla 21 län plus onlinekanal, 24 månader, ~811 000 orderrader, 848 MSEK.
-
-Ärligt motargument, som jag säger i videon istället för att gömma: syntetisk data kan vara
-för städad. Därför injicerar generatorn medvetet verklig smuts - ~1,5 % returer,
-~0,8 % kontantköp utan kund, en utgången produkt med avbruten serie, en butik som öppnar
-mitt i perioden, prisdrift över tid, och den tunna kategorin ovan.
-
-### 6. LLM-leverantör
-
-**DeepSeek `deepseek-v4-pro`, körd genom Anthropics SDK** mot
-`https://api.deepseek.com/anthropic`. DeepSeek exponerar ett Anthropic-kompatibelt endpoint
-med fullt `tools`-stöd, och MCP:s verktygsdeskriptor (`{name, description, inputSchema}`) är
-i praktiken identisk med Anthropics (`input_schema`) - så konverteringen är ett namnbyte, inte
-ett adapterlager. Att byta till riktig Claude är `base_url` plus modellnamn, inget annat.
-
-Vad det kostar, sagt rakt ut:
-
-- Endpointen **ignorerar `cache_control`**, så promptcachningen (~90 % besparing på det
-  stabila prefixet) uteblir. Systemprompten är ändå strukturerad som ett stabilt block så
-  att den vinsten finns kvar den dag vi byter.
-- `anthropic-beta`-headers stöds inte, så SDK:ns `tool_runner` går bort - verktygsloopen är
-  skriven explicit, med tak på antal verktygsanrop.
-- **Datan lämnar EU.** Grundningsarkitekturen håller, men modellen ser en kapad
-  radförhandsvisning, så jag kan inte hävda dataresidens. För produktion i EU pekar man om
-  `base_url`.
-
-### 7. Språk och marknad är inställningar, inte antaganden
-
-Appen var svensk och SEK rakt igenom: `sv-SE` hårdkodat i formateraren, en kr/tkr/Mkr-stege,
-två månadsnamnsarrayer, en tabell över Sveriges 21 län med koordinater och en handritad
-kustlinje. Allt det är nu tre inställningar och `Intl`.
+Run from this folder (`solvigo-insights/`), with the virtual environment active (see above —
+`.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on macOS/Linux):
 
 ```bash
-APP_CURRENCY=EUR   # ISO-4217. Vad lagret är denominerat i.
-APP_LOCALE=de-DE   # BCP-47. Gruppering, decimaler, månadsnamn.
-APP_LANGUAGE=en    # Standardspråk; UI:t har en växlare och skickar sitt val per anrop.
+pytest                 # backend + data logic — no database needed
+cd web && npm test      # frontend
 ```
-
-**Valutan följer datan, inte klienten.** `APP_CURRENCY` sätter `unit` på varje penningmått i
-det semantiska lagret, verktygen stämplar den i `meta`, och den följer med hela vägen ut i
-`provenance.currency` och kolumnernas `unit`. Klienten läser koden och lämnar den till `Intl` -
-den vet aldrig om den visar kronor, euro eller yen. Nyckeln heter fortfarande `net_sales_sek`:
-det är en identifierare som kompilatorn, evalen och varje sparat kort slår upp mot, och att
-byta namn på den syns inte för någon.
-
-**Formatering är `Intl`, inte tabeller.** Det tog bort ~40 rader handskriven skalning och båda
-månadsarrayerna, och gav rätt konventioner för marknader ingen här hade gissat: var
-valutasymbolen står, vilka språk sätter punkt efter månadsförkortningen (CLDR:s svenska är
-"nov." och "juli", inte "nov" och "jul" - det gamla arrayet var en förenkling som råkade vara
-svensk). Två ställen behövde omdöme:
-
-- **En skala per axel, inte per värde.** `notation: 'compact'` är det uppenbara `Intl`-svaret
-  och fel: det skalar varje tick för sig och sätter "900 k" rakt under "1,2 mn" på samma axel.
-  Så magnituden väljs en gång för hela diagrammet, och bara *etiketten* kommer från `Intl`.
-- **Japanska grupperar i myriader.** `Intl` skriver 1 000 000 som "100万", inte som
-  "1 <suffix>". Att lyfta ut suffixet och para det med en miljondelare hade märkt axeln 万
-  medan den delats med hundra gånger det. Heltalsdelen kontrolleras därför, och en lokal som
-  inte kan skriva delaren som ett ensamt 1 får ingen förkortning alls i stället för en fel.
-
-**Validatorn läser svarets språk.** Det här är den delen som kan bli tyst fel. Svenska skriver
-"1 234,5 Mkr"; engelska skriver "1,234.5M". Läser man det andra med det förstas regler blir
-1 234 567 till 1,234 - och en korrekt siffra avvisas, prosan döljs, och grundgarantin brinner
-av på interpunktion. Separatorer, magnitudord och de spann som aldrig är mätvärden ("topp 10",
-"K2" / "top 10", "Q2") är därför egenskaper hos språket. Engelskan behöver ensiffriga suffix
-(M, k), vilket är hur "12 months" blir tolv miljoner om suffixet får matcha början av ett
-längre ord - ett ordgränsvillkor är det som stoppar det, och det finns ett test för just den meningen.
-
-**Kartan ritas ur datan.** Koordinaterna kommer från `dim_store` via `get_capabilities`, och
-projektionen anpassar sig till vad som kommer in. Ett lager utan geokodade butiker svarar
-ärligt med ingenting och klienten döljer kartfliken i stället för att hitta på positioner. Det
-som försvann är kustlinjen: en handritad kontur av ett land var aldrig något annat än det landet.
-
-**Systemprompten är kvar på svenska i båda språken.** Det är den intrimmade texten evalen
-mäter, och att översätta 200 rader regler för att lägga till ett språk hade lagt själva
-grundningskontraktet på en färsk översättning ingen mätt. Det som byter språk är *utdataregeln*
-- vad svaret ska skrivas på, i vilken valuta, formaterat hur. Taket är svarets *stil*, inte dess
-grundning; validatorn läser svarets språk, inte promptens.
-
-**Kvar som framtida arbete:** en tenant med flera valutor i samma lager. Verktygen skulle behöva
-returnera valuta per rad och axeln en omräkningsdag - det är en datamodellfråga, inte en
-formateringsfråga, och att låtsas lösa den i presentationslagret hade gett växelkurser utan
-datum.
-
----
-
-## Repostruktur
-
-```
-solvigo-insights/
-├─ db/sql/               01_schema · 02_indexes · 03_rollups · 04_rls
-├─ mcp_server/
-│  ├─ semantic/          registret + spec→SQL-kompilatorn
-│  ├─ tools/             de fyra verktygen + deras scheman
-│  └─ tests/             86 tester, varav 79 utan databas
-├─ api/                  FastAPI: auth, MCP-klient, agentloop, validator, SSE
-├─ web/src/
-│  ├─ charts/            spec→diagram, deterministiskt (+ enhetstester)
-│  ├─ components/        kortrenderare, källchip, chattpanel, skal (+ renderingstester)
-│  ├─ pages/             översikt · produkter · geografi · mina vyer
-│  └─ lib/               api, SSE, formatering (Intl), i18n, stores
-├─ scripts/              generate_data · seed · embed_entities
-├─ eval/                 gyllene frågor + adversariellt + drivrutin
-└─ docs/
-   ├─ API_CONTRACT.md    fryst gränssnitt mellan backend och frontend
-   └─ DESIGN.md          designresonemanget, skrivet före koden
-```
-
----
-
-## Demofrågor att prova
-
-Kontot i parentes är det frågan är skriven för. Sortimentet skiljer sig mellan leverantörerna,
-så en fråga ställd på fel konto får ett korrekt men helt annat svar - punkt 7 är hela poängen
-med det.
-
-1. (**anna**) "Vad var min försäljning senaste 12 månaderna, och hur står det sig mot året
-   innan?"
-2. (**anna**) "Vilka produkter säljer bäst i Stockholm?" - och som följdfråga: "…mätt i antal
-   istället?" (svaret ändras: intäkter domineras av TV och datorer, volym av billiga varor)
-3. (**anna**) "Hur går det för vårt märke jämfört med kategorin i Hörlurar?"
-4. (**anna**) "Visa försäljningen per län som diagram."
-5. (**anna**) "Vad är vår marginal?" - **ska nekas**, med förslag på vad som *går* att svara på.
-6. (**anna**) "Visa Lumia Nordics siffror." - **ska nekas**; en annan leverantör är inte
-   uttryckbar.
-7. (**erik**) Marknadsandel i "Vintersport" - **ska utelämnas** av k-anonymitetsskyddet.
-   Nordström säljer ingenting i den kategorin, så som **anna** blir svaret i stället det sanna
-   men mycket tråkigare "ni har ingen försäljning där".
-
-Punkt 5–7 är inte kantfall att undvika i en demo. De är produkten som fungerar.
-
----
-
-## Vad jag hade gjort härnäst
-
-Riktiga konnektorer och inkrementell inläsning (dbt/CDC) istället för en seed-körning ·
-SSO/SCIM · metrikdefinitioner formellt godkända ihop med kedjan · larm och prenumerationer ·
-modellrouting (billig klassificerare först) · PDF-export · mobil.
-
-Promptcachning och kostnadsmätning finns numera: systemprompten skickas som ett
-`cache_control`-block när `LLM_BASE_URL` pekar på Anthropic, och `audit_turn` får riktiga
-`input_tokens`/`output_tokens` per tur plus cache-träffarna. Det var det som saknades för
-kostnadstaket per tenant - själva taket är kvar att bygga.
-
-**Två saker skiljer den här compose-demon från något driftsatt, och de är de första jag
-hade byggt:**
-
-- **Resultatcachen är per process.** `ResultCache` är en `OrderedDict` i minnet, och
-  `/api/result/{query_id}` är där *varje diagram i produkten* hämtar sina siffror. Kör två
-  uvicorn-arbetare eller två API-repliker och ungefär varannan hämtning blir 404. Detsamma
-  gäller rate limits och inloggningsspärren, som försvagas linjärt med antalet repliker.
-  Antingen Redis, eller kör om den cachade verktygsspecen vid miss - `tool` och `tool_args`
-  sparas redan, så det andra alternativet är nästan gratis.
-- **Webbcontainern är inte driftsättbar.** `docker/Dockerfile.web` kör `npm run dev`, alltså
-  Vite-devservern, som containerkommando. Det som behövs är ett flerstegsbygge → nginx, och
-  en icke-root-`USER` i båda avbildningarna (`Dockerfile.python` kopierar dessutom källkoden
-  före `pip install`, vilket ogiltigförklarar beroendelagret vid varje ändring).
-
-Kända luckor i det som ligger här: ingen realtidsström; rollup-refresh är manuell;
-utvärderingsuppsättningen är min egen och delar därmed mina blinda fläckar; syntetisk data
-kan inte visa verklig smuts; ingen återkoppling från tummen upp/ner tillbaka in i evalen.
-
-**Delningslänkar, och det som fortfarande fattas i dem.** `POST /api/share` mintar en
-signerad, tidsbegränsad token som bär *ursprungsleverantörens* omfång, och `GET
-/api/shared/{token}` löser in den: enda rutten i API:t utan session bakom sig. Allt den får
-läsa står i token - vilket kort, och vems behörighet frågan körs under - och båda är
-signerade, så en läsare kan inte vidga något. Sidan (`#/delad/{token}`) är medvetet inte
-appen: ett kort, vem som delat det, när länken slutar gälla, och ingen navigation, ingen
-chatt, inget att spara. Varken `card_id` eller `query_id` följer med till läsaren, eftersom
-varje kontroll som hänger på dem är ett inloggat anrop den sidan inte kan göra.
-
-Det som fattas är **ögonblicksbilden**. Att frysa raderna som de såg ut betyder att lagra
-dem - en tabell och en gallringsregel, inte en flagga - så alla länkar körs om mot färsk
-data vid varje öppning. Läget ligger kvar i token, så läsänden kan börja hedra det utan att
-någon länk behöver göras om.
-
-Fyra till, som mätningen ovan grävde fram och som jag hellre skriver ned än städar undan:
-
-- **Modellen är inte Claude.** Allt är kört mot `deepseek-v4-pro` via Anthropic-SDK:t
-  (beslut D1 - byt `LLM_BASE_URL` och `LLM_MODEL`, inget annat ändras). Svarskvaliteten
-  ovan är därför ett golv, inte ett tak: `deepseek-v4-flash` gav 62 % och pro 73 % på samma
-  uppsättning. Grundgarantin är oberoende av modellvalet; svarskvaliteten är det inte.
-- **31 % av de gyllene fallen är icke-deterministiska** (16 av de 52 mätta växlar mellan två
-  körningar på identisk kod). Andelen *steg* när validatorbuggen ovan rättades: fall som
-  förut föll varje gång växlar nu i stället, vilket är framsteg men inte stabilitet. Med en
-  modell som ibland utelämnar huvudsiffran krävs upprepade körningar för att ett tal ska
-  betyda något. Nästa steg är *n* körningar per fall och median, inte att jaga en bra körning.
-- **Kortet bär ett enda `query_id`.** En tur som anropar flera verktyg exponerar bara det
-  sista resultatet mot `/api/result`. Det syntes när evalen skulle kontrollera
-  `suppressed`-flaggan från `query_market_share`: raden fanns, men klienten kunde inte nå den
-  eftersom en efterföljande `query_sales` tagit över kortets `query_id`. Härkomst per
-  verktygsanrop, inte per kort, är rätt form.
-- **Modellen svarar ibland på en angränsande fråga i stället för att avböja.** "Vilka kunder
-  köpte mest?" kan besvaras med `customer_segment` i stället för ett nekande. Ingen kundrad
-  lämnar någonsin verktygslagret - kornighetsgolvet håller - men ett aggregat som *ser ut*
-  som ett svar på fel fråga är sitt eget problem.
-
-
-
-
-

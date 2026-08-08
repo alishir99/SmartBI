@@ -1,12 +1,5 @@
-/**
- * Where the numbers came from, in the words a supplier uses.
- *
- * The chip used to lead with `query_sales`, `mv_sales_daily (rollup)`, `supplier:8f2a` and a
- * block of raw tool arguments. To an engineer that reads as provenance; to the person the
- * product is for it reads as the application handing out database internals, which is the
- * opposite of the reassurance the chip exists to give. Same guarantee, stated as what was
- * counted, over which period, from how many rows.
- */
+/** Where the numbers came from, said in the words a supplier uses - not `query_sales` and
+ * raw tool arguments, which read as the app handing out database internals. */
 
 import { useId, useState } from 'react'
 import type { Claim, Provenance, ToolCallRecord } from '../types'
@@ -20,7 +13,6 @@ import {
 import { t as translate, useT } from '../lib/i18n'
 import { IconChevronDown, IconDatabase } from './Icons'
 
-/** What each tool read, said as a business fact rather than as a table name. */
 function sourceWords(tool: string): string {
   return tool === 'query_market_share'
     ? translate('source.market_share')
@@ -131,9 +123,8 @@ function SourcePanel({
         <Row label={t('source.compare_period')} value={formatPeriod(provenance.compare_range)} />
       )}
       <Row label={t('source.coverage')} value={formatPeriod(provenance.coverage)} />
-      {/* The currency code comes off the result's own provenance, not off a client-side
-          assumption: a card is allowed to say which currency it was computed in, and only the
-          words around it are translated. */}
+      {/* Currency comes off the result's own provenance, not a client-side assumption - a
+          card can say which currency it was computed in; only the surrounding words translate. */}
       <Row
         label={t('source.currency')}
         value={`${provenance.currency}, ${t(`vat.${provenance.vat}`)}`}
@@ -147,8 +138,8 @@ function SourcePanel({
       {filters && <Row label={t('source.selection')} value={filters} span />}
       <Row label={t('source.fetched')} value={formatTimestamp(provenance.executed_at)} span />
 
-      {/* The sentence this whole feature exists to be able to say. Only rendered when the
-          card carries attributions, so a saved card from before them is unaffected. */}
+      {/* Only rendered when the card carries attributions, so a saved card from before them
+          is unaffected. */}
       {claims && claims.length > 0 && (
         <div className="sm:col-span-2">
           <dt className="mb-1.5 text-ink-muted">{t('source.claims')}</dt>

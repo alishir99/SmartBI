@@ -1,4 +1,3 @@
-/** The sentence a screen reader hears instead of the plot. */
 
 import { describe, expect, it } from 'vitest'
 import type { ChartSpec, Column, ResultRow } from '../types'
@@ -46,7 +45,6 @@ describe('describeChart', () => {
   })
 
   it('describes what was drawn, not what was handed in', () => {
-    // A limit means the plot shows fewer bars than the caller supplied.
     const text = describeOf(
       spec({ limit: 2 }),
       [PRODUCT, NET],
@@ -58,7 +56,7 @@ describe('describeChart', () => {
 
   it('states the fold into Övrigt, because the picture does', () => {
     // Only a limited pie folds - every other chart drops the tail outright, because a pie that
-    // does not sum to the whole is a lie and a bar chart missing its tail is not.
+    // doesn't sum to the whole is a lie and a bar chart missing its tail is not.
     const pie = spec({ type: 'pie', limit: 2 })
     const prepared = prepareChart(pie, [PRODUCT, NET], rows([
       ['A', 40], ['B', 30], ['C', 20], ['D', 10],
@@ -71,8 +69,8 @@ describe('describeChart', () => {
   })
 
   it('points at the toggle that gives the exact numbers', () => {
-    // The table replaces the chart rather than sitting under it, so the wording has to name the
-    // control.
+    // The table replaces the chart rather than sitting under it, so the wording has to name
+    // the control.
     expect(describeOf(spec(), [PRODUCT, NET], rows([['A', 1]]))).toContain('Välj Tabell')
   })
 

@@ -25,7 +25,6 @@ def compile_ok(spec: dict):
     return compiled
 
 
-# ------------------------------------------------------------------ source choice
 
 
 def test_simple_query_uses_the_rollup():
@@ -59,7 +58,6 @@ def test_region_dimension_stays_on_the_rollup():
     assert "s.region" in compiled.sql
 
 
-# --------------------------------------------------------------- parameterisation
 
 
 def test_filter_values_are_bound_never_inlined():
@@ -88,7 +86,6 @@ def test_dates_are_bound_parameters():
     assert date(2026, 3, 31) in compiled.params
 
 
-# -------------------------------------------------------------------- rejections
 
 
 @pytest.mark.parametrize("spec", [
@@ -139,7 +136,6 @@ def test_no_supplier_predicate_is_emitted():
     assert "supplier_id" not in compiled.sql
 
 
-# ------------------------------------------------------------------- time ranges
 
 
 def test_relative_range_anchors_on_the_data_not_today():
@@ -167,11 +163,10 @@ def test_same_period_last_year_shift():
 
 
 def test_previous_period_shift_is_a_day_count():
-    window = (date(2026, 4, 1), date(2026, 6, 30))     # 91 days
+    window = (date(2026, 4, 1), date(2026, 6, 30))  # 91 days
     assert shift_range(window, "previous_period") == (date(2025, 12, 31), date(2026, 3, 31))
 
 
-# ---------------------------------------------------------------------- compare
 
 
 def test_compare_emits_delta_columns_and_a_full_outer_join():
@@ -184,8 +179,8 @@ def test_compare_emits_delta_columns_and_a_full_outer_join():
     keys = [c["key"] for c in compiled.columns]
     assert keys == ["product", "net_sales_sek", "net_sales_sek_compare",
                     "net_sales_sek_delta", "net_sales_sek_delta_pct"]
-    # Both deltas: the absolute one is what "biggest mover" means on a readable axis, the
-    # percentage is what it means about the product.
+    # Both deltas: absolute is what "biggest mover" means on a readable axis, percent is
+    # what it means about the product.
     assert "(c.net_sales_sek - pv.net_sales_sek) AS net_sales_sek_delta" in compiled.sql
     assert "FULL OUTER JOIN" in compiled.sql
     assert compiled.compare_range == (date(2024, 7, 1), date(2025, 6, 30))
@@ -269,7 +264,6 @@ def test_delta_is_computed_in_sql_not_by_the_caller():
     assert "ROUND(" in compiled.sql
 
 
-# ------------------------------------------------------------- shape and limits
 
 
 def test_category_filter_expands_the_hierarchy():
@@ -312,13 +306,11 @@ def test_columns_carry_the_configured_currency_and_a_label():
     by_key = {c["key"]: c for c in compiled.columns}
     assert by_key["net_sales_sek"]["unit"] == settings.app_currency
     assert by_key["net_sales_sek"]["label"] == "Nettoförsäljning"
-    # Generic on purpose: "Län" is a Swedish administrative unit, and the same column holds
-    # states, prefectures or provinces elsewhere.
+    # Generic on purpose: "Län" is a Swedish administrative unit, and the same column
+    # holds states, prefectures or provinces elsewhere.
     assert by_key["region"]["label"] == "Region"
 
 
-# ------------------------------------------------------- post-aggregate stage One narrow layer
-# on top of the grouped result.
 
 
 def test_order_by_a_derived_compare_column():
@@ -427,7 +419,7 @@ def test_having_filters_on_the_aggregate_not_the_row():
         "having": {"field": "net_sales_sek", "op": ">=", "value": 100_000},
     })
     assert "WHERE net_sales_sek::numeric >=" in compiled.sql
-    assert "100000" not in compiled.sql          # the threshold is a bound parameter
+    assert "100000" not in compiled.sql  # the threshold is a bound parameter
     assert Decimal("100000") in compiled.params
 
 
@@ -480,7 +472,6 @@ def test_all_four_post_aggregate_features_compose():
     assert sql.rstrip().endswith("LIMIT 50")
 
 
-# ------------------------------------------------------- calendar dimensions
 
 
 def test_calendar_dimensions_fold_the_window_instead_of_cutting_it():

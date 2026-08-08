@@ -61,7 +61,6 @@ def numeric_from(spec: dict, result: dict):
     return result.get("value")
 
 
-# ---------------------------------------------------------------- structural
 
 
 def test_every_golden_case_has_a_unique_id():
@@ -75,7 +74,6 @@ def test_derivation_runs(case_id, derived):
     assert derived[case_id], f"{case_id}: derivation produced nothing"
 
 
-# ---------------------------------------------------------------- values
 
 
 @pytest.mark.parametrize("case_id", CASE_IDS)
@@ -99,8 +97,8 @@ def test_delta_pct_expectation_still_derives(case_id, derived):
     assert actual is not None, (
         f"{case_id}: expects a delta but the derivation has no `compare_where` window")
     tolerance = spec["tolerance_pct"]
-    # Sign matters more than magnitude here: mom_june_vs_may_2026 exists to catch an answer that
-    # reports a decline as growth, and a tolerance band could otherwise straddle zero.
+    # Sign matters more than magnitude here: this case exists to catch a decline reported
+    # as growth, and a tolerance band could otherwise straddle zero.
     assert (actual < 0) == (spec["value"] < 0), report(
         case_id, "delta_pct sign", spec["value"], actual, tolerance)
     assert within(spec["value"], actual, tolerance), report(
@@ -113,7 +111,7 @@ def test_series_points_still_derive(case_id, derived):
     if spec is None:
         pytest.skip("no series expectation")
     tolerance = spec.get("tolerance_pct", 0.5)
-    # `by()` yields dates as date objects and years as ints; YAML keys are always strings.
+    # by() yields dates as date objects and years as ints; YAML keys are always strings.
     actual_points = {str(label): value for label, value in (derived[case_id].get("series")
                                                             or {}).items()}
     assert actual_points, f"{case_id}: derivation produced no series"
@@ -140,8 +138,8 @@ def test_top_n_ordering_still_derives(case_id, derived):
     actual = derived[case_id].get("order")
     assert actual is not None, (
         f"{case_id}: expects an ordering but the derivation sets no `top`")
-    # `prefix_only` means the case pins the head of the ranking and is indifferent to the tail -
-    # the useful contract when the ordering below the cut is near-tied.
+    # prefix_only means the case pins the head of the ranking and ignores the tail - useful
+    # when the ordering below the cut is near-tied.
     compared = actual[:len(expected)] if spec.get("prefix_only") else actual
     pairs = zip(expected, compared, strict=False)
     first_diff = next((i for i, (a, b) in enumerate(pairs) if a != b), len(compared))

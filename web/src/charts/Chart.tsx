@@ -1,8 +1,5 @@
-/**
- * The one renderer for every `ChartSpec`. It receives the spec from the model and the rows from
- * `/api/result/{query_id}` - the model's output never carries a value, so a hallucinated number
- * cannot reach this component.
- */
+/** The model sends the spec, not the data - rows come from /api/result/{query_id}, so a
+ * hallucinated number can never reach this component. */
 
 import {
   Area,
@@ -37,10 +34,8 @@ type Props = {
   columns: Column[]
   rows: ResultRow[]
   height?: number
-  /**
-   * Clicking a mark asks about the value under it. Mouse-only by nature, so the same questions
-   * are reachable from the table view's first column, which is real buttons.
-   */
+  /** Clicking a mark asks about that value; mouse-only, so the table view's first column
+   * (real buttons) gives the same questions a keyboard path. */
   onAsk?: (question: string) => void
 }
 
@@ -73,15 +68,12 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
     ? Math.max(height, sidewaysHeight(prepared.rows.length))
     : height
 
-  // Recharts emits a bare <svg> with no accessible name, so a screen reader reaching this point
-  // previously found nothing at all - the chart was simply absent.
+  // Recharts emits a bare <svg> with no accessible name - without this a screen reader found
+  // nothing here at all.
   const description = describeChart(spec, prepared)
 
-  /* The unit sits beside the axis rather than on it - overlaying the top tick is exactly how a
-     chart ends up with an unreadable largest value. Money carries a scale (`tkr`, `Mkr`); every
-     other unit is itself, and a bare percentage axis said nothing at all about what its numbers
-     were. It has to follow the *value* axis: on a sideways chart that is the x-axis along the
-     bottom, and printing it top-left labelled the category names instead. */
+  /* Unit sits beside the axis, not on it, to avoid overlapping the top tick. It follows the
+     value axis - bottom on a sideways chart, since top-left would read as labelling categories. */
   const unit = prepared.scale?.unit ?? prepared.unit
   const unitLabel = unit ? (
     <p className={`text-2xs text-ink-muted ${sideways ? 'mt-1 text-right' : 'mb-1'}`}>{unit}</p>
@@ -97,8 +89,8 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
       </div>
       {sideways && unitLabel}
       <Legend prepared={prepared} />
-      {/* An annotation nobody can read is decoration. The line is only worth drawing if the
-          chart also says what it means. */}
+      {/* Drawn only when marker_label exists too - an annotation nobody can read is just
+          decoration. */}
       {spec.markers.length > 0 && spec.marker_label && !sideways && (
         <p className="mt-2 text-2xs text-ink-muted">{spec.marker_label}</p>
       )}
@@ -114,9 +106,8 @@ export function Chart({ spec, columns, rows, height = 280, onAsk }: Props) {
           resten.
         </p>
       )}
-      {/* sr-only rather than hidden: it must reach the accessibility tree. The visible
-          chart already carries the title in its card header, so repeating it on screen
-          would be noise. */}
+      {/* sr-only, not hidden: must stay in the accessibility tree. Title already shows in the
+          card header, so showing it here too would be noise. */}
       <figcaption className="sr-only">{description}</figcaption>
     </figure>
   )
@@ -155,17 +146,15 @@ export function describeChart(spec: ChartSpec, prepared: PreparedChart): string 
   if (prepared.hidden > 0) {
     parts.push(`${prepared.hidden} rader visas inte i diagrammet`)
   }
-  // Points at the actual control, not at a vaguely gestured "table below": the table *replaces*
-  // the chart via the Diagram/Tabell toggle in the card's actions.
+  // Points at the actual toggle, not a vague "table below": the table replaces the chart via
+  // the Diagram/Tabell control in the card's actions.
   return `${parts.join(', ')}. Välj Tabell för att läsa samma siffror som text.`
 }
 
 type MarkClick = { onClick: (state: { activeLabel?: string | number }) => void; className: string }
 
-/**
- * One handler on the chart rather than one per mark: Recharts reports which category the click
- * landed in, which is the same answer for a bar, a point and a stacked segment.
- */
+/** One handler on the whole chart, not per mark: Recharts reports which category was clicked,
+ * same answer whether it's a bar, point, or stacked segment. */
 function markClick(prepared: PreparedChart, onAsk: (question: string) => void): MarkClick {
   return {
     onClick: (state) => {
@@ -226,7 +215,6 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
             stroke={descriptor.color}
             strokeWidth={MARK.lineWidth}
             strokeDasharray={descriptor.muted ? MARK.compareDash : undefined}
-            // `fill` is explicit on both dots.
             dot={rows.length <= 12 && !descriptor.muted
               ? { r: MARK.dotRadius, strokeWidth: 0, fill: descriptor.color }
               : false}
@@ -279,8 +267,8 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
     />
   )
 
-  // A moving average belongs on the same axis as the bars it averages, but not as one: it is
-  // the shape the run of periods makes, which only a line can say.
+  // A moving average shares the axis with the bars it averages but isn't drawn as one: it's a
+  // shape across periods, which only a line can show.
   const averages = sideways ? [] : series.filter((descriptor) => descriptor.line)
   if (averages.length > 0) {
     return (
@@ -296,8 +284,8 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
             stroke={descriptor.color}
             strokeWidth={MARK.lineWidth}
             dot={false}
-            // The average has gaps where its window was short or incomplete; joining across
-            // them would draw an average over periods it never covered.
+            // Average has gaps where its window was short/incomplete; connecting across them
+            // would draw an average over periods it never covered.
             connectNulls={false}
             activeDot={{ r: MARK.dotRadius, strokeWidth: 2,
                          stroke: CHART_INK.surface, fill: descriptor.color }}
@@ -317,7 +305,6 @@ function plot(spec: ChartSpec, prepared: PreparedChart, sideways: boolean,
   )
 }
 
-/** Ranked categories go sideways. */
 function isSideways(spec: ChartSpec, prepared: PreparedChart): boolean {
   if (spec.type !== 'bar' || !prepared.xColumn || prepared.xColumn.type === 'date') return false
   const longest = Math.max(
@@ -332,10 +319,8 @@ function sidewaysHeight(rowCount: number): number {
   return rowCount * 34 + 28
 }
 
-/**
- * An array, not a fragment: Recharts scans its *direct* children for axes, grid and tooltip, and
- * a fragment hides them from that scan - the chart then silently renders with no axes at all.
- */
+/** Returns an array, not a fragment: Recharts scans its direct children for axes/grid/tooltip,
+ * and a fragment hides them from that scan - the chart would silently render with no axes. */
 function buildAxes(prepared: PreparedChart, sideways: boolean, markers: string[] = []) {
   const categoryKey = prepared.xColumn?.key
   const tooltip = (
@@ -389,8 +374,8 @@ function buildAxes(prepared: PreparedChart, sideways: boolean, markers: string[]
       tickFormatter={(value: number) => yLabel(prepared, value)}
     />,
     tooltip,
-    // Behind the marks and in front of the grid: an annotation, not a series. Drawn only on a
-    // vertical axis, because a marker on a ranked sideways bar names a category, not a moment.
+    // Annotation, not a series - drawn only on a vertical axis, since a marker on a sideways
+    // ranked bar would name a category, not a moment.
     ...markers.map((value) => (
       <ReferenceLine
         key={`marker-${value}`}
@@ -414,10 +399,8 @@ function categoryAxisWidth(prepared: PreparedChart): number {
   return Math.min(190, Math.max(96, longest * 6.4 + 12))
 }
 
-/**
- * A pie's colour follows the slice, not the measure, so it reads from `slices` - which
- * prepare.ts builds from the dimension values, in the same row order Recharts draws.
- */
+/** Pie colour follows the slice, not the measure, so it reads `slices` - built by prepare.ts
+ * from the dimension values, in the same row order Recharts draws. */
 function sliceColor(prepared: PreparedChart, index: number): string {
   return prepared.slices[index]?.color ?? 'var(--series-1)'
 }
@@ -444,7 +427,6 @@ function xLabel(prepared: PreparedChart, value: string): string {
   return prepared.xColumn ? formatCell(value, prepared.xColumn) : value
 }
 
-/** Axis label. */
 function tickLabel(prepared: PreparedChart, value: string, sideways: boolean): string {
   const formatted = xLabel(prepared, value)
   if (prepared.xColumn?.type === 'date') return formatted
@@ -458,13 +440,11 @@ function yLabel(prepared: PreparedChart, value: number): string {
   return formatNumber(value)
 }
 
-/**
- * Our own legend rather than Recharts': it is the relief for the light-mode hues that sit below
- * 3:1 on white, so it ships with every multi-series chart and is never dropped for space.
- */
+/** Custom, not Recharts' legend: relief text for light-mode hues that fall below 3:1 contrast
+ * on white, so it ships on every multi-series chart and is never dropped for space. */
 function Legend({ prepared }: { prepared: PreparedChart }) {
-  // A pie legends its slices, and it needs one at any count: the wedges carry no axis, so
-  // without it the colours name nothing.
+  // Pie always gets a legend, even at count 1: wedges carry no axis, so without it the colour
+  // names nothing.
   const isPie = prepared.slices.length > 0
   const entries = isPie ? prepared.slices : prepared.series
   if (entries.length === 0 || (!isPie && entries.length < 2)) return null

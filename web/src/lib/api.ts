@@ -1,4 +1,3 @@
-/** The single place that talks to the backend. */
 
 import type {
   AnswerCard,
@@ -38,7 +37,7 @@ type RequestOptions = {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = getToken()
-  // Sent on every request, not only the ones with a `lang` parameter: several routes return
+  // Sent on every request, not only ones with a `lang` param: several routes return
   // server-written text (card titles, caveats, a 502's detail) and the middleware reads this.
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -71,7 +70,6 @@ async function errorDetail(response: Response): Promise<string> {
   return t('error.generic')
 }
 
-// --- auth -------------------------------------------------------------------
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('/api/auth/login', { method: 'POST', body: { email, password } })
@@ -92,11 +90,8 @@ export async function changePassword(
   })
 }
 
-/**
- * Ask for a reset link. Always resolves, whatever the address was: the server answers
- * identically for a known and an unknown account so the form cannot be used to find out who
- * has one, and a client that branched on the answer would give that away again.
- */
+/** Always resolves, whatever the address was: the server answers identically for a known and
+ * an unknown account, so a client that branched on the answer would give that away. */
 export async function forgotPassword(email: string): Promise<string> {
   const body = await request<{ detail: string }>('/api/auth/password/forgot', {
     method: 'POST',
@@ -113,7 +108,6 @@ export async function resetPassword(token: string, newPassword: string): Promise
   })
 }
 
-// --- dashboard, results -----------------------------------------------------
 
 export async function fetchDashboard(period = DEFAULT_PERIOD): Promise<DashboardResponse> {
   const query = new URLSearchParams({ period, lang: currentLanguage() })
@@ -125,10 +119,8 @@ export async function fetchMovers(period = DEFAULT_PERIOD): Promise<MoversRespon
   return request<MoversResponse>(`/api/movers?${query}`)
 }
 
-/**
- * Every region with a centroid, for the map. Empty is a real answer: a warehouse whose stores
- * are not geocoded has no map to draw, and the client hides the tab rather than guessing.
- */
+/** Every region with a centroid, for the map. Empty is a real answer: an ungeocoded warehouse
+ * has no map to draw, and the client hides the tab rather than guessing. */
 export async function fetchRegions(): Promise<RegionPoint[]> {
   const rows = await request<{ name: string; lat: number; lon: number }[]>('/api/regions')
   return rows.map((row) => ({ region: row.name, lat: row.lat, lon: row.lon }))
@@ -138,16 +130,13 @@ export async function fetchResult(queryId: string): Promise<ResultResponse> {
   return request<ResultResponse>(`/api/result/${encodeURIComponent(queryId)}?offset=0&limit=1000`)
 }
 
-// --- saved views ------------------------------------------------------------
 
 export async function fetchCards(): Promise<AnswerCard[]> {
   return request<AnswerCard[]>('/api/cards')
 }
 
-/**
- * Saving persists the spec plus the tool arguments, not a screenshot, so the card re-runs live
- * against fresh data.
- */
+/** Saving persists the spec plus the tool arguments, not a screenshot, so the card re-runs
+ * live against fresh data. */
 export async function saveCard(body: SaveCardRequest): Promise<AnswerCard> {
   return request<AnswerCard>('/api/cards', { method: 'POST', body })
 }
@@ -163,17 +152,13 @@ export async function shareCard(
   return request<ShareResponse>('/api/share', { method: 'POST', body: { card_id: cardId, mode } })
 }
 
-/**
- * The read side. No Authorization header is sent or wanted: the token carries which card and
- * whose scope, both signed, and the reader is a person with no account here.
- */
+/** No Authorization header sent or wanted: the token carries which card and whose scope, both
+ * signed, and the reader is a person with no account here. */
 export async function fetchShared(token: string): Promise<SharedView> {
   return request<SharedView>(`/api/shared/${encodeURIComponent(token)}`)
 }
 
-// --- export -----------------------------------------------------------------
 
-/** CSV download. */
 export async function downloadCsv(queryId: string, filename: string): Promise<void> {
   const token = getToken()
   const response = await fetch(apiUrl(`/api/export/${encodeURIComponent(queryId)}.csv`), {
@@ -192,7 +177,6 @@ export async function downloadCsv(queryId: string, filename: string): Promise<vo
   URL.revokeObjectURL(url)
 }
 
-// --- chat (SSE) -------------------------------------------------------------
 
 export async function streamChat(
   question: string,
@@ -203,7 +187,7 @@ export async function streamChat(
   return streamSse<ChatEvent>(apiUrl('/api/chat'), {
     token: getToken(),
     // In the body, not only the header: the answer is written inside a streaming generator,
-    // which is a different task from the one that handled the request.
+    // a different task from the one that handled the request.
     body: { question, history, lang: currentLanguage() },
     signal,
     onEvent,

@@ -1,4 +1,3 @@
-/** The chat rail. */
 
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
@@ -11,8 +10,7 @@ import { Button } from './Button'
 import { IconCheck, IconDatabase, IconPlug, IconSend, IconSparkle, IconStop } from './Icons'
 
 // Deliberately generic: an example naming a Swedish county was a question nobody could ask
-// of a warehouse holding anything else. "What is our margin?" stays - it is the one that
-// demonstrates a refusal, which is the point of showing it.
+// of a warehouse holding anything else. "What is our margin?" stays to demonstrate a refusal.
 const EXAMPLE_KEYS = ['ask.best_sellers', 'ask.monthly_trend', 'ask.top_products', 'ask.margin']
 
 export function ChatPanel({ onClose }: { onClose?: () => void }) {
@@ -92,7 +90,6 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
               node.style.height = `${Math.min(node.scrollHeight, 140)}px`
             }}
             onKeyDown={(event) => {
-              // Enter sends; Shift+Enter is a newline - the convention users already have.
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 submit(draft)
@@ -180,8 +177,6 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
         </p>
       )}
 
-      {/* The streamed prose is a preview; once the card lands it owns the narrative. The
-          chart-only preview card carries no narrative, so it does not yet own it. */}
       {(!turn.card || turn.cardIsPreview) && turn.streamedText && (
         <p className="text-sm leading-relaxed text-ink">{turn.streamedText}</p>
       )}
@@ -200,7 +195,6 @@ function Turn({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => vo
   )
 }
 
-/** Exported for the render test: a lookup that succeeded once read "✓ Uppslag · 0 rader". */
 export function ToolChipRow({ chip }: { chip: ToolChip }) {
   return (
     <li className="flex items-center gap-2 text-2xs text-ink-secondary">
@@ -221,12 +215,6 @@ export function ToolChipRow({ chip }: { chip: ToolChip }) {
   )
 }
 
-/**
- * The route an answer actually takes. Nothing here reaches the database directly: the model
- * writes tool arguments, the MCP server is the only thing that talks to the warehouse, and what
- * comes back is rows the model then has to put into words. Showing the round trip is the
- * difference between "the assistant knows" and "the assistant asked, and here is who answered".
- */
 const FLOW: { icon: ComponentType<{ className?: string }>; short: string; labelKey: string }[] = [
   { icon: IconSparkle, short: 'LLM', labelKey: 'chat.step_llm' },
   { icon: IconPlug, short: 'MCP', labelKey: 'chat.step_mcp' },
@@ -235,13 +223,10 @@ const FLOW: { icon: ComponentType<{ className?: string }>; short: string; labelK
   { icon: IconSparkle, short: 'LLM', labelKey: 'chat.step_llm_writes' },
 ]
 
-/** Which node the turn is on right now; `FLOW.length` once the whole chain has completed. */
 export function flowStage(turn: ChatTurn): number {
   if (turn.status !== 'streaming') return FLOW.length
   if (turn.streamedText) return 4
   if (turn.chips.length === 0) return 0
-  // The call out and the query itself are one event from here, so the outbound hop reads as
-  // passed rather than pending.
   return turn.chips.every((chip) => chip.done) ? 3 : 2
 }
 
@@ -252,8 +237,6 @@ function RequestFlow({ turn }: { turn: ChatTurn }) {
 
   return (
     <div className="rounded-tile bg-surface-2 px-3 py-2.5">
-      {/* Capped: the rail is draggable up to 720 px, and five 28 px nodes stretched across all
-          of it stop reading as one chain. */}
       <ol className="flex max-w-xs items-center" aria-label={t('chat.pipeline')}>
         {FLOW.map((step, index) => {
           const done = index < stage

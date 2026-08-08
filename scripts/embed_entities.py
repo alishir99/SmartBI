@@ -23,8 +23,7 @@ from mcp_server.embeddings import (  # noqa: E402
 
 BATCH = 256
 
-# IVFFlat list count.
-LISTS = 16
+LISTS = 16  # IVFFlat list count.
 
 
 async def main() -> None:
@@ -43,8 +42,8 @@ async def main() -> None:
         print(f"embedding {len(rows):,} entities with {MODEL_NAME} ({EMBEDDING_DIM}d)…")
         for start in range(0, len(rows), BATCH):
             batch = rows[start:start + BATCH]
-            # Embed the path and synonyms alongside the label: "Hörlurar" alone is a weaker
-            # target than "Ljud & Bild › Hörlurar › lurar headset trådlösa lurar".
+            # Embed path + synonyms alongside the label: "Hörlurar" alone is a weaker target
+            # than the full "Ljud & Bild › Hörlurar › lurar headset" string.
             texts = [f"{row['path']} {row['synonyms']}".strip() for row in batch]
             vectors = embed_passages(texts)
             await connection.executemany(

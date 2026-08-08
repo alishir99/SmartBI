@@ -10,12 +10,11 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
-    # eval/ is not a package and is run as a script, so the repo root is not on the path.
+    # eval/ is not a package and runs as a script, so the repo root isn't on the path yet.
     sys.path.insert(0, str(_REPO_ROOT))
 
 from api.agent.validate import NumberLiteral, extract_numbers  # noqa: E402
 
-# Every key this module knows how to grade.
 GRADED_KEYS = frozenset({
     "numeric", "delta_pct", "series", "top_n", "rank", "n_brands",
     "tools_called", "tools_not_called", "dimensions", "chart_type",
@@ -23,21 +22,17 @@ GRADED_KEYS = frozenset({
     "caveats_min", "suggestions_min", "suppressed", "status", "language",
 })
 
-# Which family each check belongs to, and the reason this file's central observation is worth
-# acting on rather than just documenting.
+# Which family each check belongs to: grounded = cache rows (architecture), prose = the
+# narrative (the model), routing = what the agent chose to do, transport = never judged.
 CHECK_FAMILIES: dict[str, str] = {
-    # graded against rows from the result cache - the architecture
     "series": "grounded", "top_n": "grounded", "rank": "grounded",
     "n_brands": "grounded", "suppressed": "grounded",
-    # graded against the narrative - the model
     "numeric": "prose", "delta_pct": "prose", "must_contain": "prose",
     "must_not_contain": "prose", "must_not_contain_numbers": "prose",
     "language": "prose",
-    # graded against what the agent chose to do - planning, not values
     "tools_called": "routing", "tools_not_called": "routing", "dimensions": "routing",
     "chart_type": "routing", "status": "routing", "caveats_min": "routing",
     "suggestions_min": "routing",
-    # not a check at all: the turn never got far enough to be judged
     "transport": "transport", "error_event": "transport",
 }
 
@@ -50,23 +45,20 @@ def family_of(check: str) -> str:
     return CHECK_FAMILIES.get(check, "routing")
 
 
-# A bare integer at or below this, carrying no unit at all, is not a money or quantity claim.
+# A bare integer at or below this, carrying no unit, is not a money or quantity claim.
 FORBIDDEN_MAX_BARE_INTEGER = 100
 
 # Bare integers in this range are read as years, matching validate.py's own allowance.
 _YEAR_MIN, _YEAR_MAX = 1990, 2099
 
-# Enough Swedish to tell "the model answered in Swedish" from "the model answered in English".
-# Not a language classifier - a smoke test, and deliberately cheap.
+# Smoke test for "answered in Swedish" vs English, deliberately cheap - not a classifier.
 _SWEDISH_MARKERS = re.compile(
     r"[åäöÅÄÖ]|\b(och|för|är|vi|på|med|av|inte|kan|det|som|har|under|mot|jämfört)\b",
     re.I,
 )
 
-# A period label that is a date or a truncated date.
-_DATEISH = re.compile(r"\d{4}(?:-\d{2}){0,2}$")
+_DATEISH = re.compile(r"\d{4}(?:-\d{2}){0,2}$")  # a date, or a truncated date
 
-# Words that carry the sign of a change.
 _DECLINE_WORDS = re.compile(
     r"minsk|sjönk|sjunk|lägre|nedgång|ned\b|tapp|backa|svagare|färre|negativ|"
     r"sämre|föll|fall\b|-\s?\d",
@@ -74,7 +66,6 @@ _DECLINE_WORDS = re.compile(
 )
 
 
-# --------------------------------------------------------------------------- structures
 
 @dataclass(frozen=True)
 class Failure:
@@ -92,13 +83,10 @@ class Observed:
     """Everything the transport collected for one case."""
 
     card: dict[str, Any] | None = None
-    # : The `tool_call` SSE events, in order: {"tool": str, "args": dict}.
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    # : Rows from GET /api/result/{query_id} - the grounded values, not the narrative's.
-    rows: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)  # {"tool": str, "args": dict}
+    rows: list[dict[str, Any]] = field(default_factory=list)  # grounded values, not the narrative's
     columns: list[dict[str, Any]] = field(default_factory=list)
-    # : An `error` SSE event, a transport failure or a timeout.
-    error: str | None = None
+    error: str | None = None  # an `error` SSE event, a transport failure, or a timeout
     latency_ms: int = 0
 
     @property
@@ -151,8 +139,7 @@ class CaseResult:
     tools_called: list[str] = field(default_factory=list)
     row_count: int = 0
     category: str | None = None
-    # Which checks this case actually ran.
-    checks_run: list[str] = field(default_factory=list)
+    checks_run: list[str] = field(default_factory=list)  # which checks this case actually ran
 
     @property
     def passed(self) -> bool:
@@ -166,8 +153,8 @@ class CaseResult:
             entry = tally[family_of(check)]
             entry[1] += 1
             entry[0] += check not in failed
-        # A transport failure is never in `checks_run` - nothing was asserted, the turn simply
-        # did not arrive - so it is counted here rather than being lost.
+        # A transport failure is never in checks_run (nothing was asserted), so count it here
+        # rather than losing it.
         for check in failed - set(self.checks_run):
             tally[family_of(check)][1] += 1
         return {name: (ok, total) for name, (ok, total) in tally.items() if total}
@@ -192,7 +179,6 @@ class CaseResult:
         }
 
 
-# ------------------------------------------------------------------------------ entry
 
 def grade(case: dict, observed: Observed, suite: str) -> CaseResult:
     """Grade one case. Pure: same inputs, same verdict, no I/O."""
@@ -209,8 +195,8 @@ def grade(case: dict, observed: Observed, suite: str) -> CaseResult:
     )
 
     if observed.card is None:
-        # No card is never a correct outcome, not even for the adversarial suite: a refusal is a
-        # card with status cannot_answer, and a crash is something else entirely.
+        # No card is never a correct outcome, even for adversarial: a refusal is a card with
+        # status cannot_answer, and a crash is something else entirely.
         reason = observed.error or "the stream ended without a card event"
         result.failures.append(Failure("transport", reason))
         return result
@@ -273,12 +259,10 @@ def _grade_one(key: str, expected: Any, observed: Observed) -> list[Failure]:
         case "suggestions_min":
             return _grade_min_list("suggestions", expected, observed)
         case _:
-            # Unreachable while GRADED_KEYS covers the suite vocabulary, and loud rather than
-            # silent if it ever stops doing so.
+            # Unreachable while GRADED_KEYS covers the suite vocabulary; loud if it ever doesn't.
             return [Failure("expects", f"no grader implemented for expects key {key!r}")]
 
 
-# ------------------------------------------------------------------------ card shape
 
 def _grade_status(expected: Any, observed: Observed) -> list[Failure]:
     allowed = expected if isinstance(expected, list) else [expected]
@@ -320,7 +304,6 @@ def _grade_min_list(field_name: str, minimum: Any, observed: Observed) -> list[F
                            f"{len(items)}")]
 
 
-# ----------------------------------------------------------------------------- tools
 
 def _grade_tools_called(expected: Any, observed: Observed) -> list[Failure]:
     called = set(observed.tools)
@@ -359,7 +342,6 @@ def _grade_dimensions(expected: Any, observed: Observed) -> list[Failure]:
                                   f"{seen}")]
 
 
-# ------------------------------------------------------------------- grounded values
 
 def _grade_series(spec: Any, observed: Observed) -> list[Failure]:
     if not isinstance(spec, dict):
@@ -384,8 +366,8 @@ def _grade_series(spec: Any, observed: Observed) -> list[Failure]:
         return [Failure("series", f"result has no numeric column to read values from "
                                   f"(columns {[c.get('key') for c in columns]})")]
 
-    # Which column holds the measure is not stated in the YAML, and cannot be: a comparison
-    # query returns three numeric columns and market share returns six.
+    # Which column holds the measure isn't stated in the YAML and can't be: a comparison
+    # query returns three numeric columns, market share returns six.
     best: tuple[int, str, list[str], list[tuple[str, float, float]]] | None = None
     for value_key in numeric_keys:
         missing: list[str] = []
@@ -477,8 +459,8 @@ def _grade_suppressed(expected: bool, observed: Observed) -> list[Failure]:
     if any_suppressed:
         return []
 
-    # The thin-slice cases allow status ok *or* a refusal, and their comments say either a
-    # suppressed row or a clean cannot_answer is correct.
+    # Thin-slice cases allow status ok *or* a refusal: either a suppressed row or a clean
+    # cannot_answer is correct.
     if observed.status in ("cannot_answer", "clarify") and not any_suppressed:
         return []
 
@@ -491,7 +473,6 @@ def _grade_suppressed(expected: bool, observed: Observed) -> list[Failure]:
                                   f"(query_id={observed.query_id!r})")]
 
 
-# --------------------------------------------------------------------------- narrative
 
 def _grade_numeric(check: str, spec: Any, observed: Observed) -> list[Failure]:
     if not isinstance(spec, dict):
@@ -579,21 +560,19 @@ def _grade_no_numbers(expected: bool, observed: Observed) -> list[Failure]:
 
 def _is_forbidden_figure(literal: NumberLiteral) -> bool:
     if not literal.bare_integer:
-        # Carries a unit, a magnitude suffix or decimals - a measurement by construction.
-        return True
+        return True  # carries a unit, magnitude suffix or decimals - a measurement by construction
     if literal.value.is_integer() and _YEAR_MIN <= literal.value <= _YEAR_MAX:
         return False
     return not (0 <= literal.value <= FORBIDDEN_MAX_BARE_INTEGER)
 
 
-# ------------------------------------------------------------------------- primitives
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _close(actual: float, expected: float, tolerance_pct: float) -> bool:
-    # The floor keeps a tolerance of 0 % on an expected 0.0 from being unsatisfiable.
+    # The floor keeps a 0% tolerance on an expected 0.0 from being unsatisfiable.
     allowed = max(abs(expected) * tolerance_pct / 100.0, 1e-9)
     return abs(actual - expected) <= allowed
 
@@ -606,7 +585,7 @@ def _within(value: float, expected: float, tolerance_pct: float, literal_tol: fl
 
 def _literal_matches(literal: NumberLiteral, expected: float, tolerance_pct: float,
                      unit: str | None) -> bool:
-    # "12,4" in a sentence about millions is a rounding, not a hallucination - the same
+    # "12,4" in a sentence about millions is a rounding, not a hallucination - same
     # allowance validate.py makes.
     scales: tuple[float, ...] = (1.0,)
     if literal.implicit_scale_allowed and unit != "%":
@@ -630,9 +609,8 @@ def _same_label(expected: Any, actual: Any) -> bool:
     left, right = str(expected).strip().casefold(), str(actual).strip().casefold()
     if left == right:
         return True
-    # A date dimension is truncated to the start of its period and serialised in full
-    # ("2024-01-01"), while the YAML writes a year as "2024". Prefix equality between two date-
-    # shaped strings closes that gap without loosening anything else.
+    # A date dimension serialises full ("2024-01-01") while YAML writes a year ("2024");
+    # prefix equality between two date-shaped strings closes that gap.
     if _DATEISH.match(left) and _DATEISH.match(right):
         return right.startswith(left) or left.startswith(right)
     return False

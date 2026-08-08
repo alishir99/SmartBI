@@ -1,4 +1,3 @@
-/** The tool chips under a question, which are the only view of what the agent actually did. */
 
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -23,8 +22,8 @@ describe('a tool chip', () => {
   })
 
   it('says nothing about rows for a tool that has none', () => {
-    // get_capabilities and resolve_entities have no row concept, so the count arrived as 0 and
-    // a lookup that succeeded read as one that found nothing: "✓ Uppslag · 0 rader".
+    // These tools have no row concept, so the count arrived as 0 and a successful lookup read
+    // as "found nothing": "✓ Uppslag · 0 rader".
     render(<ToolChipRow chip={chip({ tool: 'resolve_entities', rowCount: null })} />)
     expect(screen.queryByText(/rader/)).toBeNull()
   })

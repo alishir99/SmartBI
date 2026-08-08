@@ -1,4 +1,3 @@
-/** One icon family: 20×20 viewBox, 1.5px stroke, round caps and joins, currentColor. */
 
 type IconProps = {
   className?: string
@@ -58,6 +57,13 @@ export const IconPin = (p: IconProps) => (
   </Svg>
 )
 
+export const IconPinFilled = ({ className = 'h-4 w-4' }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true" focusable="false">
+    <path d="M7.5 2.75h5l-.6 4.1 2.35 2.35H5.75L8.1 6.85l-.6-4.1Z" />
+    <rect x="9.25" y="9.2" width="1.5" height="8.05" rx="0.75" />
+  </svg>
+)
+
 export const IconDownload = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10 3v9" />
@@ -71,6 +77,14 @@ export const IconShare = (p: IconProps) => (
     <path d="M10 12.75V3.25" />
     <path d="M6.5 6.5 10 3l3.5 3.5" />
     <path d="M4.25 11v4.25a1.5 1.5 0 0 0 1.5 1.5h8.5a1.5 1.5 0 0 0 1.5-1.5V11" />
+  </Svg>
+)
+
+export const IconLink = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8.25 11.75 11.75 8.25" />
+    <path d="M7.25 12.75 5.4 14.6a2.5 2.5 0 1 1-3.5-3.5l2.5-2.5a2.5 2.5 0 0 1 3.5 0" />
+    <path d="M12.75 7.25l1.85-1.85a2.5 2.5 0 1 1 3.5 3.5l-2.5 2.5a2.5 2.5 0 0 1-3.5 0" />
   </Svg>
 )
 
@@ -194,7 +208,6 @@ export const IconEmptyChart = (p: IconProps) => (
   </Svg>
 )
 
-/** The model. */
 export const IconSparkle = (p: IconProps) => (
   <Svg {...p}>
     <path d="M8 2.75 9.4 6.6 13.25 8 9.4 9.4 8 13.25 6.6 9.4 2.75 8 6.6 6.6 8 2.75Z" />
@@ -211,7 +224,6 @@ export const IconPlug = (p: IconProps) => (
   </Svg>
 )
 
-/** A small indeterminate spinner for in-flight tool chips. */
 export function Spinner({ className = 'h-3.5 w-3.5' }: IconProps) {
   return (
     <svg viewBox="0 0 20 20" className={`${className} animate-spin`} aria-hidden="true">

@@ -34,7 +34,6 @@ def pool() -> asyncpg.Pool:
     return _pool
 
 
-# ------------------------------------------------------------------------------ users
 
 USER_SELECT = """
 SELECT u.user_id, u.email, u.password_hash, u.role, u.display_name,
@@ -61,7 +60,6 @@ async def set_password_hash(user_id: int, password_hash: str) -> bool:
     return result.endswith(" 1")
 
 
-# ------------------------------------------------------------------------------ audit
 
 async def record_turn(
     *,
@@ -87,7 +85,7 @@ async def record_turn(
             json.dumps(tool_calls, default=str), json.dumps(row_counts, default=str),
             latency_ms, input_tokens, output_tokens, status,
         )
-    except Exception:                                    # noqa: BLE001 - see docstring
+    except Exception:  # noqa: BLE001 - a logging failure must not fail the turn it's logging
         log.exception("kunde inte skriva audit_turn")
 
 
@@ -105,7 +103,6 @@ async def tokens_used_since(supplier_id: int, window_hours: int) -> int:
     return int(row["used"]) if row else 0
 
 
-# ------------------------------------------------------------------------ saved cards
 
 async def insert_card(*, user_id: int, supplier_id: int, title: str,
                       chart_spec: dict[str, Any], tool_name: str,
@@ -134,8 +131,8 @@ async def count_cards(supplier_id: int) -> int:
 
 
 async def list_cards(supplier_id: int, limit: int) -> list[dict[str, Any]]:
-    # The LIMIT is in the SQL rather than in the route because every one of these rows costs an
-    # MCP round-trip when the caller refreshes it - see the note in routes/cards.py.
+    # LIMIT lives in SQL, not the route: every row here costs an MCP round-trip on refresh
+    # (see routes/cards.py).
     rows = await pool().fetch(
         "SELECT card_id, title, chart_spec, tool_name, tool_args FROM saved_card "
         "WHERE supplier_id = $1 ORDER BY created_at DESC LIMIT $2",
@@ -154,9 +151,8 @@ async def get_card(card_id: int, supplier_id: int) -> dict[str, Any] | None:
 
 
 async def delete_card(card_id: int, supplier_id: int) -> bool:
-    # The supplier predicate is in the DELETE itself rather than checked first, so there is no
-    # window between "may I?" and "do it", and no way to learn that someone else's card_id
-    # exists.
+    # Supplier check is baked into the DELETE itself, not a prior check-then-act: no window
+    # to race, and no way to learn another supplier's card_id exists.
     result = await pool().execute(
         "DELETE FROM saved_card WHERE card_id = $1 AND supplier_id = $2",
         card_id, supplier_id,
@@ -165,8 +161,8 @@ async def delete_card(card_id: int, supplier_id: int) -> bool:
 
 
 def _decode_card(row: dict[str, Any]) -> dict[str, Any]:
-    # asyncpg hands JSONB back as text unless a codec is registered; decoding here keeps that
-    # detail out of the routes.
+    # asyncpg returns JSONB as text unless a codec is registered; decode here so routes don't
+    # have to.
     for key in ("chart_spec", "tool_args"):
         if isinstance(row.get(key), str):
             row[key] = json.loads(row[key])

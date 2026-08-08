@@ -9,14 +9,12 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
-    # PyJWT, not python-jose: jose was declared and never imported, is unmaintained and
-    # carries CVE history, and pulled `cryptography` in behind it. PyJWT was already the
-    # library api/auth.py imports - it just happened to resolve transitively through `mcp`,
-    # which is a dependency an upgrade could silently drop.
+    # PyJWT, not python-jose: jose was unimported, unmaintained, and pulled cryptography
+    # in behind it. api/auth.py already imports pyjwt directly.
     "pyjwt>=2.9",
     "argon2-cffi>=23.1",
-    # Upper bound is load-bearing, not caution: mcp 2.0 renamed mcp.server.fastmcp to
-    # mcp.server.mcpserver, so an unpinned rebuild fails at import in mcp_server/server.py.
+    # Upper bound is load-bearing: mcp 2.0 renamed mcp.server.fastmcp, breaking the import
+    # in mcp_server/server.py.
     "mcp>=1.2,<2",
     "anthropic>=0.40",
     "httpx>=0.27",
@@ -29,9 +27,8 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    # test_compiler.py parses every generated statement to prove it is valid Postgres and
-    # that no literal reached the SQL. That is a test dependency, not an ad-hoc CI install:
-    # leaving it out of here meant a reviewer following the README got 38 collection errors.
+    # test_compiler.py parses every generated statement to prove it's valid Postgres; a
+    # real test dependency, not an ad-hoc CI install.
     "sqlglot>=25.0",
     "ruff>=0.7",
     "mypy>=1.13",
@@ -42,7 +39,7 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["api", "mcp_server"]
+packages = ["api", "mcp_server", "eval"]
 
 [tool.ruff]
 line-length = 100
@@ -52,10 +49,8 @@ target-version = "py313"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.flake8-bugbear]
-# `Depends(...)` and `Query(...)` in a default argument is the FastAPI idiom, not the mutable
-# default B008 is meant to catch - FastAPI reads these markers off the signature. Listing them
-# here keeps B008 switched on everywhere it is actually useful, rather than littering the
-# routes with per-line noqa.
+# Depends(...)/Query(...) as a default arg is the FastAPI idiom, not the B008 mutable-default
+# bug; listing them keeps B008 useful elsewhere instead of noqa-ing every route.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
                           "fastapi.Header", "fastapi.Form", "fastapi.File"]
 
@@ -63,9 +58,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 asyncio_mode = "auto"
 testpaths = ["mcp_server/tests", "api/tests", "eval/tests"]
 markers = [
-    # Needs a seeded Postgres. These are the assertions a laptop without Docker cannot make:
-    # that RLS actually stops a cross-tenant read, and that the tools reproduce
-    # ground_truth.json. They skip themselves when no database answers, so `pytest -q` stays
+    # Needs seeded Postgres; skips itself when no database answers, so `pytest -q` stays
     # a clean-clone command.
     "integration: requires a running, seeded Postgres (see README).",
 ]
@@ -73,22 +66,16 @@ markers = [
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true
-# There are no __init__.py files: Python has not needed them since 3.3, and pytest does not
-# either while no two test modules share a basename. mypy is the one tool that does - api
-# and mcp_server each have a `config.py`, and without a package root it sees two modules
-# both called `config`. This tells it where the roots are instead.
+# No __init__.py files (unneeded since 3.3), but mypy needs package roots when two modules
+# share a basename (api/config.py and mcp_server/config.py) - this tells it where they are.
 explicit_package_bases = true
 mypy_path = "."
-# Test modules use deliberately partial fakes - a FakeMcp implements the three methods the
-# loop actually calls, and typing it as the full client would mean importing a protocol that
-# exists only to satisfy the checker.
+# Test modules use deliberately partial fakes (e.g. FakeMcp implements only what's called),
+# so typing them against the real client would mean importing a protocol just to satisfy mypy.
 exclude = "tests/"
 
-# The two SDK boundaries. `anthropic` and `mcp` express their request and response shapes as
-# large TypedDict unions; we build those payloads as plain dicts on purpose, because the
-# provider is swappable behind three settings (decision D1) and pinning our own call sites to
-# one vendor's generated types would undo that. Relaxed here, in one place with a reason,
-# rather than as `type: ignore` scattered down the call sites.
+# anthropic/mcp express request/response shapes as large TypedDict unions; we build plain
+# dicts on purpose so call sites stay swappable behind provider settings (decision D1).
 [[tool.mypy.overrides]]
 module = ["api.agent.loop", "api.mcp_client"]
 disable_error_code = ["arg-type", "union-attr"]

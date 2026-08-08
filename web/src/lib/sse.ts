@@ -1,9 +1,7 @@
-/**
- * SSE over `fetch` + `ReadableStream`. Deliberately NOT `EventSource`: EventSource cannot set
- * request headers, so it cannot send `Authorization: Bearer <token>`, and it cannot POST a body.
- */
+/** SSE over `fetch` + `ReadableStream`, deliberately not `EventSource`: EventSource can't set
+ * request headers, so it can't send `Authorization: Bearer <token>`, and it can't POST a body. */
 
-import { t } from './i18n'
+import { currentLanguage, t } from './i18n'
 
 export type SseOptions<TEvent> = {
   token: string | null
@@ -26,6 +24,10 @@ export async function streamSse<TEvent>(url: string, options: SseOptions<TEvent>
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
+    // Same header api.ts sends on every other request - without it, an error raised before
+    // the route body runs (e.g. an expired token) resolves the server's default language
+    // instead of the one the UI is actually showing.
+    'Accept-Language': currentLanguage(),
   }
   if (options.token) headers.Authorization = `Bearer ${options.token}`
 

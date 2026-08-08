@@ -3,13 +3,8 @@
 import { useSyncExternalStore } from 'react'
 import { DEFAULT_PERIOD, PERIOD_KEYS } from './periods'
 
-/**
- * One persisted choice out of a fixed set, readable from any page.
- *
- * Keyed on the option *keys*, not on labelled options: the labels are language-dependent now,
- * and a validity check that depends on the active language would reject a stored period after
- * a language switch.
- */
+// Keyed on the option keys, not labelled options: labels are language-dependent, and a
+// validity check tied to the active language would reject a stored period after a switch.
 function choiceStore(storageKey: string, keys: readonly string[], fallback: string) {
   const listeners = new Set<() => void>()
 

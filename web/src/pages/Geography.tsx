@@ -1,4 +1,3 @@
-/** Geografi - the regional cut, in two views. */
 
 import { useState } from 'react'
 import type { AnswerCard } from '../types'
@@ -89,8 +88,8 @@ function RankingTab({ card }: { card: AnswerCard }) {
 function MapTab({ card }: { card: AnswerCard }) {
   const t = useT()
   const result = useResult(card.query_id ?? null)
-  // Coordinates come from the warehouse, not from a table shipped with the client. A market
-  // whose stores are not geocoded gets an honest "no map" rather than invented positions.
+  // Coordinates come from the warehouse, not a table shipped with the client - an ungeocoded
+  // market gets an honest "no map" rather than invented positions.
   const regions = useRegions()
 
   if (result.isPending || regions.isPending) return <CardSkeleton height={560} />

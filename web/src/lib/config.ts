@@ -1,15 +1,6 @@
-/**
- * How this deployment's numbers are denominated and formatted.
- *
- * It comes from the server, not from a build-time `VITE_` variable, because the currency is a
- * property of the *warehouse*: the API stamps it onto every result's provenance, and a client
- * built with a different answer would render EUR figures with a kronor symbol and be
- * confidently wrong. One source, fetched once.
- *
- * Loaded before React mounts (see main.tsx) so the very first render already formats
- * correctly - a currency that arrives one tick late means every amount on screen flips, which
- * reads as a glitch and, for the seconds before it, as a wrong number.
- */
+/** Currency and locale come from the server, not a build-time env var: they're properties of
+ * the warehouse, stamped onto every result's provenance - a client built with a different
+ * answer would render EUR figures with a kronor symbol and be confidently wrong. */
 
 import { apiUrl } from './env'
 
@@ -22,8 +13,8 @@ export type AppConfig = {
   passwordMinLength: number
 }
 
-// What to use until the server answers, and what to fall back to if it never does. The app
-// still works offline from the API this way; it just formats as the build's default market.
+// What to use until the server answers, and to fall back to if it never does - the app still
+// works offline from the API, it just formats as the build's default market.
 const FALLBACK: AppConfig = { currency: 'SEK', locale: 'sv-SE', passwordMinLength: 8 }
 
 let current: AppConfig = FALLBACK
@@ -40,15 +31,9 @@ export function passwordMinLength(): number {
   return current.passwordMinLength
 }
 
-/**
- * The locale to format in.
- *
- * Not the same as the UI language: a Swedish deployment read in English still groups its
- * thousands the way its own market does, because the *figures* belong to that market. Only
- * where the deployment's locale and the reading language disagree on the actual digits - a
- * Swedish locale read in English - does the language win, so "1 234,5" does not appear in an
- * English sentence that says "1,234.5".
- */
+/** Not the same as the UI language: figures group per the deployment's own market. Only where
+ * the deployment's locale and the reading language actually disagree on the digits does the
+ * language win. */
 export function formatLocale(lang: string): string {
   return current.locale.split('-')[0] === lang ? current.locale : lang
 }
@@ -70,7 +55,7 @@ export async function loadConfig(): Promise<AppConfig> {
       }
     }
   } catch {
-    // An unreachable API is about to be visible everywhere else; formatting is not where the
+    // An unreachable API is about to be visible everywhere else; formatting isn't where the
     // user should first hear about it.
   }
   return current

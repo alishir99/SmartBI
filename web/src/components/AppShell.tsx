@@ -1,4 +1,3 @@
-/** The frame: navigation on the left, content in the middle, chat on the right. */
 
 import {
   useEffect,
@@ -30,13 +29,11 @@ import {
 
 type NavItem = { route: Route; labelKey: string; icon: ComponentType<{ className?: string }> }
 
-// The route slugs stay Swedish: they are in every bookmark and every shared URL, and changing
-// them by language would make the same page two addresses that break each other's links.
 const NAV: NavItem[] = [
-  { route: 'oversikt', labelKey: 'nav.overview', icon: IconOverview },
-  { route: 'produkter', labelKey: 'nav.products', icon: IconProducts },
-  { route: 'geografi', labelKey: 'nav.geography', icon: IconGeo },
-  { route: 'mina-vyer', labelKey: 'nav.saved', icon: IconPin },
+  { route: 'overview', labelKey: 'nav.overview', icon: IconOverview },
+  { route: 'products', labelKey: 'nav.products', icon: IconProducts },
+  { route: 'geography', labelKey: 'nav.geography', icon: IconGeo },
+  { route: 'saved-views', labelKey: 'nav.saved', icon: IconPin },
 ]
 
 /** Tailwind's default `xl`, where the chat rail becomes permanent. */
@@ -52,8 +49,8 @@ const RAIL_KEY = 'solvigo.rail'
 const PAGE_MIN = 520
 
 function clampRail(px: number): number {
-  // The rail must not be draggable past the point where the page it sits next to stops being
-  // usable - a stored width from a wider screen must not survive onto a narrower one either.
+  // A stored width from a wider screen must not survive onto a narrower one, and the rail must
+  // never be draggable past the point where the page beside it stops being usable.
   const max = Math.max(RAIL_MIN, Math.min(RAIL_MAX, window.innerWidth - PAGE_MIN))
   return Math.min(max, Math.max(RAIL_MIN, Math.round(px)))
 }
@@ -107,8 +104,8 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   }, [chatOpen])
 
   return (
-    // `--rail` rather than an inline width: the rail only exists from xl up, and keeping the
-    // breakpoint in the class list is what stops the custom width leaking into the slide-over.
+    // `--rail` rather than an inline width: keeping the breakpoint in the class list is what
+    // stops the custom width leaking into the slide-over below xl.
     <div className="flex min-h-screen bg-page" style={{ '--rail': `${railWidth}px` } as CSSProperties}>
       <Sidebar route={route} />
 
@@ -119,13 +116,11 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         </main>
       </div>
 
-      {/* Permanent rail from xl up. */}
       <aside className="fixed right-0 top-0 hidden h-screen w-[var(--rail)] border-l border-hairline xl:block">
         <RailHandle width={railWidth} onResize={setRailWidth} />
         <ChatPanel />
       </aside>
 
-      {/* Slide-over below xl. */}
       {chatOpen && (
         <div className="fixed inset-0 z-40 xl:hidden">
           <div
@@ -157,10 +152,8 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   )
 }
 
-/**
- * The drag edge between the page and the chat rail - the ARIA window-splitter pattern, so it
- * works from the keyboard too rather than being a mouse-only affordance.
- */
+/** The drag edge between page and chat rail - the ARIA window-splitter pattern, so it works
+ * from the keyboard too rather than being a mouse-only affordance. */
 function RailHandle({ width, onResize }: { width: number; onResize: (px: number) => void }) {
   const t = useT()
   return (
@@ -172,13 +165,13 @@ function RailHandle({ width, onResize }: { width: number; onResize: (px: number)
       aria-valuemin={RAIL_MIN}
       aria-valuemax={RAIL_MAX}
       tabIndex={0}
-      // Dragging leftwards widens the rail, so the width is the distance from the right edge.
       onPointerDown={(event) => {
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
       onPointerMove={(event) => {
         if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+        // Dragging leftwards widens the rail, so the width is the distance from the right edge.
         onResize(window.innerWidth - event.clientX)
       }}
       onKeyDown={(event) => {
@@ -192,7 +185,6 @@ function RailHandle({ width, onResize }: { width: number; onResize: (px: number)
   )
 }
 
-/** Below `md` the sidebar is gone, so navigation, identity and theme move up here. */
 function MobileBar({ route }: { route: Route }) {
   const t = useT()
   const user = useAuthStore((state) => state.user)
@@ -357,13 +349,8 @@ function roleLabel(role: string, t: (key: string) => string): string {
   return label === `role.${role}` ? role : label
 }
 
-/**
- * The language switcher.
- *
- * Two languages, so a segmented control rather than a dropdown: the choice and its current
- * value are both visible without opening anything, and it sits next to the theme toggle
- * because they are the same kind of setting.
- */
+// Two languages, so a segmented control rather than a dropdown: the choice and its current
+// value are both visible without opening anything.
 function LanguagePicker() {
   const t = useT()
   const lang = useLanguageStore((state) => state.lang)

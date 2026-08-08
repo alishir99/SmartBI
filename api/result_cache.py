@@ -7,8 +7,8 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-# 30 minutes is long enough to page through a chart, save a card and export a CSV, and short
-# enough that a result set is not sitting in memory long after the user moved on.
+# 30 min is long enough to page through a chart, save a card and export a CSV, and short
+# enough that a result set isn't sitting in memory long after the user moved on.
 DEFAULT_TTL_SECONDS = 30 * 60
 DEFAULT_MAX_ENTRIES = 500
 
@@ -119,10 +119,8 @@ class ResultCache:
         return entry
 
     def _evict(self) -> None:
-        # ponytail: a full scan of at most `max_entries` (500) on every put and every get.
-        # Entries are insertion-ordered by creation, so this could stop at the first live one -
-        # worth doing if the cache ever holds five figures, which it cannot while it is a
-        # per-process dict.
+        # ponytail: full scan of up to `max_entries` (500) every put/get - could stop at the
+        # first live entry, worth it only if this stops being a per-process dict.
         cutoff = time.monotonic() - self.ttl_seconds
         for query_id in [k for k, v in self._entries.items() if v.created_at < cutoff]:
             del self._entries[query_id]

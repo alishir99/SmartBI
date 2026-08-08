@@ -1,17 +1,6 @@
-/**
- * UI strings, and the language the user picked.
- *
- * A plain lookup table and a zustand store, not i18next: the app has two languages and ~150
- * strings, and every feature the library adds beyond `t('key')` - lazy namespaces, plural
- * rules for languages we do not ship, an interpolation DSL - is weight for a problem this
- * does not have. The one non-trivial part, plurals, is `Intl.PluralRules` in ten lines below.
- *
- * `MEASURE_LABELS` is the deliberate duplication. The API sends every column with a `label`
- * off the semantic model, which is monolingual on purpose (it is a data contract, not a
- * presentation one), but it also sends the `key`, which is stable and which the client
- * already reads to lay out charts. So the client translates by key and falls back to the
- * server's label for anything it does not recognise - derived columns included.
- */
+/** A plain lookup table, not i18next: two languages and ~150 strings don't need lazy
+ * namespaces or an interpolation DSL. `MEASURE_LABELS` translates by key because the
+ * semantic layer's own `label` is monolingual by design (a data contract, not a UI one). */
 
 import { create } from 'zustand'
 
@@ -27,7 +16,6 @@ function isLanguage(value: unknown): value is Language {
   return LANGUAGES.includes(value as Language)
 }
 
-/** Stored choice, else the browser's preference, else Swedish. */
 function readStoredLanguage(): Language {
   try {
     const stored = localStorage.getItem(LANGUAGE_KEY)
@@ -52,24 +40,19 @@ export const useLanguageStore = create<LanguageState>((set) => ({
     } catch {
       /* private browsing */
     }
-    // The <html lang> attribute is what a screen reader reads the page's pronunciation from,
-    // and it is wrong on every page the moment the switcher is used.
+    // The <html lang> attribute is what a screen reader reads pronunciation from, and it's
+    // wrong on every page the moment the switcher is used.
     document.documentElement.lang = lang
     set({ lang })
   },
 }))
 
-/**
- * The current language, readable outside React.
- *
- * `format.ts` and `tooltext.ts` are called from render paths that are not components, and a
- * hook cannot reach them. Reading the store directly is the same value the hook returns.
- */
+/** Readable outside React - format.ts and tooltext.ts run from render paths that aren't
+ * components, so a hook can't reach them; this reads the same value the hook would return. */
 export function currentLanguage(): Language {
   return useLanguageStore.getState().lang
 }
 
-/** One string, with `{name}` placeholders filled in. */
 export function t(key: string, params?: Record<string, string | number>): string {
   const table = STRINGS[currentLanguage()]
   const template = table[key] ?? STRINGS.sv[key] ?? key
@@ -79,13 +62,8 @@ export function t(key: string, params?: Record<string, string | number>): string
   )
 }
 
-/**
- * A hook, so a component re-renders when the language changes.
- *
- * `t` alone reads the store without subscribing, which is right for a formatter called from a
- * chart and wrong for a heading: the heading would keep its old language until something else
- * happened to re-render it.
- */
+/** A hook, so a component re-renders on language change - `t` alone reads the store without
+ * subscribing, right for a chart formatter but wrong for a heading. */
 export function useT(): typeof t {
   useLanguageStore((state) => state.lang)
   return t
@@ -97,16 +75,12 @@ export function plural(count: number, key: string): string {
   return t(`${key}.${rule}`, { count })
 }
 
-// ---------------------------------------------------------------- column labels
 
-/**
- * Measures and dimensions by their semantic-layer key. Falls back to the server's label, so
- * an unrecognised or derived column still reads as something.
- */
+/** Measures and dimensions by their semantic-layer key. Falls back to the server's label, so
+ * an unrecognised or derived column still reads as something. */
 export function columnLabel(key: string, fallback: string): string {
-  // Derived columns are built from a base key plus a suffix the compiler owns. Translating the
-  // base and re-applying the suffix means one entry per measure rather than one per
-  // measure × suffix.
+  // Derived columns are a base key plus a suffix the compiler owns - translating the base and
+  // re-applying the suffix means one entry per measure, not one per measure × suffix.
   const derived = /^(.*?)(_compare|_delta_pct|_delta_pe|_delta|_ma)$/.exec(key)
   if (derived) {
     const base = MEASURE_LABELS[derived[1]]
@@ -151,21 +125,17 @@ const MEASURE_LABELS: Record<string, string> = {
   campaign_id: 'dimension.campaign',
 }
 
-// ---------------------------------------------------------------------- strings
 
 type Table = Record<string, string>
 
 const sv: Table = {
-  // --- units and formatting
   'unit.count': 'st',
   'unit.percentage_points': 'p.e.',
-  // Spelled out, for prose. A question reads as a question with the word in it; "1,2 p.e."
-  // in the middle of a sentence reads as a chip that fell out of a tile.
+  // Spelled out, for prose: "1,2 p.e." mid-sentence reads as a chip that fell out of a tile.
   'unit.percentage_points_long': 'procentenheter',
   'unit.percent': '%',
   'value.missing': '–',
 
-  // --- columns
   column_compare: '(jämförelse)',
   column_delta: '(förändring)',
   column_delta_pct: '(förändring %)',
@@ -203,7 +173,6 @@ const sv: Table = {
   'dimension.is_holiday': 'Dagtyp',
   'dimension.campaign': 'Kampanj',
 
-  // --- navigation and shell
   'nav.overview': 'Översikt',
   'nav.products': 'Produkter',
   'nav.geography': 'Geografi',
@@ -222,7 +191,6 @@ const sv: Table = {
   'theme.dark': 'Mörkt läge',
   'theme.system': 'Följer systemet',
 
-  // --- periods
   'period.last_7_days': 'Senaste veckan',
   'period.last_7_days.short': 'Vecka',
   'period.last_30_days': 'Senaste 30 dagarna',
@@ -239,7 +207,6 @@ const sv: Table = {
   'period.all_time.short': 'Allt',
   'period.previous': 'vs föregående period',
 
-  // --- login
   'login.title': 'Solvigo Insights',
   'login.subtitle': 'Din försäljning hos handlaren, utan omvägar.',
   'login.email': 'E-post',
@@ -249,7 +216,6 @@ const sv: Table = {
   'login.forgot': 'Glömt lösenordet?',
   'login.back': 'Tillbaka till inloggning',
 
-  // --- forgot / reset password
   'forgot.title': 'Återställ lösenord',
   'forgot.description':
     'Skriv adressen du loggar in med, så skickar vi en länk för att välja ett nytt lösenord.',
@@ -263,7 +229,6 @@ const sv: Table = {
   'reset.done': 'Du kan nu logga in med ditt nya lösenord.',
   'reset.to_login': 'Till inloggningen',
 
-  // --- change password, for a signed-in user
   'password.change': 'Byt lösenord',
   'password.current': 'Nuvarande lösenord',
   'password.new': 'Nytt lösenord',
@@ -285,7 +250,6 @@ const sv: Table = {
   'shared.footer':
     'Solvigo Insights - färdiga svar om försäljningen, direkt ur handlarens data.',
 
-  // --- pages
   'overview.title': 'Översikt',
   'overview.description': 'Din försäljning hos handlaren, mot perioden dessförinnan.',
   'products.title': 'Produkter',
@@ -312,7 +276,6 @@ const sv: Table = {
   'page.no_view': 'Fråga i chatten så byggs vyn från din data.',
   'page.data_through': 'data t.o.m. {date}',
 
-  // --- chat
   'chat.title': 'Fråga datan',
   'chat.subtitle': 'Svar direkt ur din försäljningsdata',
   'chat.placeholder': 'Fråga om din försäljning…',
@@ -338,7 +301,6 @@ const sv: Table = {
   'chat.step_llm_writes': 'Modellen formulerar svaret ur raderna',
   'chat.flow_done': 'svaret kommer från raderna, inte från modellens minne',
 
-  // --- cards
   'card.clarify': 'Behöver en precisering',
   'card.cannot_answer': 'Det här har jag inte underlag för',
   'card.can_answer': 'Det här kan jag svara på',
@@ -361,8 +323,6 @@ const sv: Table = {
   'card.saved': 'Sparad i Mina vyer',
   'card.delete': 'Ta bort sparad vy',
   'card.share': 'Dela',
-  'card.share_title': 'Dela som läslänk',
-  'card.share_create': 'Skapa länk',
   'card.share_note':
     'Körs om mot färsk data vid varje öppning - alltid under din behörighet, aldrig läsarens. Slutar gälla automatiskt.',
   'card.share_copy': 'Kopiera länk',
@@ -380,7 +340,6 @@ const sv: Table = {
   'value.one': '{count} värde',
   'value.other': '{count} värden',
 
-  // --- source chip
   'source.plural': 'Källor',
   'source.singular': 'Källa',
   'source.own_sales': 'Din egen försäljning',
@@ -403,7 +362,6 @@ const sv: Table = {
   'vat.excl': 'exkl. moms',
   'vat.incl': 'inkl. moms',
 
-  // --- tool progress chips
   'tool.get_capabilities': 'Datakatalog',
   'tool.resolve_entities': 'Uppslag',
   'tool.query_sales': 'Försäljning',
@@ -421,7 +379,6 @@ const sv: Table = {
   'channel.online': 'onlinekanalen',
   'channel.physical': 'fysiska butiker',
 
-  // --- filters, on the source chip
   'filter.region': 'Region',
   'filter.channel': 'Kanal',
   'filter.category': 'Kategori',
@@ -434,12 +391,10 @@ const sv: Table = {
   'filter.store_ids.one': '{count} butik',
   'filter.store_ids.other': '{count} butiker',
 
-  // --- errors
   'error.generic': 'Något gick fel när datan skulle hämtas.',
   'error.expired': 'Sessionen har gått ut. Logga in igen.',
   'error.forbidden': 'Du har inte åtkomst till den här datan.',
 
-  // --- follow-up questions offered on each page
   'ask.grew_fastest': 'Var växer vi snabbast jämfört med förra året?',
   'ask.weekly_in_region': 'Visa försäljning per vecka per region',
   'ask.best_online': 'Vilka regioner säljer mest online?',
@@ -659,8 +614,6 @@ const en: Table = {
   'card.saved': 'Saved to Saved views',
   'card.delete': 'Delete saved view',
   'card.share': 'Share',
-  'card.share_title': 'Share as a read-only link',
-  'card.share_create': 'Create link',
   'card.share_note':
     'Re-run against fresh data on every open - always under your permissions, never the reader’s. Expires automatically.',
   'card.share_copy': 'Copy link',

@@ -46,8 +46,8 @@ SUPPLIER_ROLES = ("supplier_viewer", "supplier_admin")
 def read_password(generate: bool) -> str:
     """Prompt twice, or mint one. Never taken from argv."""
     if generate:
-        # token_urlsafe(12) is 96 bits of entropy - far past anything a person would choose,
-        # and still short enough to read down a phone line once.
+        # 96 bits of entropy - far past anything a person would choose, still short enough
+        # to read down a phone line once.
         password = secrets.token_urlsafe(12)
         print(f"\n  generated password: {password}")
         print("  Give this to the user over a channel that is not this terminal's scrollback,")
@@ -81,8 +81,7 @@ async def resolve_supplier(connection: asyncpg.Connection, name: str | None,
         listed = "\n    ".join(row["name"] for row in known) or "(none - is the database seeded?)"
         raise SystemExit(f"no supplier named {name!r}. Known suppliers:\n    {listed}")
 
-    # Stated rather than assumed: an account pointed at a supplier with no brands sees an empty
-    # dashboard and looks broken, and the cause is upstream of this script.
+    # An account pointed at a supplier with no brands sees an empty dashboard and looks broken.
     brands = await connection.fetchval(
         "SELECT COUNT(*) FROM dim_brand WHERE supplier_id = $1", supplier_id)
     if not brands:
@@ -135,8 +134,8 @@ async def main() -> None:
     try:
         supplier_id = await resolve_supplier(connection, args.supplier, args.role)
         password = read_password(args.generate)
-        # Hashed with the API's own function, so the cost parameters cannot drift from the ones
-        # `verify_password` was tuned for.
+        # Hashed with the API's own function, so cost parameters can't drift from what
+        # verify_password was tuned for.
         action = await upsert_user(connection, email=email, name=args.name, role=args.role,
                                    supplier_id=supplier_id,
                                    password_hash=hash_password(password))

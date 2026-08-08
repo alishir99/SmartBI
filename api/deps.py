@@ -9,6 +9,7 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from . import i18n
 from .mcp_client import McpClient
 from .result_cache import ResultCache
 
@@ -26,20 +27,20 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> TenantContext:
     if credentials is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Saknar Authorization-header")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.tr("auth.missing_header"))
 
-    # Imported here rather than at module scope: auth.py imports this module for
-    # get_current_user, so a top-level import would be circular.
+    # Imported here, not at module scope: auth.py imports this module for get_current_user,
+    # so a top-level import would be circular.
     from .auth import decode_access_token
 
     try:
         claims = decode_access_token(credentials.credentials)
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ogiltig eller utgången token") from exc
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.tr("auth.invalid_token")) from exc
 
     if claims.get("typ") is not None:
-        # Share tokens are signed with the same secret but are not sessions (§10).
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token kan inte användas för inloggning")
+        # Share tokens use the same secret but aren't sessions.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.tr("auth.token_not_for_login"))
 
     supplier_id = claims.get("supplier_id")
     return TenantContext(
@@ -61,11 +62,7 @@ async def get_supplier_scope(
 ) -> ScopedTenant:
     """For the data endpoints: refuse rather than guess when there is no supplier scope."""
     if tenant.supplier_id is None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Kontot är inte kopplat till en leverantör. Leverantörsdata kräver ett "
-            "leverantörskonto.",
-        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.tr("auth.no_supplier"))
     return cast(ScopedTenant, tenant)
 
 

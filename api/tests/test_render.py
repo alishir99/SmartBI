@@ -34,7 +34,6 @@ PRODUCT = {"key": "product", "type": "text", "label": "Produkt"}
 REGION = {"key": "region", "type": "text", "label": "Län"}
 
 
-# --------------------------------------------------------------- deterministic mapping
 
 def test_a_single_value_becomes_a_kpi():
     spec = propose_chart(make([MEASURE], [{"net_sales_sek": 93_011_117.0}]))
@@ -60,8 +59,7 @@ def test_one_category_plus_one_measure_becomes_a_bar():
 def test_two_categories_become_a_stacked_bar_not_a_pie():
     """Part-of-whole is a stacked bar deliberately: these break down by län, and a twenty-one-slice
     pie is unreadable."""
-    # Two rows, not one: stacking is a claim about how several rows compose, and a one-row
-    # result now falls through to a plain bar (there is nothing to stack it against).
+    # Two rows, not one: a single row has nothing to stack against and falls back to a plain bar.
     spec = propose_chart(make([REGION, PRODUCT, MEASURE], [
         {"region": "Stockholms län", "product": "A", "net_sales_sek": 1.0},
         {"region": "Skåne län", "product": "B", "net_sales_sek": 2.0}]))
@@ -109,8 +107,8 @@ def test_the_comparison_period_is_overlaid_on_the_trend():
         {"month": "2026-02-01", "month_compare": "2025-02-01", "net_sales_sek": 2.0}]))
     assert spec.type == "line"
     assert spec.y == ["net_sales_sek", "net_sales_sek_compare"]
-    # The comparison's own date column is still not a dimension: as a series it would break the
-    # single line into one point per month.
+    # The comparison's date column is still not a dimension: as a series it would split
+    # one line into one point per month.
     assert spec.series is None
 
 
@@ -135,7 +133,6 @@ def test_the_model_may_now_name_the_comparison_measure_on_the_axis():
     assert not problems
 
 
-# ------------------------------------------------------------------- override policy
 
 def test_a_valid_override_is_honoured():
     result = make([PRODUCT, MEASURE], [{"product": "A", "net_sales_sek": 1.0}])
@@ -193,7 +190,6 @@ def test_a_rejected_override_keeps_validator_vocabulary_off_the_card():
     assert "passade inte datan" in joined
 
 
-# ------------------------------------------------------------------ answer envelope
 
 def test_the_json_block_is_split_from_the_prose():
     narrative, envelope = split_answer(
@@ -251,15 +247,13 @@ def test_a_date_range_keeps_its_en_dash():
     assert strip_markdown(kept) == kept
 
 
-# ------------------------------------------------------------------ names in a refusal
 
 def test_a_refusal_does_not_repeat_the_name_it_refuses():
     """Confirming which name was and was not in the data is itself information about someone
     else. The prompt says so; only this makes it true."""
     scrubbed = scrub_names('"Lumia Nordic" finns inte bland dina varumärken.', ["Lumia"])
     assert "Lumia" not in scrubbed
-    # The looked-up word is "Lumia" and the model wrote "Lumia Nordic": redacting only what was
-    # looked up left `det efterfrågade namnet Nordic"` - still the competitor, and broken prose.
+    # Redacting only the looked-up word "Lumia" leaves "Nordic" - still the competitor's name.
     assert "Nordic" not in scrubbed
     assert scrubbed.startswith("Det efterfrågade namnet finns inte")
 
@@ -287,7 +281,6 @@ def test_malformed_json_does_not_raise():
     assert "Svar." in narrative
 
 
-# ------------------------------------------------------------------------- the card
 
 def test_validation_failure_keeps_the_chart_and_drops_the_prose():
     """The safety guarantee, as the user experiences it."""
@@ -297,8 +290,7 @@ def test_validation_failure_keeps_the_chart_and_drops_the_prose():
     assert card.narrative == ""
     assert card.chart is not None
     assert card.query_id == "q_1"
-    # The explanation is rendered from the status, once, by AnswerCard. Putting it in the
-    # caveats too printed it twice on the card, verbatim.
+    # AnswerCard renders the explanation from the status once; it must not repeat in caveats.
     assert not any("kunde inte verifieras" in c for c in card.caveats)
 
 
@@ -339,7 +331,6 @@ def test_provenance_is_built_from_the_tools_own_meta():
     assert card.provenance.vat == "excl"
 
 
-# ------------------------------------------------------------- what a reader is shown (F2)
 
 SUPPRESSED = {"key": "suppressed", "type": "text", "label": "suppressed"}
 PRODUCT_ID = {"key": "product_id", "type": "number", "label": "product_id"}

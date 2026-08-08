@@ -59,7 +59,7 @@ def account(monkeypatch):
 
 @pytest.fixture
 def client():
-    # No lifespan: it opens a Postgres pool, and every database call here is patched.
+    # No lifespan: it opens a Postgres pool, and every DB call here is patched.
     return TestClient(app)
 
 
@@ -78,7 +78,6 @@ def bearer(account: dict) -> dict:
     return {"Authorization": f"Bearer {auth.create_access_token(account)}"}
 
 
-# --------------------------------------------------------------------- reset tokens
 
 def test_a_reset_token_verifies_against_the_hash_it_was_minted_for(account):
     token = token_for(account)
@@ -97,7 +96,7 @@ def test_redeeming_a_reset_link_burns_it(account):
     old_hash = account["password_hash"]
     account["password_hash"] = auth.hash_password("something-else")
 
-    auth.decode_password_reset_token(token, old_hash)          # still valid against the old
+    auth.decode_password_reset_token(token, old_hash)  # still valid against the old hash
     with pytest.raises(jwt.PyJWTError):
         auth.decode_password_reset_token(token, account["password_hash"])
 
@@ -118,15 +117,14 @@ def test_an_access_token_is_not_accepted_as_a_reset_token(account):
 def test_the_user_id_is_read_without_being_trusted(account):
     assert auth.user_id_in_reset_token(token_for(account)) == 7
     assert auth.user_id_in_reset_token("not-a-jwt") is None
-    # Forged `sub`, signed with a key of the attacker's choosing: it parses, and that is fine -
-    # it only decides whose hash the signature is then checked against, which is what fails.
+    # Forged sub, signed with an attacker's own key: it parses fine - it only decides whose
+    # hash the signature is checked against, which is what fails below.
     forged = jwt.encode({"typ": "reset", "sub": "7"}, "attacker-key", algorithm="HS256")
     assert auth.user_id_in_reset_token(forged) == 7
     with pytest.raises(jwt.PyJWTError):
         auth.decode_password_reset_token(forged, account["password_hash"])
 
 
-# ------------------------------------------------------------------- forgot: no oracle
 
 def test_forgot_answers_identically_for_known_and_unknown_addresses(account, client):
     """This route must not become a way to enumerate a retailer's suppliers."""
@@ -135,7 +133,7 @@ def test_forgot_answers_identically_for_known_and_unknown_addresses(account, cli
 
     assert known.status_code == unknown.status_code == 202
     assert known.json() == unknown.json()
-    # And the difference that does exist is invisible to the caller: one mail, not two.
+    # And the difference that does exist is invisible: one mail, not two.
     assert len(account["sent"]) == 1
 
 
@@ -158,7 +156,6 @@ def test_forgot_is_throttled_per_address(account, client):
                        json={"email": account["email"]}).status_code == 429
 
 
-# ------------------------------------------------------------------------ reset route
 
 def test_a_reset_link_sets_the_password_and_cannot_be_replayed(account, client):
     client.post("/api/auth/password/forgot", json={"email": account["email"]})
@@ -191,7 +188,6 @@ def test_a_garbage_token_is_a_400_not_a_500(account, client):
                        ).status_code == 400
 
 
-# ----------------------------------------------------------------------- change route
 
 def test_changing_a_password_requires_the_current_one(account, client):
     """A borrowed session must not become permanent account takeover."""
@@ -228,12 +224,11 @@ def test_a_change_invalidates_outstanding_reset_links(account, client):
                        ).status_code == 400
 
 
-# -------------------------------------------------------------------------- policy
 
 @pytest.mark.parametrize("password, ok", [
     ("a" * (settings.password_min_length - 1), False),
     ("a" * settings.password_min_length, True),
-    ("a" * 201, False),      # unbounded input is unbounded Argon2 work per request
+    ("a" * 201, False),  # unbounded input is unbounded Argon2 work per request
 ])
 def test_the_length_policy_is_enforced_at_the_boundary(password, ok):
     from pydantic import ValidationError

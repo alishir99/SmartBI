@@ -30,7 +30,6 @@ def request_from(ip: str = "198.51.100.7"):
     return SimpleNamespace(client=SimpleNamespace(host=ip))
 
 
-# ------------------------------------------------------------------- the window itself
 
 def test_the_limit_holds_and_then_releases():
     clock = FakeClock()
@@ -103,7 +102,6 @@ def test_exhausted_keys_are_swept_rather_than_accumulated():
     assert len(window._hits) == 1
 
 
-# -------------------------------------------------------------------- the login throttle
 
 @pytest.fixture
 def login_probe(monkeypatch):
@@ -198,7 +196,6 @@ async def test_the_refusal_carries_retry_after(login_probe):
     assert int(caught.value.headers["Retry-After"]) > 0
 
 
-# ----------------------------------------------------------------------- the chat limits
 
 class FakeTenant:
     user_id = 7
@@ -240,7 +237,6 @@ async def test_another_user_is_unaffected(monkeypatch, unlimited_budget):
     await chat_route.chat(ChatRequest(question="q"), Other(), mcp=None, cache=None)
 
 
-# -------------------------------------------------------------------- the tenant budget
 
 @pytest.fixture
 def budget(monkeypatch):
@@ -304,7 +300,6 @@ async def test_the_budget_check_fails_open(budget):
     await ask()
 
 
-# ------------------------------------------------------------------------ request bounds
 
 def turns(count: int, content: str = "hej") -> list[ChatTurn]:
     return [ChatTurn(role="user" if n % 2 == 0 else "assistant", content=content)
@@ -330,9 +325,17 @@ def test_a_realistic_conversation_is_well_under_both_caps():
 
 def test_a_saved_card_may_only_name_a_real_tool():
     chart = {"type": "bar", "title": "Topp 10"}
+    args = {"measures": ["net_sales_sek"]}
     for tool in ("query_sales", "query_market_share"):
-        SaveCardRequest(title="t", chart=chart, tool_name=tool)
+        SaveCardRequest(title="t", chart=chart, tool_name=tool, tool_args=args)
 
     for tool in ("get_capabilities", "drop_everything", "", "query_sales; DROP TABLE"):
         with pytest.raises(ValueError):
-            SaveCardRequest(title="t", chart=chart, tool_name=tool)
+            SaveCardRequest(title="t", chart=chart, tool_name=tool, tool_args=args)
+
+
+def test_a_saved_card_needs_arguments_to_re_run():
+    """`{}` here means the card can never be refreshed, only ever fail with the same message."""
+    chart = {"type": "bar", "title": "Topp 10"}
+    with pytest.raises(ValueError):
+        SaveCardRequest(title="t", chart=chart, tool_name="query_sales", tool_args={})

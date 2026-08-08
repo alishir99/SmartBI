@@ -26,7 +26,6 @@ class SpecError(ValueError):
     """The request cannot be expressed. Always the caller's fault, never a 500."""
 
 
-# What `having.op` may say, and what that becomes in SQL.
 HAVING_OPS = {">": ">", ">=": ">=", "<": "<", "<=": "<=", "=": "=", "!=": "<>"}
 
 
@@ -89,8 +88,8 @@ def resolve_time_range(spec: dict, coverage: tuple[date, date]) -> tuple[date, d
     start = time_range.get("from")
     end = time_range.get("to")
     if not start or not end:
-        # No period given at all: the last full 12 months is the least surprising default, and
-        # meta.time_range reports it so the answer can never be silently undated.
+        # No period given: default to last full 12 months, reported via meta.time_range
+        # so the answer can never be silently undated.
         return (max(coverage_from, _months_back(coverage_to, 12) + timedelta(days=1)),
                 coverage_to)
 
@@ -123,7 +122,7 @@ def shift_range(window: tuple[date, date], mode: str) -> tuple[date, date]:
 def _same_day_last_year(value: date) -> date:
     try:
         return value.replace(year=value.year - 1)
-    except ValueError:            # 29 Feb
+    except ValueError:  # 29 Feb
         return value.replace(year=value.year - 1, day=28)
 
 
@@ -188,8 +187,8 @@ def _where(source: str, filters: dict, window: tuple[date, date],
 
     if ids := filters.get("category_ids"):
         joins.update(("product",))
-        # Two-level hierarchy: a level-1 id matches every product in its children, a level-2 id
-        # matches directly.
+        # Two-level hierarchy: a level-1 id matches every product in its children, a
+        # level-2 id matches directly.
         placeholder = params.add(list(ids))
         clauses.append(
             f"p.category_id IN (SELECT category_id FROM dim_category "
@@ -213,7 +212,7 @@ def _where(source: str, filters: dict, window: tuple[date, date],
             joins.add("store")
         clauses.append(f"{column} = ANY({params.add(list(channels))}::text[])")
 
-    # Note what is *absent*: any supplier predicate.
+    # Note what's absent: any supplier predicate - RLS handles tenant scoping, not this.
     return clauses
 
 
@@ -257,8 +256,7 @@ def _select_block(source: str, measures: list[str], dimensions: list[str],
 
 
 def _positive_int(value, name: str) -> int:
-    # bool is an int in Python, so `limit=True` would otherwise pass as "one row". A caller who
-    # sends a boolean has made a mistake and should hear about it.
+    # bool is an int in Python, so limit=True would otherwise silently pass as "one row".
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise SpecError(f"{name} måste vara ett positivt heltal")
     return value
@@ -295,7 +293,7 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
                 "kvoter vars andelar inte betyder något")
         for key in share_of:
             measure = MEASURES[key]
-            # 100.0, not 100: SUM(qty) is a bigint and integer division would silently truncate
+            # 100.0, not 100: SUM(qty) is bigint, so integer division would truncate
             # every share to a whole percent.
             select_parts.append(
                 f"ROUND((100.0 * {key} / NULLIF(SUM({key}) OVER (), 0))::numeric, 1) "
@@ -307,9 +305,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
 
     where = ""
     if having:
-        # Only aggregates: filtering a dimension is what `filters` is for, and doing it here
-        # would run after the grouping instead of before it - same rows, more work, and a second
-        # way to express one thing.
+        # Aggregates only - filtering a dimension belongs in filters; doing it here would
+        # run after grouping instead of before, duplicating what filters already expresses.
         aggregate_keys = set(measures)
         if compare:
             aggregate_keys |= {f"{key}_compare" for key in measures}
@@ -327,8 +324,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
         value = having.get("value")
         if isinstance(value, bool) or not isinstance(value, int | float | Decimal):
             raise SpecError("having.value måste vara ett tal")
-        # Both sides cast to numeric: the measures are a mix of numeric and bigint, and Decimal
-        # is the only Python type asyncpg encodes as numeric without complaint.
+        # Cast both sides to numeric: measures mix numeric/bigint, and Decimal is the only
+        # Python type asyncpg encodes as numeric without complaint.
         where = (f"\n WHERE {key}::numeric {operator} "
                  f"{params.add(Decimal(str(value)))}::numeric")
 
@@ -343,9 +340,8 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
         if order_by:
             rank_key, direction = _order_key(order_by, output_keys)
             if rank_key not in base_keys:
-                # A window function cannot see another window function's alias at the same
-                # level, and ranking by a share is in any case the same order as ranking by the
-                # measure it divides.
+                # A window function can't see another window function's alias at the same
+                # level; ranking by a share is the same order as ranking by its measure anyway.
                 raise SpecError(f"kan inte rangordna top_n_per på '{rank_key}'; "
                                 "använd måttet självt")
         else:
@@ -356,8 +352,7 @@ def _post_aggregate(sql: str, spec: dict, measures: list[str], dimensions: list[
 
     sql = f"SELECT {', '.join(select_parts)}\n  FROM (\n{sql}\n) q{where}"
     if top_n_per:
-        # A second level, because a window function is not available to the WHERE of the SELECT
-        # that computes it.
+        # Second SELECT level: a window function's own result isn't available to its own WHERE.
         sql = (f"SELECT {', '.join(output_keys)}\n  FROM (\n{sql}\n) w"
                f"\n WHERE __rank <= {params.add(rows)}")
     return sql, columns, order
@@ -394,8 +389,8 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             for key in dimensions:
                 if key in date_dimensions:
                     conditions.append(f"c.{key}__ord = pv.{key}__ord")
-                    # Both real dates are returned: the caller needs to label the comparison
-                    # series with the period it actually came from.
+                    # Both real dates returned - the comparison series needs labelling
+                    # with the period it actually came from.
                     select_parts.append(f"c.{key}")
                     select_parts.append(f"pv.{key} AS {key}_compare")
                 else:
@@ -410,10 +405,8 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
             select_parts += [
                 f"c.{key}",
                 f"pv.{key} AS {key}_compare",
-                # Both deltas are computed here rather than by the model. The absolute one is
-                # what "biggest mover" should usually mean: ranking on the percentage alone
-                # puts a product that went from 400 kr to 6 000 kr above one that gained a
-                # million, and draws a chart with one bar in it.
+                # Absolute delta matters as much as percent: ranking on percent alone puts
+                # a 400->6000 kr product above one that gained a million.
                 f"(c.{key} - pv.{key}) AS {key}_delta",
                 f"ROUND((100.0 * (c.{key} - pv.{key}) / "
                 f"NULLIF(ABS(pv.{key}), 0))::numeric, 1) AS {key}_delta_pct",
@@ -434,12 +427,11 @@ def compile_query(spec: dict, coverage: tuple[date, date]) -> CompiledQuery:
         key, direction = _order_key(order_by, [str(column["key"]) for column in columns])
         keys = [f"{key} {direction} NULLS LAST"]
     elif dimensions:
-        # Every grouped query gets a total order, and it has to be *total* rather than merely
-        # present.
+        # Every grouped query gets a total order, and it has to be total, not merely present.
         leading = dimensions[0]
         if DIMENSIONS[leading].type == "date":
-            # NULLS LAST matters under compare: a period present only in the comparison window
-            # has no current date, and should trail rather than lead the series.
+            # NULLS LAST: a period present only in the comparison window has no current
+            # date and should trail, not lead, the series.
             keys = [f"{leading} ASC NULLS LAST"]
         else:
             keys = [f"{measures[0]} DESC NULLS LAST"]

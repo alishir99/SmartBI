@@ -53,7 +53,6 @@ def problems(case: dict, suite: str = "golden") -> str:
     return " | ".join(cases.validate([case], suite))
 
 
-# ---------------------------------------------------------------- happy path
 
 
 def test_valid_golden_case_has_no_problems():
@@ -65,13 +64,12 @@ def test_valid_adversarial_case_has_no_problems():
 
 
 def test_status_may_be_a_list_in_adversarial():
-    # A refusal that is equally correct as a clarification is a legitimate expectation; only
-    # golden questions are pinned to a single status.
+    # A refusal that's equally correct as a clarification is legitimate here; golden
+    # questions are pinned to a single status.
     assert cases.validate([adversarial(expects={"status": ["cannot_answer", "clarify"]})],
                           "adversarial") == []
 
 
-# ---------------------------------------------------------------- identity and shape
 
 
 def test_non_mapping_case_is_reported():
@@ -99,13 +97,12 @@ def test_empty_expects():
 
 
 def test_unknown_expects_key():
-    # The allow-list is per suite: `suppressed` is meaningful in adversarial.yaml and
-    # meaningless in a golden question, so it must be rejected here and only here.
+    # Allow-list is per suite: `suppressed` is meaningful in adversarial.yaml and
+    # meaningless in a golden question.
     assert "unknown expects key 'suppressed'" in problems(golden(expects={"suppressed": True}))
     assert cases.validate([adversarial(expects={"suppressed": True})], "adversarial") == []
 
 
-# ---------------------------------------------------------------- vocabularies
 
 
 def test_missing_status_is_required():
@@ -115,8 +112,8 @@ def test_missing_status_is_required():
 
 
 def test_unknown_status():
-    # `validation_failed` is a real AnswerCard status and still not a legal expectation - the
-    # system failing its own output check is never the answer we wanted.
+    # A real AnswerCard status, still not a legal expectation: the system failing its own
+    # output check is never the wanted answer.
     assert "unknown status 'validation_failed'" in problems(
         golden(expects={"status": "validation_failed"}))
 
@@ -135,11 +132,9 @@ def test_unknown_chart_type():
 
 
 def test_language_must_be_swedish():
-    # The product answers in Swedish.
     assert "must be 'sv'" in problems(golden(expects={"language": "en"}))
 
 
-# ---------------------------------------------------------------- golden-only rules
 
 
 def test_golden_case_must_carry_a_derivation():
@@ -164,7 +159,7 @@ def test_golden_case_must_expect_ok():
 
 
 def test_absurd_tolerance_is_rejected():
-    # 25 % either way is not a check, it is a shrug.
+    # 25% either way is not a check, it is a shrug.
     assert "proves nothing" in problems(
         golden(expects={"numeric": {"value": 1234.5, "unit": "SEK", "tolerance_pct": 25}}))
 
@@ -197,7 +192,6 @@ def test_caveats_min_must_be_positive():
     assert "caveats_min must be a positive integer" in problems(golden(expects={"caveats_min": 0}))
 
 
-# ---------------------------------------------------------------- multi-turn history
 
 
 def test_a_case_without_history_is_still_valid():
@@ -222,9 +216,8 @@ def test_history_turns_must_be_non_empty_strings():
 
 
 def test_history_may_not_carry_the_assistants_half():
-    # The tempting shape, and the wrong one: the assistant's turn is whatever the system answers
-    # at run time, so a hand-written one would be untraceable prose in a file whose claim is
-    # that everything in it is traceable.
+    # The assistant's turn is whatever the system answers at run time; hand-writing one
+    # would be untraceable prose in a file whose claim is that everything is traceable.
     assert "only the user's half belongs here" in problems(
         golden(history=[{"role": "user", "content": "Vad sålde vi i juni 2026?"}]))
 
@@ -249,7 +242,6 @@ def test_history_needs_no_grader():
     assert "history" not in cases.ADVERSARIAL_EXPECT_KEYS
 
 
-# ---------------------------------------------------------------- adversarial-only rules
 
 
 def test_adversarial_case_needs_a_category():
@@ -265,8 +257,7 @@ def test_adversarial_case_must_assert_something():
 
 
 def test_adversarial_case_may_not_allow_a_bare_ok():
-    # `ok` is legal here only when the row itself is suppressed or specific content is
-    # forbidden.
+    # `ok` is legal here only when the row is suppressed or specific content is forbidden.
     reported = problems(
         adversarial(expects={"status": "ok", "must_not_contain_numbers": True}), "adversarial")
     assert "permits a plain answer" in reported
@@ -291,7 +282,6 @@ def test_must_not_contain_must_be_a_list_of_strings():
         adversarial(expects={"must_not_contain": "Lumia"}), "adversarial")
 
 
-# ---------------------------------------------------------------- the real suites
 
 
 @pytest.mark.parametrize("suite", ["golden", "adversarial"])

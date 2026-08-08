@@ -1,4 +1,3 @@
-/** TanStack Query hooks. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SaveCardRequest } from '../types'
@@ -16,7 +15,7 @@ import {
 import { useLanguageStore } from './i18n'
 
 export const queryKeys = {
-  // The period is part of the key: two windows are two different results, and sharing one cache
+  // Period is part of the key: two windows are two different results, and sharing one cache
   // entry between them would show last year's figures under this week's label.
   dashboard: (period: string) => ['dashboard', period] as const,
   movers: (period: string) => ['movers', period] as const,
@@ -25,21 +24,16 @@ export const queryKeys = {
   regions: ['regions'] as const,
 }
 
-/**
- * The language is part of the key wherever the server writes text into the response.
- *
- * Card titles, KPI labels and caveats are all server-written, so a cached English dashboard
- * served under a Swedish session would be a page in two languages - and TanStack has no way to
- * know the request differed unless the key says so.
- */
+// Language is part of the key wherever the server writes text into the response (card titles,
+// KPI labels, caveats) - TanStack has no way to know the request differed unless the key says so.
 export function useDashboard(period: string = DEFAULT_PERIOD) {
   const lang = useLanguageStore((state) => state.lang)
   return useQuery({
     queryKey: [...queryKeys.dashboard(period), lang],
     queryFn: () => fetchDashboard(period),
     staleTime: 5 * 60 * 1000,
-    // Keeps the previous window on screen while the next one loads, so switching period does
-    // not blank the page and bounce the layout.
+    // Keeps the previous window on screen while the next loads, so switching period doesn't
+    // blank the page and bounce the layout.
     placeholderData: (previous) => previous,
   })
 }
@@ -65,7 +59,7 @@ export function useResult(queryId: string | null) {
   })
 }
 
-/** Region centroids. One per deployment and effectively static, so it is fetched once. */
+/** Region centroids. One per deployment and effectively static, so it's fetched once. */
 export function useRegions() {
   return useQuery({
     queryKey: queryKeys.regions,

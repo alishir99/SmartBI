@@ -20,8 +20,7 @@ async def get_capabilities(tenant: TenantContext) -> dict:
     coverage_from, coverage_to = await db.coverage()
 
     async with db.tenant_connection(tenant.supplier_id) as connection:
-        # Scoped by RLS to the caller's own brands, so this doubles as the answer to "vad räknas
-        # som vårt märke?".
+        # Scoped by RLS to the caller's own brands, so this doubles as "vad räknas som vårt märke?".
         brands = await connection.fetch(
             "SELECT brand_id, name FROM dim_brand ORDER BY name")
         supplier = await connection.fetchrow(
@@ -29,16 +28,13 @@ async def get_capabilities(tenant: TenantContext) -> dict:
         categories = await connection.fetch(
             "SELECT category_id, name, level, parent_id FROM dim_category "
             "ORDER BY level, name")
-        # Coordinates come along because they are the only thing that lets a map be drawn for
-        # a warehouse whose regions nobody hardcoded. The mean store position is a good enough
-        # centroid for a proportional-symbol map, and `NULL` where a region has no geocoded
-        # store is an honest answer the client can hide a map tab over.
+        # Mean store position as centroid for a proportional-symbol map; NULL where a region
+        # has no geocoded store is an answer the client can hide a map tab over.
         regions = await connection.fetch(
             "SELECT region, AVG(lat) AS lat, AVG(lon) AS lon "
             "  FROM dim_store GROUP BY region ORDER BY region")
-        # Calendar, not sales: dim_date is ~730 rows and carries no tenant data, so this is a
-        # dimension read like the four above rather than a trip to the fact table. Each
-        # campaign_id is one contiguous run of days, so MIN/MAX is the window.
+        # dim_date is ~730 rows with no tenant data - a dimension read, not a fact-table trip.
+        # Each campaign_id is one contiguous run of days, so MIN/MAX gives its window.
         campaigns = await connection.fetch(
             "SELECT campaign_id, MIN(date) AS starts, MAX(date) AS ends "
             "  FROM dim_date WHERE campaign_id IS NOT NULL "
@@ -67,8 +63,8 @@ async def get_capabilities(tenant: TenantContext) -> dict:
                   **({"allowed_values": CHANNELS} if key == "channel" else {})}
             for key, meta in FILTER_FIELDS.items()
         },
-        # Name plus centroid. The client's map projects whatever comes back and fits its own
-        # bounds to it, so this works for counties, states, prefectures or nothing at all.
+        # Name + centroid only - the client fits its own map bounds, so this works for
+        # counties, states, prefectures, or no regions at all.
         "regions": [{"name": r["region"],
                      "lat": float(r["lat"]) if r["lat"] is not None else None,
                      "lon": float(r["lon"]) if r["lon"] is not None else None}
@@ -85,8 +81,8 @@ async def get_capabilities(tenant: TenantContext) -> dict:
             "note": "Relativa perioder räknas från sista datumet i datan, inte från dagens "
                     "datum. Det finns ingen data efter coverage.to.",
             "compare_to": ["previous_period", "same_period_last_year"],
-            # The warehouse stores the campaign's id and its days, not its name - so this says
-            # when a campaign ran, and never what it was called.
+            # Warehouse stores campaign id + dates, never a name - this says when a
+            # campaign ran, not what it was called.
             "campaigns": [{"campaign_id": r["campaign_id"],
                            "from": r["starts"].isoformat(),
                            "to": r["ends"].isoformat()} for r in campaigns],

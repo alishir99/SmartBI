@@ -31,8 +31,8 @@ def recorder(monkeypatch):
     answers: dict[str, Observed] = {}
 
     async def fake_ask(session, question, timeout, history=None):
-        # Copied, not aliased: the driver mutates one history list across the conversation, and
-        # a shared reference would make every recorded turn show the final state.
+        # Copied, not aliased: the driver mutates one history list across the conversation,
+        # so a shared reference would show every recorded turn as the final state.
         sent.append((question, list(history or [])))
         return answers.get(question, Observed(card=card(f"Svar på {question}")))
 
@@ -45,7 +45,6 @@ def run(spec: dict):
                                          timeout=1.0, semaphore=asyncio.Semaphore(1)))
 
 
-# ---------------------------------------------------------------- the wire
 
 
 def test_a_single_turn_case_still_sends_an_empty_history(recorder):
@@ -89,7 +88,6 @@ def test_several_prior_turns_accumulate_in_order(recorder):
         "user", "assistant", "user", "assistant"]
 
 
-# ---------------------------------------------------------------- a broken prelude
 
 
 def test_a_set_up_turn_that_never_answered_fails_the_case_on_the_prelude(recorder):

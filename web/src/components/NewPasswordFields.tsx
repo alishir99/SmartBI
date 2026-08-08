@@ -1,10 +1,5 @@
-/**
- * "New password" plus "repeat it", and the one rule both places enforce.
- *
- * Shared by the reset page and the change-password panel so the two cannot drift on what a
- * valid password is - and so the minimum length shown is the one the server will actually
- * apply, which is why it comes from `/api/config` rather than from a constant here.
- */
+/** Shared by the reset page and the change-password panel so the two forms cannot drift on
+ * what a valid password is - the shown minimum comes from /api/config, the server's own rule. */
 
 import { passwordMinLength } from '../lib/config'
 import { t } from '../lib/i18n'
@@ -14,13 +9,8 @@ export type NewPassword = { password: string; repeat: string }
 
 export const EMPTY_PASSWORD: NewPassword = { password: '', repeat: '' }
 
-/**
- * Why this pair is not yet submittable, or null when it is.
- *
- * Returns a *reason*, not a boolean, so the caller shows the specific problem rather than a
- * disabled button with no explanation. Silent while the user is still typing the confirmation:
- * "the passwords do not match" under a half-typed second field is noise, not help.
- */
+/** Why the pair isn't submittable yet, or null - a reason, not a boolean, so the caller shows
+ * the specific problem. Silent about a mismatch while the user is still typing the repeat. */
 export function passwordProblem(value: NewPassword, touched: boolean): string | null {
   const min = passwordMinLength()
   if (value.password.length < min) {
@@ -30,7 +20,6 @@ export function passwordProblem(value: NewPassword, touched: boolean): string | 
   return null
 }
 
-/** True when the pair is complete and consistent - the condition for enabling submit. */
 export function passwordReady(value: NewPassword): boolean {
   return (
     value.password.length >= passwordMinLength() && value.password === value.repeat

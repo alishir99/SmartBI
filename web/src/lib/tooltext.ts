@@ -38,8 +38,8 @@ export function describeToolCall(tool: string, args: Record<string, unknown>): s
       const channel = firstString(filters.channel)
       const dimensions = Array.isArray(args.dimensions) ? (args.dimensions as string[]) : []
       const scope = region ?? (channel ? channelLabel(channel) : null)
-      // The dimension names come off the same key table the chart axes use, so a chip and the
-      // axis under it cannot disagree about what "region" is called.
+      // Same key table the chart axes use, so a chip and the axis under it cannot disagree
+      // about what "region" is called.
       const grain = dimensions.length
         ? t('tool.per', { dimension: columnLabel(dimensions[0], dimensions[0]).toLowerCase() })
         : null

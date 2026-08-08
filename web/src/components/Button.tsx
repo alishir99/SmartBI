@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Spinner } from './Icons'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'quiet'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'quiet' | 'outline'
 type Size = 'sm' | 'md' | 'lg'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -20,6 +20,7 @@ const VARIANTS: Record<Variant, string> = {
     'bg-surface-2 text-ink hover:bg-surface-3 active:opacity-90 ring-1 ring-inset ring-hairline',
   ghost: 'bg-transparent text-ink-secondary hover:bg-surface-2 hover:text-ink',
   quiet: 'bg-transparent text-accent hover:bg-accent-soft',
+  outline: 'bg-surface text-accent ring-1 ring-inset ring-hairline hover:bg-accent-soft',
 }
 
 const SIZES: Record<Size, string> = {

@@ -22,8 +22,8 @@ logger = logging.getLogger("api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Before anything else, and before the port is listening: an unconfigured deployment must
-    # not reach the point of answering a request.
+    # Before anything else, before the port listens: an unconfigured deployment must never
+    # reach the point of answering a request.
     settings.assert_secrets_rotated()
     await db.init_pool()
     app.state.mcp = McpClient()
@@ -46,8 +46,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # An allowlist, not "*": the API is called with a bearer token, and a wildcard origin on a
-    # credentialed API is how a malicious page reads a logged-in user's data.
+    # An allowlist, not "*": a wildcard origin on a bearer-token API is how a malicious page
+    # reads a logged-in user's data.
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
@@ -64,8 +64,7 @@ async def request_context(request: Request, call_next):
     """
     request_id = request.headers.get("X-Request-Id") or logs.new_turn_id()
     logs.bind(request_id=request_id, path=request.url.path, method=request.method)
-    # Every string the server writes under this request picks its language from here. An
-    # explicit `?lang` wins over the browser's header, because the app has a language switcher
+    # Explicit `?lang` wins over the browser header: the app has its own language switcher,
     # and a user who flips it means it for this app, not for every site they visit.
     i18n.use(request.query_params.get("lang") or request.headers.get("Accept-Language"))
     started = time.monotonic()
@@ -83,17 +82,13 @@ async def request_context(request: Request, call_next):
     return response
 
 
-# The API serves JSON, SSE and one CSV - no scripts, no styles, no frames, no images. So the
-# policy can be the strictest one there is. It matters because the session token lives in
-# `localStorage` (SSE over fetch needs an Authorization header, which an httpOnly cookie cannot
-# carry), and that trade means any injected script is a session takeover: narrowing the script
-# surface to nothing is the other half of the answer.
+# API serves only JSON/SSE/CSV, so CSP can be maximally strict. The session token lives in
+# localStorage (SSE needs an Authorization header), so zero script surface is what stops
+# injection from becoming a session takeover.
 _CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
-# Except Swagger UI - the only HTML this API serves, and it loads its bundle from jsdelivr and
-# runs an inline initialiser. Naming that one host on those three paths is what lets the policy
-# above stay absolute everywhere else; the alternative was one policy loose enough for the docs
-# page, applied to every route that carries data.
+# Swagger UI is the one HTML page served, and it loads its bundle from jsdelivr with inline JS;
+# scoping the exception to these paths keeps the strict CSP absolute everywhere else.
 _DOCS_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc"}
 _DOCS_CSP = ("default-src 'none'; "
              "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
@@ -134,13 +129,12 @@ async def config() -> dict:
     return {
         "currency": settings.app_currency,
         "locale": settings.app_locale,
-        # The deployment's default, deliberately not "the language of this request": the client
-        # owns the language (it has a switcher and a stored preference) and only needs to know
-        # what it falls back to. Naming it `language` invited reading `?lang=en` back out of it.
+        # Deployment default, not this request's language: the client owns language state
+        # (switcher + stored preference) and only needs to know the fallback.
         "default_language": i18n.resolve(None),
         "languages": list(i18n.LANGUAGES),
-        # So the client can say "at least N characters" before a round trip, and say the same
-        # number the server will enforce. One rule, one source.
+        # So the client can validate "at least N characters" locally, using the same number
+        # the server enforces.
         "password_min_length": settings.password_min_length,
     }
 

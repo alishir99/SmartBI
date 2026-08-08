@@ -20,9 +20,7 @@ KNOWN_TOOLS = frozenset({
     "get_capabilities", "resolve_entities", "query_sales", "query_market_share",
 })
 
-# Read off DimensionKey rather than copied from it. The hand-written copy had drifted: it was
-# missing month_of_year, weekday, is_holiday and campaign_id, so a valid eval case using any of
-# them was rejected by the loader - the suite refusing to measure the tools' actual surface.
+# Read off DimensionKey, not copied - a hand copy had drifted and silently rejected valid cases.
 KNOWN_DIMENSIONS = frozenset(get_args(DimensionKey))
 
 # Mirrors ChartSpec.type in docs/API_CONTRACT.md.
@@ -35,8 +33,7 @@ STATUSES = frozenset({"ok", "clarify", "cannot_answer"})
 
 KNOWN_UNITS = frozenset({"SEK", "st", "%"})
 
-# The frontend feeds back the last eight history entries - four question/answer pairs
-# (web/src/lib/chat.ts :: toHistory).
+# Frontend feeds back the last 8 history entries = 4 Q/A pairs (web/src/lib/chat.ts::toHistory).
 MAX_HISTORY_TURNS = 4
 
 GOLDEN_EXPECT_KEYS = frozenset({
@@ -212,8 +209,7 @@ def _check_golden(where: str, case: dict, expects: dict) -> list[str]:
             problems.append(f"{where}: golden questions must expect status 'ok' - a case "
                             f"that should be refused belongs in adversarial.yaml")
 
-    # Traceability, enforced rather than commented: every golden case carries a derivation, and
-    # tests/test_expectations.py re-computes it against the CSVs.
+    # Traceability enforced, not just commented: test_expectations.py re-computes this.
     derivation = case.get("derivation")
     if not isinstance(derivation, dict) or not derivation:
         problems.append(f"{where}: missing `derivation` - every expected value must be "
@@ -340,11 +336,10 @@ def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
     statuses = expects.get("status")
     statuses = statuses if isinstance(statuses, list) else [statuses]
 
-    # The three negative assertions are the usual way an adversarial case bites: forbid a
-    # number, forbid a substring, or require the suppression flag.
+    # Usual ways a case bites: forbid a number, forbid a substring, or require suppression.
     asserted = {"must_not_contain_numbers", "suppressed", "must_not_contain"} & set(expects)
 
-    # A fourth way, narrower and only sound for a case that must be refused outright.
+    # A fourth way, only sound when the case must be refused outright.
     if not asserted and expects.get("must_contain"):
         if statuses and all(status in ("cannot_answer", "clarify") for status in statuses):
             asserted = {"must_contain"}
@@ -353,8 +348,7 @@ def _check_adversarial(where: str, case: dict, expects: dict) -> list[str]:
         problems.append(f"{where}: asserts nothing - an adversarial case must set at least "
                         f"one of must_not_contain_numbers, suppressed, must_not_contain, or "
                         f"must_contain alongside a refusing status")
-    # `must_not_contain_numbers` is deliberately NOT accepted here, though it looks like it
-    # should be.
+    # must_not_contain_numbers deliberately NOT accepted here, though it looks like it should be.
     if "ok" in statuses and not expects.get("suppressed") and "must_not_contain" not in expects:
         problems.append(f"{where}: allows status 'ok' without requiring suppression or "
                         f"forbidding content - that permits a plain answer")

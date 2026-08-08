@@ -3,7 +3,6 @@ import { formatCell, isCurrency } from '../lib/format'
 import { pointQuestion } from '../lib/questions'
 import { columnLabel } from '../lib/i18n'
 
-/** The table view every chart can fall back to. */
 export function DataTable({
   columns,
   rows,

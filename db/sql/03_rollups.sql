@@ -1,12 +1,6 @@
--- Materialised rollups (IMPLEMENTATION_PLAN.md §5.3).
---
--- Two reasons these exist, and both matter:
---   1. Latency - the standard dashboard is six tiles and the answer changes once a day.
---   2. They are the privacy boundary. mv_category_daily and mv_brand_monthly are the only
---      objects query_market_share may read. Competitor detail is not "filtered out" by
---      application logic; it was never in the object the tool can reach.
---
--- Each has a UNIQUE index so REFRESH MATERIALIZED VIEW CONCURRENTLY works.
+-- Materialised rollups (§5.3): latency, plus the privacy boundary - mv_category_daily and
+-- mv_brand_monthly are the only objects query_market_share may read, so competitor detail
+-- was never in the object, not filtered out after the fact.
 
 -- Own-brand detail, still supplier-attributable. Reached through v_sales_daily.
 CREATE MATERIALIZED VIEW mv_sales_daily AS
@@ -31,10 +25,8 @@ CREATE UNIQUE INDEX uq_mv_sales_daily
     ON mv_sales_daily (date, supplier_id, product_id, region, channel);
 CREATE INDEX idx_mv_sales_daily_supplier ON mv_sales_daily (supplier_id, date);
 
--- Category totals across ALL brands. Carries no brand or supplier identity - the
--- identity has been aggregated away, which is what makes it safe to read across tenants.
--- n_brands / n_transactions are carried so the k-anonymity guard (§11.3) has something
--- to test at query time.
+-- Category totals across ALL brands, no brand/supplier identity - aggregated away is what
+-- makes it safe to read cross-tenant. n_brands/n_transactions feed the k-anonymity guard (§11.3).
 CREATE MATERIALIZED VIEW mv_category_daily AS
 SELECT
     d.date,
@@ -54,10 +46,8 @@ GROUP BY d.date, p.category_id, st.region, st.channel;
 CREATE UNIQUE INDEX uq_mv_category_daily
     ON mv_category_daily (date, category_id, region, channel);
 
--- One row per brand × category × region × month, each row already carrying its own
--- category context (total, share, rank, peer count). A supplier reads only its own
--- rows, and those rows are sufficient to answer "how am I doing vs the category"
--- without any competitor row ever being reachable.
+-- Each row carries its own category context (total/share/rank/peer count), so a supplier
+-- can answer "how am I doing vs category" from only its own rows.
 CREATE MATERIALIZED VIEW mv_brand_monthly AS
 WITH base AS (
     SELECT

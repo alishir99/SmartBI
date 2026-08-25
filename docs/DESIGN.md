@@ -1,6 +1,6 @@
 # AI-native försäljningsdashboard — Design rationale
 
-**Case:** Solvigo utvecklarcase — "BI utan BI-avdelning"
+**Origin:** personal portfolio project, inspired by a take-home case brief titled "BI utan BI-avdelning" ("BI without a BI department")
 **Author:** Ali Shirzad
 **Written:** 2026-07-27, before the code
 
@@ -13,7 +13,7 @@
 
 ## 1. What the case actually asks for
 
-Restated from `utvecklarcase-solvigo.pdf`, in the order it will be graded:
+Restated from the original case brief, in the order it was originally graded:
 
 | # | Requirement | Where it's addressed |
 |---|---|---|
@@ -44,7 +44,7 @@ a **finished dashboard** — not an empty chat box.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Solvigo Insights          Leverantör: Nordströms Audio AB    [ ⌄ ]  │
+│  SmartBI Insights          Leverantör: Nordströms Audio AB    [ ⌄ ]  │
 ├────────────┬─────────────────────────────────────────────────────────┤
 │ Översikt   │  Försäljning     Andel av      Sålda        Snittpris   │
 │ Produkter  │   12,4 Mkr        kategori     enheter        349 kr    │
@@ -544,7 +544,7 @@ abuse — and the adversarial eval set (§13.3) proves it rather than assuming i
 ## 12. Repository layout
 
 ```
-solvigo-insights/
+smartbi-insights/
 ├─ docker-compose.yml
 ├─ README.md                      # architecture + choices (a required deliverable)
 ├─ .github/workflows/ci.yml

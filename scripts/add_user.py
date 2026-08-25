@@ -5,7 +5,7 @@ for building a demo database from nothing and catastrophic on a live one, becaus
 takes every saved card and audit row with it. Onboarding a customer is not seeding, so it is
 its own script.
 
-    python scripts/add_user.py --email ali@solvigo.se \\
+    python scripts/add_user.py --email ali@smartbi.se \\
                               --name "Ali Shirzad" \\
                               --supplier "Nordström Audio AB"
 

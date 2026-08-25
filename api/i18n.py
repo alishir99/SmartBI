@@ -137,10 +137,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "agent.checking_numbers": "Kontrollerar siffrorna mot datan…",
         "agent.rewriting": "Skriver om svaret…",
         "agent.error": "Något gick fel i agenten: {error}",
-        "mail.reset_subject": "Återställ ditt lösenord - Solvigo Insights",
+        "mail.reset_subject": "Återställ ditt lösenord - SmartBI Insights",
         "mail.reset_body": (
             "Hej {name},\n\n"
-            "Någon har begärt ett nytt lösenord för ditt Solvigo Insights-konto. Öppna "
+            "Någon har begärt ett nytt lösenord för ditt SmartBI Insights-konto. Öppna "
             "länken nedan för att välja ett:\n\n"
             "{link}\n\n"
             "Länken gäller i {minutes} minuter och kan bara användas en gång.\n\n"
@@ -219,10 +219,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "agent.checking_numbers": "Checking the numbers against the data…",
         "agent.rewriting": "Rewriting the answer…",
         "agent.error": "Something went wrong in the agent: {error}",
-        "mail.reset_subject": "Reset your password - Solvigo Insights",
+        "mail.reset_subject": "Reset your password - SmartBI Insights",
         "mail.reset_body": (
             "Hi {name},\n\n"
-            "Someone asked for a new password for your Solvigo Insights account. Open the "
+            "Someone asked for a new password for your SmartBI Insights account. Open the "
             "link below to choose one:\n\n"
             "{link}\n\n"
             "The link is valid for {minutes} minutes and can only be used once.\n\n"

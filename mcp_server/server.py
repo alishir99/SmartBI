@@ -45,7 +45,7 @@ leverantör, och det är avsiktligt.
 """
 
 mcp = FastMCP(
-    name="solvigo-insights",
+    name="smartbi-insights",
     instructions=INSTRUCTIONS,
     host=settings.mcp_host,
     port=settings.mcp_port,

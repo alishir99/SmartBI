@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 IN_REPO_DEFAULTS = {
     "jwt_secret": "dev-only-change-me",
     "internal_token": "dev-internal-token",
-    "postgres_password": "solvigo",
+    "postgres_password": "smartbi",
 }
 
 
@@ -17,14 +17,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # `dev` is the demo posture: published internal ports, in-repo secrets, no TLS.
-    solvigo_env: str = "prod"
+    smartbi_env: str = "prod"
 
     # The API's own Postgres connection, not the MCP role.
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_db: str = "solvigo"
-    postgres_user: str = "solvigo"
-    postgres_password: str = "solvigo"
+    postgres_db: str = "smartbi"
+    postgres_user: str = "smartbi"
+    postgres_password: str = "smartbi"
 
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     # Mail (api/mail.py): `log` writes to the app log for local/demo use, `smtp` sends for
     # real. stdlib smtplib only - a provider SDK is a dependency, an account, another failure mode.
     mail_backend: str = "log"  # log | smtp
-    mail_from: str = "no-reply@solvigo.example"
+    mail_from: str = "no-reply@smartbi.example"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -111,7 +111,7 @@ class Settings(BaseSettings):
 
     def unrotated_secrets(self) -> list[str]:
         """Which guarded fields still hold the value published in this repository."""
-        if self.solvigo_env.strip().lower() == "dev":
+        if self.smartbi_env.strip().lower() == "dev":
             return []
         return sorted(name for name, default in IN_REPO_DEFAULTS.items()
                       if getattr(self, name) == default)
@@ -123,7 +123,7 @@ class Settings(BaseSettings):
                 f"api: refusing to start with the in-repo default for "
                 f"{', '.join(unchanged)}. These values are public - anyone who can read "
                 f"the repository can mint a session with them. Set real values, or set "
-                f"SOLVIGO_ENV=dev to run the local demo.")
+                f"SMARTBI_ENV=dev to run the local demo.")
 
 
 settings = Settings()

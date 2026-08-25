@@ -6,9 +6,9 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-solvigo}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solvigo}
-      POSTGRES_DB: ${POSTGRES_DB:-solvigo}
+      POSTGRES_USER: ${POSTGRES_USER:-smartbi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartbi}
+      POSTGRES_DB: ${POSTGRES_DB:-smartbi}
     # No published port: publishing 5432 would put credentials-bearing Postgres on the host
     # interface. docker-compose.demo.yml adds it back for hands-on work.
     volumes:
@@ -18,7 +18,7 @@ services:
       # -h 127.0.0.1 forces a TCP check: docker-entrypoint-initdb.d holds TCP closed until
       # init finishes, so a socket-only pg_isready would report healthy mid-init and race seed.
       test: ["CMD-SHELL",
-             "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-solvigo} -d ${POSTGRES_DB:-solvigo}"]
+             "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-smartbi} -d ${POSTGRES_DB:-smartbi}"]
       interval: 5s
       timeout: 5s
       retries: 20

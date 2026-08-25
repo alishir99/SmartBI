@@ -2,8 +2,8 @@
 import { create } from 'zustand'
 import type { User } from '../types'
 
-const TOKEN_KEY = 'solvigo.token'
-const USER_KEY = 'solvigo.user'
+const TOKEN_KEY = 'smartbi.token'
+const USER_KEY = 'smartbi.user'
 
 function readStoredUser(): User | null {
   try {

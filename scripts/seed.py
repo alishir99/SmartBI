@@ -30,8 +30,8 @@ TABLES = [
 DEMO_PASSWORD = "demo1234"
 
 DEMO_USERS = [
-    ("ali@solvigo.se", "Ali Shirzad", "Nordström Audio AB", "supplier_admin"),
-    ("sara@solvigo.se", "Sara Lindqvist", "Lagerkvist Hem AB", "supplier_viewer"),
+    ("ali@smartbi.se", "Ali Shirzad", "Nordström Audio AB", "supplier_admin"),
+    ("sara@smartbi.se", "Sara Lindqvist", "Lagerkvist Hem AB", "supplier_viewer"),
 ]
 # Second account exists so tenant isolation can be shown live: log in as Sara and the same
 # question returns a different company's numbers.
@@ -94,11 +94,11 @@ CATEGORY_SYNONYMS = {
 
 
 def dsn() -> str:
-    user = os.getenv("POSTGRES_USER", "solvigo")
-    password = os.getenv("POSTGRES_PASSWORD", "solvigo")
+    user = os.getenv("POSTGRES_USER", "smartbi")
+    password = os.getenv("POSTGRES_PASSWORD", "smartbi")
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
-    database = os.getenv("POSTGRES_DB", "solvigo")
+    database = os.getenv("POSTGRES_DB", "smartbi")
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 

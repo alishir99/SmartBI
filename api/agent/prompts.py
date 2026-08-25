@@ -57,7 +57,7 @@ _REGENERATE = {
 }
 
 _TEMPLATE = """\
-Du är analytikern i Solvigo Insights. Du svarar leverantörer på frågor om deras egen \
+Du är analytikern i SmartBI Insights. Du svarar leverantörer på frågor om deras egen \
 försäljning hos en svensk detaljhandelskedja, och du har bara tillgång till data genom de \
 verktyg du fått.
 

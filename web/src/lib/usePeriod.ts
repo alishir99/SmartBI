@@ -37,7 +37,7 @@ function choiceStore(storageKey: string, keys: readonly string[], fallback: stri
   return { subscribe, read, set, fallback }
 }
 
-const periodStore = choiceStore('solvigo.period', PERIOD_KEYS, DEFAULT_PERIOD)
+const periodStore = choiceStore('smartbi.period', PERIOD_KEYS, DEFAULT_PERIOD)
 
 export const setPeriod = periodStore.set
 

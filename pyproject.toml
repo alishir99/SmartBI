@@ -1,5 +1,5 @@
 [project]
-name = "solvigo-insights"
+name = "smartbi-insights"
 version = "0.1.0"
 description = "AI-native sales dashboard for suppliers - MCP semantic layer over a Swedish retail star schema"
 requires-python = ">=3.13"

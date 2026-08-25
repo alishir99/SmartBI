@@ -23,7 +23,7 @@ import grade  # noqa: E402
 from grade import FAMILIES, CaseResult, Observed, family_of, family_rates  # noqa: E402
 
 DEFAULT_BASE_URL = "http://localhost:8000"
-DEFAULT_EMAIL = "ali@solvigo.se"
+DEFAULT_EMAIL = "ali@smartbi.se"
 DEFAULT_PASSWORD = "demo1234"
 
 # One agent turn is several LLM round-trips plus a database query.
@@ -357,9 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adversarial", action="store_true",
                         help="run the adversarial suite instead of the golden one")
     parser.add_argument("--all", action="store_true", help="run both suites")
-    parser.add_argument("--base-url", default=os.environ.get("SOLVIGO_API_URL",
+    parser.add_argument("--base-url", default=os.environ.get("SMARTBI_API_URL",
                                                              DEFAULT_BASE_URL),
-                        help=f"API root (env SOLVIGO_API_URL, default {DEFAULT_BASE_URL})")
+                        help=f"API root (env SMARTBI_API_URL, default {DEFAULT_BASE_URL})")
     parser.add_argument("--email", default=DEFAULT_EMAIL, help="demo account e-mail")
     parser.add_argument("--password", default=DEFAULT_PASSWORD, help="demo account password")
     parser.add_argument("--case", action="append", dest="case_ids", metavar="ID",

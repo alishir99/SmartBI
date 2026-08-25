@@ -9,8 +9,8 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from .config import settings
 
-HEADER_SUPPLIER = "x-solvigo-supplier-id"
-HEADER_TOKEN = "x-solvigo-internal-token"
+HEADER_SUPPLIER = "x-smartbi-supplier-id"
+HEADER_TOKEN = "x-smartbi-internal-token"
 
 
 @dataclass(frozen=True)

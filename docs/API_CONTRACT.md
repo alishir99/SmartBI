@@ -34,8 +34,8 @@ Demo accounts (seeded, password `demo1234`):
 
 | email | supplier |
 |---|---|
-| `ali@solvigo.se` | Nordström Audio AB (the demo tenant) |
-| `sara@solvigo.se` | Lagerkvist Hem AB (for showing isolation live) |
+| `ali@smartbi.se` | Nordström Audio AB (the demo tenant) |
+| `sara@smartbi.se` | Lagerkvist Hem AB (for showing isolation live) |
 
 ---
 

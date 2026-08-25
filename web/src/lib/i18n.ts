@@ -10,7 +10,7 @@ export const LANGUAGES: Language[] = ['sv', 'en']
 
 export const LANGUAGE_NAMES: Record<Language, string> = { sv: 'Svenska', en: 'English' }
 
-const LANGUAGE_KEY = 'solvigo.lang'
+const LANGUAGE_KEY = 'smartbi.lang'
 
 function isLanguage(value: unknown): value is Language {
   return LANGUAGES.includes(value as Language)
@@ -207,7 +207,7 @@ const sv: Table = {
   'period.all_time.short': 'Allt',
   'period.previous': 'vs föregående period',
 
-  'login.title': 'Solvigo Insights',
+  'login.title': 'SmartBI Insights',
   'login.subtitle': 'Din försäljning hos handlaren, utan omvägar.',
   'login.email': 'E-post',
   'login.password': 'Lösenord',
@@ -242,13 +242,13 @@ const sv: Table = {
   'password.rule': 'Minst {min} tecken. Längd skyddar bättre än specialtecken.',
   'login.failed': 'Inloggningen misslyckades.',
   'login.demo_hint': 'Demokonton finns i repots README.',
-  'shared.eyebrow': 'Delad vy · Solvigo Insights',
+  'shared.eyebrow': 'Delad vy · SmartBI Insights',
   'shared.title': 'Delad vy',
   'shared.by':
     'Delad av {name}. Siffrorna hämtas färskt ur {name}s data varje gång länken öppnas, under deras behörighet - aldrig under din.',
   'shared.expires': 'Länken slutar fungera {date}.',
   'shared.footer':
-    'Solvigo Insights - färdiga svar om försäljningen, direkt ur handlarens data.',
+    'SmartBI Insights - färdiga svar om försäljningen, direkt ur handlarens data.',
 
   'overview.title': 'Översikt',
   'overview.description': 'Din försäljning hos handlaren, mot perioden dessförinnan.',
@@ -498,7 +498,7 @@ const en: Table = {
   'period.all_time.short': 'All',
   'period.previous': 'vs previous period',
 
-  'login.title': 'Solvigo Insights',
+  'login.title': 'SmartBI Insights',
   'login.subtitle': 'Your sales at the retailer, without the detours.',
   'login.email': 'Email',
   'login.password': 'Password',
@@ -534,13 +534,13 @@ const en: Table = {
   'password.rule': 'At least {min} characters. Length protects better than special characters.',
   'login.failed': 'Sign-in failed.',
   'login.demo_hint': 'Demo accounts are in the repository README.',
-  'shared.eyebrow': 'Shared view · Solvigo Insights',
+  'shared.eyebrow': 'Shared view · SmartBI Insights',
   'shared.title': 'Shared view',
   'shared.by':
     'Shared by {name}. The figures are read fresh from {name}’s data every time the link is opened, under their permissions - never under yours.',
   'shared.expires': 'The link stops working on {date}.',
   'shared.footer':
-    'Solvigo Insights - ready answers about your sales, straight from the retailer’s data.',
+    'SmartBI Insights - ready answers about your sales, straight from the retailer’s data.',
 
   'overview.title': 'Overview',
   'overview.description': 'Your sales at the retailer, against the period before.',

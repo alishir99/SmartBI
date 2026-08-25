@@ -16,9 +16,9 @@ SERVICES = [pytest.param(ApiSettings, API_DEFAULTS, id="api"),
             pytest.param(McpSettings, MCP_DEFAULTS, id="mcp")]
 
 
-def build(cls, defaults: dict, *, solvigo_env: str = "prod", **overrides):
+def build(cls, defaults: dict, *, smartbi_env: str = "prod", **overrides):
     """Construct settings, then run the check the entrypoints run at boot."""
-    values = {**defaults, "solvigo_env": solvigo_env, **overrides}
+    values = {**defaults, "smartbi_env": smartbi_env, **overrides}
     settings = cls(_env_file=None, **values)
     settings.assert_secrets_rotated()
     return settings
@@ -68,13 +68,13 @@ def test_the_error_never_prints_the_value(cls, defaults):
 @pytest.mark.parametrize("value", ["prod", "production", "staging", "", "development", "devx"])
 def test_only_dev_exactly_opts_in(cls, defaults, value):
     with pytest.raises(RuntimeError):
-        build(cls, defaults, solvigo_env=value)
+        build(cls, defaults, smartbi_env=value)
 
 
 @pytest.mark.parametrize("cls,defaults", SERVICES)
 def test_production_is_the_default_posture(cls, defaults):
-    """Forgetting to set SOLVIGO_ENV must not be a way into the demo posture."""
-    assert cls.model_fields["solvigo_env"].default == "prod"
+    """Forgetting to set SMARTBI_ENV must not be a way into the demo posture."""
+    assert cls.model_fields["smartbi_env"].default == "prod"
 
 
 # --------------------------------------------------------------------------- it still boots
@@ -83,7 +83,7 @@ def test_production_is_the_default_posture(cls, defaults):
 @pytest.mark.parametrize("value", ["dev", "DEV", " dev "])
 def test_dev_permits_the_demo_defaults(cls, defaults, value):
     """The local demo has to keep working with nothing but the checked-in .env.example."""
-    settings = build(cls, defaults, solvigo_env=value)
+    settings = build(cls, defaults, smartbi_env=value)
 
     for name, default in defaults.items():
         assert getattr(settings, name) == default
@@ -123,7 +123,7 @@ def unconfigured(monkeypatch):
     from mcp_server import config as mcp_config
 
     for module, defaults in ((api_config, API_DEFAULTS), (mcp_config, MCP_DEFAULTS)):
-        monkeypatch.setattr(module.settings, "solvigo_env", "prod")
+        monkeypatch.setattr(module.settings, "smartbi_env", "prod")
         for name, default in defaults.items():
             monkeypatch.setattr(module.settings, name, default)
 

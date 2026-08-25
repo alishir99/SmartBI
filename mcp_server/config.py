@@ -13,11 +13,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Default is the published demo posture: open port, in-repo secrets.
-    solvigo_env: str = "prod"
+    smartbi_env: str = "prod"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_db: str = "solvigo"
+    postgres_db: str = "smartbi"
 
     app_db_user: str = "app_readonly"
     app_db_password: str = "app_readonly"
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     def unrotated_secrets(self) -> list[str]:
         """Which guarded fields still hold the value published in this repository."""
-        if self.solvigo_env.strip().lower() == "dev":
+        if self.smartbi_env.strip().lower() == "dev":
             return []
         return sorted(name for name, default in IN_REPO_DEFAULTS.items()
                       if getattr(self, name) == default)
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
                 f"mcp_server: refusing to start with the in-repo default for "
                 f"{', '.join(unchanged)}. These values are public - anyone who can read "
                 f"the repository can call the internal tool surface with them. Set real "
-                f"values, or set SOLVIGO_ENV=dev to run the local demo.")
+                f"values, or set SMARTBI_ENV=dev to run the local demo.")
 
 
 settings = Settings()

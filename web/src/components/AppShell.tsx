@@ -43,7 +43,7 @@ const RAIL_BREAKPOINT = '(min-width: 1280px)'
 const RAIL_DEFAULT = 416
 const RAIL_MIN = 320
 const RAIL_MAX = 720
-const RAIL_KEY = 'solvigo.rail'
+const RAIL_KEY = 'smartbi.rail'
 
 /** Room the page keeps for itself whatever the rail is dragged to. */
 const PAGE_MIN = 520
@@ -196,7 +196,7 @@ function MobileBar({ route }: { route: Route }) {
     <div className="hairline-b sticky top-0 z-20 bg-page/85 backdrop-blur md:hidden">
       <div className="flex items-center justify-between gap-3 px-5 pt-4">
         <div className="min-w-0">
-          <p className="text-sm font-semibold tracking-tight text-ink">Solvigo Insights</p>
+          <p className="text-sm font-semibold tracking-tight text-ink">SmartBI Insights</p>
           {user?.supplier_name && (
             <p className="truncate text-2xs text-ink-muted">{user.supplier_name}</p>
           )}
@@ -269,7 +269,7 @@ function Sidebar({ route }: { route: Route }) {
     >
       <div>
         <div className="px-3">
-          <p className="text-base font-semibold tracking-tight text-ink">Solvigo Insights</p>
+          <p className="text-base font-semibold tracking-tight text-ink">SmartBI Insights</p>
           {user?.supplier_name && (
             <p className="mt-0.5 truncate text-2xs text-ink-muted">{user.supplier_name}</p>
           )}

@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cache = ResultCache()
     logger.info("api ready", extra={"event": "startup", "mcp_url": settings.mcp_url,
                                     "model": settings.llm_model,
-                                    "env": settings.solvigo_env})
+                                    "env": settings.smartbi_env})
     try:
         yield
     finally:
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Solvigo Insights API",
+    title="SmartBI Insights API",
     description="AI-native försäljningsdashboard. All data läses genom MCP-servern.",
     version="0.1.0",
     lifespan=lifespan,

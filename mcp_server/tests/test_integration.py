@@ -197,10 +197,10 @@ async def owner():
     """A connection as the *owner* role, which the rest of this module deliberately never uses."""
     if not _reachable():
         pytest.skip(f"ingen databas på {db.settings.postgres_host}:{db.settings.postgres_port}")
-    dsn = (f"postgresql://{os.getenv('POSTGRES_USER', 'solvigo')}:"
-           f"{os.getenv('POSTGRES_PASSWORD', 'solvigo')}"
+    dsn = (f"postgresql://{os.getenv('POSTGRES_USER', 'smartbi')}:"
+           f"{os.getenv('POSTGRES_PASSWORD', 'smartbi')}"
            f"@{db.settings.postgres_host}:{db.settings.postgres_port}/"
-           f"{os.getenv('POSTGRES_DB', 'solvigo')}")
+           f"{os.getenv('POSTGRES_DB', 'smartbi')}")
     try:
         connection = await asyncpg.connect(dsn)
     except (OSError, asyncpg.PostgresError) as exc:

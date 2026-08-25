@@ -5,7 +5,7 @@ import { t } from './i18n'
 
 export type Theme = 'light' | 'dark' | 'system'
 
-const THEME_KEY = 'solvigo.theme'
+const THEME_KEY = 'smartbi.theme'
 
 function readStoredTheme(): Theme {
   try {

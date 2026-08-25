@@ -1,4 +1,4 @@
-# Solvigo Insights
+# SmartBI Insights
 
 An AI-native sales dashboard for retail suppliers, "BI without a BI department." You log in
 and land on a finished dashboard (no setup), then ask follow-up questions in a chat and get
@@ -43,8 +43,8 @@ Log in with a demo account (password is `demo1234` for both):
 
 | Email | Company |
 |---|---|
-| `ali@solvigo.se` | Nordström Audio AB |
-| `sara@solvigo.se` | Lagerkvist Hem AB |
+| `ali@smartbi.se` | Nordström Audio AB |
+| `sara@smartbi.se` | Lagerkvist Hem AB |
 
 Try asking the chat: *"Which products sell best in Stockholm?"*, then log in as the other
 account and ask the same thing. You'll get different, correct answers, because each account
@@ -57,7 +57,7 @@ To stop everything: `Ctrl+C`, then `docker compose down`.
 Only do this if you can't use Docker. You'll need Python 3.13, Node.js, and a PostgreSQL 16
 database with the `pgvector` extension already running yourself.
 
-**Every command below is run from this folder** (`solvigo-insights/`, where this README and
+**Every command below is run from this folder** (`smartbi-insights/`, where this README and
 `pyproject.toml` live), open a terminal here first, and keep it open for all the steps.
 
 ```bash
@@ -118,7 +118,7 @@ result before showing it to you.
 
 ## Tests
 
-Run from this folder (`solvigo-insights/`), with the virtual environment active (see above,
+Run from this folder (`smartbi-insights/`), with the virtual environment active (see above,
 `.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on macOS/Linux):
 
 ```bash

@@ -17,8 +17,8 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 
-HEADER_SUPPLIER = "x-solvigo-supplier-id"
-HEADER_TOKEN = "x-solvigo-internal-token"
+HEADER_SUPPLIER = "x-smartbi-supplier-id"
+HEADER_TOKEN = "x-smartbi-internal-token"
 
 
 class McpToolError(RuntimeError):

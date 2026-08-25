@@ -57,7 +57,7 @@ async def export_csv(query_id: str,
     for row in result.rows:
         writer.writerow([_sv(row.get(c.key)) for c in columns])
 
-    filename = f"solvigo-{result.tool}-{query_id}.csv"
+    filename = f"smartbi-{result.tool}-{query_id}.csv"
     return StreamingResponse(
         iter(["﻿" + buffer.getvalue()]),  # BOM so Excel detects UTF-8 (å, ä, ö render correctly)
         media_type="text/csv; charset=utf-8",

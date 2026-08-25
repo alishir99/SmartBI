@@ -29,7 +29,7 @@ def account(monkeypatch):
     """
     state = {
         "user_id": 7,
-        "email": "ali@solvigo.se",
+        "email": "ali@smartbi.se",
         "display_name": "Ali Shirzad",
         "role": "supplier_admin",
         "supplier_id": 1,

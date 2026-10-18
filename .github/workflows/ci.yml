@@ -99,7 +99,7 @@ jobs:
       TAG: ${{ github.sha }}
       RESOURCE_GROUP: rg-smartbi-dev
       API_URL: https://api.jollycliff-2adc6508.francecentral.azurecontainerapps.io
-      WEB_URL: https://web.jollycliff-2adc6508.francecentral.azurecontainerapps.io
+      WEB_URL: https://smartbi.jollycliff-2adc6508.francecentral.azurecontainerapps.io
       # Identifiers, not secrets: the user-assigned identity id-smartbi-github only trusts
       # tokens GitHub issues for this repo's main branch (its federated credential).
       AZURE_CLIENT_ID: 4be43221-8440-444b-8d03-28dc9c6d5edd
@@ -137,7 +137,7 @@ jobs:
           az extension add --name containerapp --upgrade --only-show-errors
           az containerapp update -n mcp -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
           az containerapp update -n api -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
-          az containerapp update -n web -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-web:$TAG" -o none
+          az containerapp update -n smartbi -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-web:$TAG" -o none
           # Kept on the same image so a manual reseed runs this commit's code; not started here.
           az containerapp job update -n seed -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
 

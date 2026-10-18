@@ -125,10 +125,54 @@ function SignInForm({ onForgot }: { onForgot: () => void }) {
         <LinkButton onClick={onForgot}>{t('login.forgot')}</LinkButton>
       </Card>
 
-      {/* No credentials on the page - anyone who reached it is already past the only door
-          there is. But a reviewer who opens the app cold is otherwise simply stuck. */}
-      <p className="mt-5 text-center text-2xs text-ink-muted">{t('login.demo_hint')}</p>
+      {/* The published demo exists to be explored, so its credentials are on the page; a
+          reviewer who opens the app cold would otherwise be stuck at a login form. */}
+      <DemoAccounts
+        onPick={(account) => {
+          setEmail(account.email)
+          setPassword(DEMO_PASSWORD)
+          setError(null)
+        }}
+      />
     </>
+  )
+}
+
+// Mirrors DEMO_USERS and DEMO_PASSWORD in scripts/seed.py - keep both in sync.
+const DEMO_PASSWORD = 'demo1234'
+const DEMO_ACCOUNTS = [
+  { email: 'ali@smartbi.se', name: 'Ali Shirzad', company: 'Nordström Audio AB' },
+  { email: 'sara@smartbi.se', name: 'Sara Lindqvist', company: 'Lagerkvist Hem AB' },
+] as const
+
+type DemoAccount = (typeof DEMO_ACCOUNTS)[number]
+
+function DemoAccounts({ onPick }: { onPick: (account: DemoAccount) => void }) {
+  const t = useT()
+  return (
+    <section className="mt-5 rounded-card bg-surface p-4 shadow-card ring-hairline">
+      <h2 className="text-xs font-semibold text-ink">{t('login.demo_title')}</h2>
+      <p className="mt-1 text-2xs text-ink-secondary">
+        {t('login.demo_hint')} <span className="font-mono text-ink">{DEMO_PASSWORD}</span>
+      </p>
+      <ul className="mt-3 space-y-2">
+        {DEMO_ACCOUNTS.map((account) => (
+          <li key={account.email}>
+            <button
+              type="button"
+              onClick={() => onPick(account)}
+              className="w-full rounded-card px-3 py-2 text-left ring-hairline hover:bg-page"
+            >
+              <span className="block text-xs font-medium text-ink">
+                {account.name} · {account.company}
+              </span>
+              <span className="block font-mono text-2xs text-ink-secondary">{account.email}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-2xs text-ink-muted">{t('login.demo_tenants')}</p>
+    </section>
   )
 }
 

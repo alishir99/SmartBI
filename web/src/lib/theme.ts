@@ -7,12 +7,16 @@ export type Theme = 'light' | 'dark' | 'system'
 
 const THEME_KEY = 'smartbi.theme'
 
+// Light until the user picks otherwise; 'system' is stored explicitly so it survives a reload.
+// index.html applies the same default before first paint.
+const DEFAULT_THEME: Theme = 'light'
+
 function readStoredTheme(): Theme {
   try {
     const raw = localStorage.getItem(THEME_KEY)
-    return raw === 'light' || raw === 'dark' ? raw : 'system'
+    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : DEFAULT_THEME
   } catch {
-    return 'system'
+    return DEFAULT_THEME
   }
 }
 
@@ -21,8 +25,7 @@ function apply(theme: Theme): void {
   if (theme === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', theme)
   try {
-    if (theme === 'system') localStorage.removeItem(THEME_KEY)
-    else localStorage.setItem(THEME_KEY, theme)
+    localStorage.setItem(THEME_KEY, theme)
   } catch {
     /* private browsing */
   }

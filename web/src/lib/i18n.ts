@@ -241,7 +241,9 @@ const sv: Table = {
   'password.cancel': 'Avbryt',
   'password.rule': 'Minst {min} tecken. Längd skyddar bättre än specialtecken.',
   'login.failed': 'Inloggningen misslyckades.',
-  'login.demo_hint': 'Demokonton finns i repots README.',
+  'login.demo_title': 'Demokonton',
+  'login.demo_hint': 'Klicka på ett konto för att fylla i det. Lösenord för båda:',
+  'login.demo_tenants': 'Varje konto ser bara sitt eget företags siffror.',
   'shared.eyebrow': 'Delad vy · SmartBI Insights',
   'shared.title': 'Delad vy',
   'shared.by':
@@ -533,7 +535,9 @@ const en: Table = {
   'password.cancel': 'Cancel',
   'password.rule': 'At least {min} characters. Length protects better than special characters.',
   'login.failed': 'Sign-in failed.',
-  'login.demo_hint': 'Demo accounts are in the repository README.',
+  'login.demo_title': 'Demo accounts',
+  'login.demo_hint': 'Click an account to fill it in. Password for both:',
+  'login.demo_tenants': "Each account sees only its own company's figures.",
   'shared.eyebrow': 'Shared view · SmartBI Insights',
   'shared.title': 'Shared view',
   'shared.by':

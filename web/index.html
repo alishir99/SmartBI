@@ -10,11 +10,13 @@
     />
     <title>SmartBI Insights</title>
     <script>
-      // Apply the stored theme before first paint so there is no flash.
+      // Apply the stored theme before first paint so there is no flash. Light by default,
+      // matching DEFAULT_THEME in src/lib/theme.ts; 'system' leaves it to the OS.
+      var t = 'light'
       try {
-        var t = localStorage.getItem('smartbi.theme')
-        if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t)
+        t = localStorage.getItem('smartbi.theme') || 'light'
       } catch (e) {}
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t)
     </script>
   </head>
   <body>

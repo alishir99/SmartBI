@@ -11,6 +11,9 @@ chart, on a path the model never touches.
 Full design reasoning (why Postgres, why this architecture, every trade-off): see
 [`docs/DESIGN.md`](docs/DESIGN.md). This file is just: what it is, and how to run it.
 
+**Live demo:** https://web.jollycliff-2adc6508.francecentral.azurecontainerapps.io (the demo
+accounts are on the login page; the first load takes 10-20 s while the containers wake up).
+
 > Shared for evaluation only , see [`LICENSE`](LICENSE). Not licensed for production use.
 
 ---
@@ -113,6 +116,31 @@ result before showing it to you.
 | Numbers never touch the AI model | The model can only pick a question and a chart type. The actual figures are fetched separately and checked against the real database before display, grounding by construction, not by a well-written prompt. |
 | Synthetic, generated data | Needed several competing brands per category (for market-share questions) and a known-correct answer key to test against, no public dataset offers both. |
 | DeepSeek, via the Anthropic SDK | Anthropic-compatible endpoint, switching to real Claude later is a one-line config change, not a rewrite. |
+
+## How it's deployed (Azure)
+
+```
+Internet ──► web  (Container App, nginx)       public
+         └─► api  (Container App, FastAPI)     public ──► mcp (Container App, internal only)
+                                                              │
+             seed (Container Apps Job, run once) ─────────────┴──► Supabase Postgres (Paris)
+```
+
+| Piece | Where | Why |
+|---|---|---|
+| `web`, `api` | Azure Container Apps, external ingress | Scale to zero: costs nothing while nobody is using the demo. |
+| `mcp` | Container Apps, **internal** ingress | Same rule as `docker-compose.yml`: only `api` can reach it, never the internet. |
+| `seed` | Container Apps Job (manual trigger) | Runs once, loads the data, exits. |
+| Database | Supabase free tier (session pooler) | An always-on managed Postgres would be the only fixed cost. |
+| Images | GitHub Container Registry | Free, and the deploy workflow pushes to it with its built-in token. |
+| Secrets | Container Apps secrets | Never in the image (`.dockerignore` drops `.env`) or the repo. |
+
+**CI/CD** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): every push and pull request
+runs lint, unit and integration tests (against a real Postgres) and the frontend build. A push to
+`main` that passes all of that builds both images, tags them with the commit SHA, pushes them to
+GHCR and rolls them out to Container Apps (`mcp`, then `api`, then `web`), then smoke-tests the
+live URLs. Azure access uses OpenID Connect with a user-assigned managed identity that only
+trusts this repository's `main` branch, so no cloud credential is stored in GitHub.
 
 ---
 

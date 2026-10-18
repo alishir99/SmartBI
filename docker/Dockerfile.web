@@ -20,6 +20,9 @@ RUN npm run build
 # as uid 101 on 8080, so nothing here needs root to bind a low port.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
+# Links the GHCR package to the repo, so the deploy workflow's GITHUB_TOKEN may push to it.
+LABEL org.opencontainers.image.source="https://github.com/alishir99/SmartBI"
+
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Hash-based router: every URL is `/` to the server, so no SPA fallback is needed.

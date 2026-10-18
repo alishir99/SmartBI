@@ -82,3 +82,67 @@ jobs:
       # Chart contract (§8) is deterministic frontend logic, so it's unit-tested, not eyeballed.
       - run: npm test
       - run: npm run build
+
+  # CD: only a push to main that passed both jobs above reaches Azure.
+  deploy:
+    needs: [python, web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy-azure
+    permissions:
+      contents: read
+      packages: write  # push images to GHCR with GITHUB_TOKEN
+      id-token: write  # OIDC token for Azure - no stored cloud credentials
+
+    env:
+      REGISTRY: ghcr.io/alishir99
+      TAG: ${{ github.sha }}
+      RESOURCE_GROUP: rg-smartbi-dev
+      API_URL: https://api.jollycliff-2adc6508.francecentral.azurecontainerapps.io
+      WEB_URL: https://web.jollycliff-2adc6508.francecentral.azurecontainerapps.io
+      # Identifiers, not secrets: the user-assigned identity id-smartbi-github only trusts
+      # tokens GitHub issues for this repo's main branch (its federated credential).
+      AZURE_CLIENT_ID: 4be43221-8440-444b-8d03-28dc9c6d5edd
+      AZURE_TENANT_ID: 29147a65-536d-43f9-b802-e0a1b5cf9dbf
+      AZURE_SUBSCRIPTION_ID: 87173671-8eff-4dd7-918c-c1cdfa76d186
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagged by commit, never `latest`: every revision in Azure names the exact commit it runs.
+      - name: Build and push images
+        run: |
+          docker build -f docker/Dockerfile.python -t "$REGISTRY/smartbi-python:$TAG" .
+          docker build -f docker/Dockerfile.web --build-arg VITE_API_BASE_URL="$API_URL" \
+            -t "$REGISTRY/smartbi-web:$TAG" .
+          docker push "$REGISTRY/smartbi-python:$TAG"
+          docker push "$REGISTRY/smartbi-web:$TAG"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      # Image only: command, env and secrets stay as configured on each app.
+      # mcp before api, api before web, so no new frontend ever calls an old backend.
+      - name: Roll out to Container Apps
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update -n mcp -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
+          az containerapp update -n api -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
+          az containerapp update -n web -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-web:$TAG" -o none
+          # Kept on the same image so a manual reseed runs this commit's code; not started here.
+          az containerapp job update -n seed -g "$RESOURCE_GROUP" --image "$REGISTRY/smartbi-python:$TAG" -o none
+
+      # Scaled to zero, so the first request includes a cold start - hence the retries.
+      - name: Smoke test
+        run: |
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors --max-time 60 "$API_URL/health"
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors --max-time 60 -o /dev/null "$WEB_URL"

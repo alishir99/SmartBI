@@ -1,5 +1,8 @@
 FROM python:3.13-slim
 
+# Links the GHCR package to the repo, so the deploy workflow's GITHUB_TOKEN may push to it.
+LABEL org.opencontainers.image.source="https://github.com/alishir99/SmartBI"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1

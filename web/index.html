@@ -18,9 +18,59 @@
       } catch (e) {}
       if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t)
     </script>
+    <style>
+      /* Boot screen: main.tsx waits for /api/config before rendering, and a scaled-to-zero API
+         takes 10-20 s to wake. Delayed fades keep warm loads from flashing it. */
+      .boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 10px; text-align: center; padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+      .boot > * { opacity: 0; animation: boot-in 0.4s ease-out forwards; }
+      .boot-spinner { width: 28px; height: 28px; border-radius: 50%; margin-bottom: 6px;
+        border: 3px solid var(--surface-3, #ececf0); border-top-color: var(--accent, #0071e3);
+        animation: boot-in 0.4s ease-out 0.3s forwards, boot-spin 0.9s linear infinite; }
+      .boot-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--text, #1d1d1f);
+        animation-delay: 0.3s; }
+      .boot-hint { margin: 0; max-width: 340px; font-size: 14px; line-height: 1.45;
+        color: var(--text-secondary, #6e6e73); animation-delay: 2.5s; }
+      @keyframes boot-in { to { opacity: 1; } }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-spinner"></div>
+        <p class="boot-title" data-en="Starting SmartBI Insights…">Startar SmartBI Insights…</p>
+        <p class="boot-hint" data-en="The demo sleeps when nobody is using it, so the first visit can take up to 20 seconds.">
+          Demot sover när ingen använder det, så första besöket kan ta upp till 20 sekunder.
+        </p>
+      </div>
+    </div>
+    <script>
+      // Mirrors readStoredLanguage in src/lib/i18n.ts - keep both in sync.
+      ;(function () {
+        var lang = null
+        try {
+          lang = localStorage.getItem('smartbi.lang')
+        } catch (e) {}
+        if (lang !== 'sv' && lang !== 'en') {
+          lang = 'sv'
+          var tags = navigator.languages || [navigator.language]
+          for (var i = 0; i < tags.length; i++) {
+            var base = (tags[i] || '').split('-')[0]
+            if (base === 'sv' || base === 'en') {
+              lang = base
+              break
+            }
+          }
+        }
+        if (lang === 'en') {
+          document.documentElement.lang = 'en'
+          var els = document.querySelectorAll('[data-en]')
+          for (var j = 0; j < els.length; j++) els[j].textContent = els[j].getAttribute('data-en')
+        }
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

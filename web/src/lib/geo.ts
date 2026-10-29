@@ -1,7 +1,52 @@
 /** Coordinates come from the data (dim_store lat/lon, get_capabilities' mean per region), not
  * a hardcoded table - a hand-traced coastline was wrong the moment the app pointed elsewhere. */
 
-export type RegionPoint = { region: string; lat: number; lon: number }
+import type { Geometry } from 'geojson'
+
+export type LatLon = { lat: number; lon: number }
+export type RegionPoint = LatLon & { region: string }
+
+/** One land shape: an outer ring plus any holes, each ring as [lon, lat] pairs (GeoJSON order). */
+export type Shape = number[][][]
+
+/** How far (degrees) past the regions a country's island may lie and still be drawn: keeps
+ * Gotland and Öland, drops far-off territories like Svalbard that would shrink the map. */
+const NEARBY_DEG = 2
+
+/** The land of every country holding at least one region, trimmed to the parts near the regions.
+ * Empty when no region falls on land, and the map then shows markers only. */
+export function outlineFor(countries: Geometry[], points: LatLon[]): Shape[] {
+  if (points.length === 0) return []
+  const lats = points.map((p) => p.lat)
+  const lons = points.map((p) => p.lon)
+  const box = {
+    minLat: Math.min(...lats) - NEARBY_DEG,
+    maxLat: Math.max(...lats) + NEARBY_DEG,
+    minLon: Math.min(...lons) - NEARBY_DEG,
+    maxLon: Math.max(...lons) + NEARBY_DEG,
+  }
+  return countries.flatMap((country) => {
+    const shapes: Shape[] =
+      country.type === 'Polygon' ? [country.coordinates] : country.type === 'MultiPolygon' ? country.coordinates : []
+    const near = shapes.filter((shape) =>
+      shape[0].some(([lon, lat]) => lat >= box.minLat && lat <= box.maxLat && lon >= box.minLon && lon <= box.maxLon),
+    )
+    // Tested on nearby shapes only: a far ring crossing 180° (eastern Russia) fools the ray cast
+    // into "containing" Stockholm. ponytail: a market straddling 180° itself (Fiji) draws badly.
+    return points.some((p) => near.some((shape) => ringContains(shape[0], p))) ? near : []
+  })
+}
+
+/** Ray casting: is the point inside this ring? */
+function ringContains(ring: number[][], { lat, lon }: LatLon): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [x1, y1] = ring[i]
+    const [x2, y2] = ring[j]
+    if (y1 > lat !== y2 > lat && lon < ((x2 - x1) * (lat - y1)) / (y2 - y1) + x1) inside = !inside
+  }
+  return inside
+}
 
 /** Look a region up by the label the API returns, tolerating a suffix like " län". */
 export function findRegion(name: string, points: RegionPoint[]): RegionPoint | undefined {
@@ -16,14 +61,14 @@ function normalise(value: string): string {
 }
 
 export type Projection = {
-  x: (point: RegionPoint) => number
-  y: (point: RegionPoint) => number
+  x: (point: LatLon) => number
+  y: (point: LatLon) => number
 }
 
 /** Equirectangular with a cosine correction on longitude, taken at the mean latitude of the
  * points themselves - how much correction is needed depends entirely on where the data sits. */
 export function project(
-  points: RegionPoint[],
+  points: LatLon[],
   width: number,
   height: number,
   padding: number,

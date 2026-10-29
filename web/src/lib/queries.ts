@@ -1,5 +1,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { feature } from 'topojson-client'
+import type { GeometryCollection, Topology } from 'topojson-specification'
+import worldUrl from 'world-atlas/countries-50m.json?url'
 import type { SaveCardRequest } from '../types'
 import { DEFAULT_PERIOD } from './periods'
 import {
@@ -22,6 +25,7 @@ export const queryKeys = {
   cards: ['cards'] as const,
   result: (queryId: string) => ['result', queryId] as const,
   regions: ['regions'] as const,
+  countries: ['countries'] as const,
 }
 
 // Language is part of the key wherever the server writes text into the response (card titles,
@@ -64,6 +68,21 @@ export function useRegions() {
   return useQuery({
     queryKey: queryKeys.regions,
     queryFn: fetchRegions,
+    staleTime: Infinity,
+  })
+}
+
+/** Country shapes (Natural Earth 1:50m) for the map's land. A static file, fetched only once a
+ * map is opened; geo.ts picks the countries the regions sit in. */
+export function useCountries() {
+  return useQuery({
+    queryKey: queryKeys.countries,
+    queryFn: async () => {
+      const response = await fetch(worldUrl)
+      if (!response.ok) throw new Error(`countries: ${response.status}`)
+      const world = (await response.json()) as Topology<{ countries: GeometryCollection }>
+      return feature(world, world.objects.countries).features.map((country) => country.geometry)
+    },
     staleTime: Infinity,
   })
 }

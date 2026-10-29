@@ -1,8 +1,9 @@
-/** Proportional-symbol map from the data's own coordinates - no basemap: the old hand-traced
- * Sweden outline was 600 points that couldn't generalize, so markers float free instead. */
+/** Proportional-symbol map from the data's own coordinates, drawn over the land of whichever
+ * country the regions sit in (Natural Earth), so it works for any market, not just Sweden. */
 
+import type { Geometry } from 'geojson'
 import { useId, useMemo, useState } from 'react'
-import { findRegion, project, radiusFor, type RegionPoint } from '../lib/geo'
+import { findRegion, outlineFor, project, radiusFor, type LatLon, type RegionPoint } from '../lib/geo'
 import { formatMoneyWithUnit, moneyScale, formatPercent } from '../lib/format'
 import { useT } from '../lib/i18n'
 
@@ -20,11 +21,13 @@ type Props = {
   data: RegionDatum[]
   /** Every region the warehouse knows, with its centroid. Positions come from here. */
   places: RegionPoint[]
+  /** Every country's geometry; the ones holding a region are drawn as land. Empty = markers only. */
+  countries: Geometry[]
   /** Accessible caption; also used as the visible unit hint. */
   label: string
 }
 
-export function RegionMap({ data, places, label }: Props) {
+export function RegionMap({ data, places, countries, label }: Props) {
   const t = useT()
   const titleId = useId()
   const [active, setActive] = useState<string | null>(null)
@@ -48,11 +51,26 @@ export function RegionMap({ data, places, label }: Props) {
       .sort((a, b) => b.radius - a.radius)
   }, [data, places])
 
-  // Fitted to every region the warehouse has, not just this result's: otherwise a period with
-  // one empty region would re-scale/re-centre the map, so the country looks different card to card.
-  const projection = useMemo(
-    () => project(places.length ? places : points.map((p) => p.point), VIEW_W, VIEW_H, PADDING),
-    [places, points],
+  const outline = useMemo(() => outlineFor(countries, places), [countries, places])
+
+  // Fitted to the land, else to every region the warehouse has (not just this result's): otherwise
+  // a period with one empty region would re-scale/re-centre the map, card to card.
+  const projection = useMemo(() => {
+    const coast: LatLon[] = outline.flatMap((shape) => shape[0].map(([lon, lat]) => ({ lon, lat })))
+    const fitTo = coast.length ? coast : places.length ? places : points.map((p) => p.point)
+    return project(fitTo, VIEW_W, VIEW_H, PADDING)
+  }, [outline, places, points])
+
+  const land = useMemo(
+    () =>
+      outline
+        .flat()
+        .map((ring) => 'M' + ring.map(([lon, lat]) => {
+          const at = { lon, lat }
+          return `${projection.x(at).toFixed(1)},${projection.y(at).toFixed(1)}`
+        }).join('L') + 'Z')
+        .join(''),
+    [outline, projection],
   )
 
   // Greedy label placement: walk the regions largest-value first and keep a label only if it
@@ -101,13 +119,24 @@ export function RegionMap({ data, places, label }: Props) {
       >
         <title id={titleId}>{t('card.map_title', { label })}</title>
 
+        {land && (
+          <path
+            d={land}
+            fillRule="evenodd"
+            fill="var(--surface-2)"
+            stroke="var(--hairline-strong)"
+            strokeWidth={1}
+            strokeLinejoin="round"
+          />
+        )}
+
         {empties.map((point) => (
           <circle
             key={point.region}
             cx={projection.x(point)}
             cy={projection.y(point)}
             r={2.5}
-            className="fill-[var(--surface-3)]"
+            className="fill-[var(--text-muted)]"
           />
         ))}
 

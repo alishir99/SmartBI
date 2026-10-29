@@ -6,11 +6,12 @@ import { AnswerCardView } from '../components/AnswerCard'
 import { RegionMap, type RegionDatum } from '../charts/RegionMap'
 import { EmptyState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/Skeleton'
-import { useRegions, useResult } from '../lib/queries'
+import { useCountries, useRegions, useResult } from '../lib/queries'
 import { useChatStore } from '../lib/chat'
 import { columnLabel, useT } from '../lib/i18n'
 
 type Tab = 'ranking' | 'map'
+const NO_COUNTRIES: never[] = []
 
 // Keys, and none of them names a place: a suggested question about "Skåne" is unanswerable
 // against a warehouse holding any other market.
@@ -91,8 +92,10 @@ function MapTab({ card }: { card: AnswerCard }) {
   // Coordinates come from the warehouse, not a table shipped with the client - an ungeocoded
   // market gets an honest "no map" rather than invented positions.
   const regions = useRegions()
+  // Land is decoration: if it fails to load, the markers still answer the question.
+  const countries = useCountries()
 
-  if (result.isPending || regions.isPending) return <CardSkeleton height={560} />
+  if (result.isPending || regions.isPending || countries.isPending) return <CardSkeleton height={560} />
   if (result.isError || !result.data) {
     return (
       <EmptyState
@@ -124,6 +127,7 @@ function MapTab({ card }: { card: AnswerCard }) {
       <RegionMap
         data={data}
         places={regions.data}
+        countries={countries.data ?? NO_COUNTRIES}
         label={columnLabel(measure, measureColumn?.label ?? measure)}
       />
     </div>

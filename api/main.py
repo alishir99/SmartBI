@@ -139,6 +139,20 @@ async def config() -> dict:
     }
 
 
+@app.get("/api/warm", tags=["ops"])
+async def warm(request: Request) -> dict:
+    """Wakes what a first visit needs after scale-to-zero: one database round trip (which also
+    counts as activity, so Supabase's free tier doesn't pause the project) and an MCP handshake,
+    which starts the mcp app. Unauthenticated on purpose: it reads no tenant data, and the
+    portfolio page and the daily keep-alive both call it without a session.
+    ponytail: anyone can trigger it; add the rate limiter if it ever shows up in the bill."""
+    await db.pool().fetchval("SELECT 1")
+    # Initialize only. Supplier scope is checked per tool call, and none is made here.
+    async with request.app.state.mcp.session(0):
+        pass
+    return {"status": "warm"}
+
+
 @app.get("/health", tags=["ops"])
 async def health() -> dict:
     """Reports what is actually wired up, including whether an LLM key is present - the most common

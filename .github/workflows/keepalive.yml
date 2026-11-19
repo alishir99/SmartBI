@@ -1,0 +1,15 @@
+name: keepalive
+
+# Supabase's free tier pauses a project after about a week without database activity, and a
+# paused project takes the whole app down (the api can't start). /api/warm does a real query.
+on:
+  schedule:
+    - cron: "17 6 * * *"   # daily, 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      # Generous timeout and retries: the apps scale to zero, so this call is always a cold start.
+      - run: curl -fsS --retry 3 --retry-all-errors --max-time 120 https://api.jollycliff-2adc6508.francecentral.azurecontainerapps.io/api/warm

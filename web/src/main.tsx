@@ -5,6 +5,7 @@ import { App } from './App'
 import { ApiError } from './lib/api'
 import { useAuthStore } from './lib/auth'
 import { loadConfig } from './lib/config'
+import { apiUrl } from './lib/env'
 import { currentLanguage } from './lib/i18n'
 import './index.css'
 
@@ -27,6 +28,10 @@ const client = new QueryClient({
 })
 
 document.documentElement.lang = currentLanguage()
+
+// /api/config only wakes the api; this also starts mcp and the DB pool while the user is
+// still on the login screen, so the first dashboard isn't the one paying for the cold start.
+void fetch(apiUrl('/api/warm')).catch(() => {})
 
 void loadConfig().then(() => {
   createRoot(document.getElementById('root') as HTMLElement).render(

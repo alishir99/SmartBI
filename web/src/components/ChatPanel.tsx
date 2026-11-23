@@ -10,8 +10,8 @@ import { Button } from './Button'
 import { IconCheck, IconDatabase, IconPlug, IconSend, IconSparkle, IconStop } from './Icons'
 
 // Deliberately generic: an example naming a Swedish county was a question nobody could ask
-// of a warehouse holding anything else. "What is our margin?" stays to demonstrate a refusal.
-const EXAMPLE_KEYS = ['ask.best_sellers', 'ask.monthly_trend', 'ask.top_products', 'ask.margin']
+// of a warehouse holding anything else. Each one mirrors a golden eval case, so a test click never hits a refusal or a clarify.
+const EXAMPLE_KEYS = ['ask.best_sellers', 'ask.monthly_trend', 'ask.online_share', 'ask.vs_previous']
 
 export function ChatPanel({ onClose }: { onClose?: () => void }) {
   const t = useT()

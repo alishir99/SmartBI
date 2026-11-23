@@ -16,10 +16,10 @@ const NO_COUNTRIES: never[] = []
 // Keys, and none of them names a place: a suggested question about "Skåne" is unanswerable
 // against a warehouse holding any other market.
 const FOLLOW_UP_KEYS = [
-  'ask.grew_fastest',
-  'ask.weekly_in_region',
-  'ask.best_online',
-  'ask.category_share_region',
+  'ask.best_region',
+  'ask.sales_by_region',
+  'ask.region_split',
+  'ask.top_stores',
 ]
 
 export function GeographyPage() {

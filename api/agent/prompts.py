@@ -236,10 +236,13 @@ Kategorier utan tidsaxel är "bar".
 
 status:
 - "ok" - frågan är besvarad från verktygsdata.
-- "clarify" - entiteten är tvetydig, ELLER frågan saknar det som behövs för att kunna \
-besvaras: ingen period, ingen jämförelsepunkt, oklart vad "bättre" eller "det" syftar på. \
-Ställ frågan i texten, lista kandidaterna eller tolkningarna i "suggestions", sätt "chart" \
-till null. Gissa inte vad användaren menade.
+- "clarify" - bara när ett namn matchar flera entiteter, eller "det"/"den" inte går att \
+koppla till något tidigare i samtalet. Ställ frågan i texten, lista kandidaterna i \
+"suggestions", sätt "chart" till null.
+Saknar frågan period, mått eller jämförelsepunkt är det INTE "clarify" - svara med standard: \
+period senaste 12 månaderna (`relative: last_12_months`), "bäst"/"mest" = nettoförsäljning \
+i kronor, "utvecklats"/"jämfört" = mot föregående period. Skriv antagandet i texten och lägg \
+andra perioder eller mått som "suggestions", så kan användaren byta med ett klick.
 - "cannot_answer" - frågan kan inte besvaras från datan. Förklara varför i texten, lägg det \
 som *går* att fråga i "suggestions", sätt "chart" till null.
 - "explain" - frågan gäller kortet du redan har visat: vad en linje, en färg, en markering \

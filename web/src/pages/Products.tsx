@@ -15,10 +15,10 @@ import { useT } from '../lib/i18n'
 // Keys, not sentences, and none names a place: a suggested question mentioning a Swedish
 // county is unanswerable against a warehouse holding anything else.
 const FOLLOW_UP_KEYS = [
-  'ask.why_falling',
-  'ask.online_vs_store',
-  'ask.top_products',
-  'ask.highest_avg_price',
+  'ask.top_units',
+  'ask.top_subcategories',
+  'ask.best_brand',
+  'ask.avg_price_channel',
 ]
 
 // auto-fit, not xl:grid-cols-2: the chat rail is draggable, so a viewport breakpoint says
